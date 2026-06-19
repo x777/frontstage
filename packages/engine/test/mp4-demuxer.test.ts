@@ -18,11 +18,13 @@ describe("demuxMp4", () => {
     expect(r.video!.description).toBeInstanceOf(Uint8Array);
     expect((r.video!.description as Uint8Array).byteLength).toBeGreaterThan(0);
   });
-  test("extracts the AAC audio track", async () => {
+  test("extracts the AAC audio track with esds description", async () => {
     const r = await demuxMp4(blob);
     expect(r.audio).toBeDefined();
     expect(r.audio!.codec.startsWith("mp4a")).toBe(true);
     expect(r.audio!.sampleRate).toBeGreaterThan(0);
     expect(r.audio!.samples.length).toBeGreaterThan(0);
+    expect(r.audio!.description).toBeInstanceOf(Uint8Array);
+    expect((r.audio!.description as Uint8Array).byteLength).toBeGreaterThan(0);
   });
 });

@@ -36,8 +36,28 @@ declare module "mp4box" {
     write(stream: DataStreamInstance): void;
   }
 
+  export interface DecoderSpecificInfo {
+    tag: number;
+    data: Uint8Array;
+  }
+
+  export interface DecoderConfigDescriptor {
+    tag: number;
+    descs: DecoderSpecificInfo[];
+  }
+
+  export interface EsDescriptor {
+    tag: number;
+    descs: DecoderConfigDescriptor[];
+  }
+
+  export interface EsdsBox {
+    esd?: EsDescriptor;
+  }
+
   export interface SampleEntry {
     avcC?: AvcCBox;
+    esds?: EsdsBox;
   }
 
   export interface MP4Trak {

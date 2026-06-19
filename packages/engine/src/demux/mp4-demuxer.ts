@@ -24,6 +24,7 @@ export interface DemuxedAudioTrack {
   channels: number;
   timescale: number;
   samples: DemuxedSample[];
+  description?: Uint8Array;
 }
 
 export interface DemuxResult {
@@ -32,6 +33,16 @@ export interface DemuxResult {
 }
 
 const toMicros = (ts: number, timescale: number): number => Math.round((ts / timescale) * 1_000_000);
+
+function esdsDescription(file: ReturnType<typeof MP4Box.createFile>, trackId: number): Uint8Array | undefined {
+  const trak = file.getTrackById(trackId);
+  const entry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+  const esds = entry?.esds;
+  if (!esds) return undefined;
+  // Navigate: esds.esd → descs[0] (DecoderConfigDescriptor) → descs[0] (DecoderSpecificInfo) → data (AudioSpecificConfig)
+  const asc = esds.esd?.descs?.[0]?.descs?.[0]?.data;
+  return asc ?? undefined;
+}
 
 function avccDescription(file: ReturnType<typeof MP4Box.createFile>, trackId: number): Uint8Array | undefined {
   const trak = file.getTrackById(trackId);
@@ -77,6 +88,7 @@ export async function demuxMp4(blob: Blob): Promise<DemuxResult> {
           channels: a.audio.channel_count,
           timescale: a.timescale,
           samples: audioSamples,
+          description: esdsDescription(file, a.id),
         };
         file.setExtractionOptions(a.id, "audio", { nbSamples: Number.MAX_SAFE_INTEGER });
       }
