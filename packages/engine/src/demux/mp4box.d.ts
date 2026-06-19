@@ -35,8 +35,8 @@ declare module "mp4box" {
   export interface MP4File {
     onReady: ((info: MP4Info) => void) | null;
     onError: ((e: string) => void) | null;
-    onSamples: ((id: number, user: unknown, samples: MP4Sample[]) => void) | null;
-    setExtractionOptions(id: number, user: unknown, options: { nbSamples: number }): void;
+    onSamples: ((id: number, user: string, samples: MP4Sample[]) => void) | null;
+    setExtractionOptions(id: number, user: string, options: { nbSamples: number }): void;
     appendBuffer(buffer: MP4ArrayBuffer): number;
     start(): void;
     flush(): void;
