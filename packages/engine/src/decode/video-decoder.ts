@@ -75,29 +75,36 @@ export class VideoDecodeManager {
   lastError(): EngineDecodeError | undefined { return this.err ?? undefined; }
   closeFrame(frame: VideoFrame): void { frame.close(); this.open--; }
 
-  seekTo(targetUs: number): void {
+  async seekTo(targetUs: number): Promise<void> {
     this.mode = "pump";
-    this.decoder.flush().catch(() => { /* flush during reset */ });
+    await this.decoder.flush();
     for (const f of this.buffer) { f.close(); this.open--; }
     this.buffer = [];
+    for (const f of this.collected) { f.close(); this.open--; }
+    this.collected = [];
     this.cursor = this.keyframeIndexBefore(targetUs);
   }
 
   pump(): void {
+    if (this.decoder.state !== "configured") return;
     const ahead = this.buffer.length
       ? this.buffer[this.buffer.length - 1]!.timestamp - this.buffer[0]!.timestamp
       : 0;
+    let fed = 0;
     while (
       this.cursor < this.chunks.length &&
       ahead < VideoDecodeManager.AHEAD_MICROS &&
-      this.decoder.decodeQueueSize < VideoDecodeManager.QUEUE_LIMIT
+      this.decoder.decodeQueueSize < VideoDecodeManager.QUEUE_LIMIT &&
+      fed < VideoDecodeManager.QUEUE_LIMIT
     ) {
       this.decoder.decode(this.chunks[this.cursor]!);
       this.cursor++;
+      fed++;
     }
   }
 
   frameForMicros(targetUs: number): VideoFrame | undefined {
+    if (this.mode !== "pump") throw new Error("seekTo must be called before frameForMicros");
     this.buffer.sort((a, b) => a.timestamp - b.timestamp);
     let idx = -1;
     for (let i = 0; i < this.buffer.length; i++) {

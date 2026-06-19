@@ -27,7 +27,7 @@ async function main(): Promise<void> {
     const chunks = buildVideoChunks(result.video, fileBytes);
     const mgr = await VideoDecodeManager.create(result.video, chunks);
 
-    mgr.seekTo(0);
+    await mgr.seekTo(0);
 
     window.__bufferedCount = () => mgr.bufferedCount();
     window.__openFrames = () => mgr.openFrameCount();
