@@ -34,7 +34,7 @@ async function main(): Promise<void> {
       const width = frame.displayWidth;
       const height = frame.displayHeight;
       const timestamp = frame.timestamp;
-      frame.close();
+      mgr.closeFrame(frame);
       return { width, height, timestamp, openAfterClose: mgr.openFrameCount() };
     };
 

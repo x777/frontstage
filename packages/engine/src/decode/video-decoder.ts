@@ -72,18 +72,10 @@ export class VideoDecodeManager {
     }
     if (!best && collected.length > 0) { best = collected[collected.length - 1]; }
     if (!best) throw new Error("no frame decoded");
-    // Wrap the returned frame so caller's close() decrements open count
-    const mgr = this;
-    return new Proxy(best, {
-      get(target, prop) {
-        if (prop === "close") {
-          return () => { target.close(); mgr.open--; };
-        }
-        const val = (target as unknown as Record<string, unknown>)[prop as string];
-        return typeof val === "function" ? (val as Function).bind(target) : val;
-      },
-    });
+    return best;
   }
+
+  closeFrame(frame: VideoFrame): void { frame.close(); this.open--; }
 
   dispose(): void {
     if (this.decoder.state !== "closed") this.decoder.close();
