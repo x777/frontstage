@@ -12,3 +12,4 @@ export * from "./timeline.js";
 export * from "./clip-mutations.js";
 export * from "./schema/schemas.js";
 export * from "./schema/migrations.js";
+export * from "./schema/serialize.js";
