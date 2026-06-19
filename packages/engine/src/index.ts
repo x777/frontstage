@@ -6,3 +6,5 @@ export * from "./decode/video-decoder.js";
 export * from "./decode/audio-decoder.js";
 export * from "./playback-engine.js";
 export * from "./clock/play-clock.js";
+export * from "./audio/ring-buffer.js";
+export * from "./audio/audio-graph.js";
