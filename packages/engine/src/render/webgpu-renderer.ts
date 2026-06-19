@@ -59,8 +59,7 @@ export class FrameRenderer {
   private readbackPipeline: GPURenderPipeline;
   private sampler: GPUSampler;
   private readbackTex: GPUTexture;
-  private cw: number;
-  private ch: number;
+  private canvasFmt: GPUTextureFormat;
 
   private constructor(
     device: GPUDevice,
@@ -69,8 +68,7 @@ export class FrameRenderer {
     readbackPipeline: GPURenderPipeline,
     sampler: GPUSampler,
     readbackTex: GPUTexture,
-    cw: number,
-    ch: number,
+    canvasFmt: GPUTextureFormat,
   ) {
     this.device = device;
     this.ctx = ctx;
@@ -78,8 +76,7 @@ export class FrameRenderer {
     this.readbackPipeline = readbackPipeline;
     this.sampler = sampler;
     this.readbackTex = readbackTex;
-    this.cw = cw;
-    this.ch = ch;
+    this.canvasFmt = canvasFmt;
   }
 
   static async create(canvas: HTMLCanvasElement): Promise<FrameRenderer> {
@@ -126,7 +123,7 @@ export class FrameRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
 
-    return new FrameRenderer(device, ctx, canvasPipeline, readbackPipeline, sampler, readbackTex, cw, ch);
+    return new FrameRenderer(device, ctx, canvasPipeline, readbackPipeline, sampler, readbackTex, canvasFmt);
   }
 
   present(frame: VideoFrame, mat: Mat2d, renderSize: Size): void {
@@ -204,7 +201,7 @@ export class FrameRenderer {
   async readPixel(x: number, y: number): Promise<[number, number, number, number]> {
     const device = this.device;
     // bytesPerRow must be a multiple of 256
-    const bytesPerRow = 256;
+    const bytesPerRow = 256; // WebGPU COPY_BYTES_PER_ROW_ALIGNMENT
     const buf = device.createBuffer({
       size: bytesPerRow,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
@@ -225,8 +222,6 @@ export class FrameRenderer {
   }
 
   resize(w: number, h: number): void {
-    this.cw = w;
-    this.ch = h;
     const canvas = this.ctx.canvas as HTMLCanvasElement;
     canvas.width = w;
     canvas.height = h;
@@ -236,12 +231,12 @@ export class FrameRenderer {
       format: "rgba8unorm",
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
-    const canvasFmt = navigator.gpu.getPreferredCanvasFormat();
-    this.ctx.configure({ device: this.device, format: canvasFmt, alphaMode: "opaque" });
+    this.ctx.configure({ device: this.device, format: this.canvasFmt, alphaMode: "opaque" });
   }
 
   dispose(): void {
     this.readbackTex.destroy();
+    this.device.destroy();
   }
 }
 
