@@ -16,3 +16,4 @@ export * from "./schema/serialize.js";
 export * from "./project/project-store.js";
 export * from "./project/memory-store.js";
 export * from "./project/project-io.js";
+export * from "./mat2d.js";
