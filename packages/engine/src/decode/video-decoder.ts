@@ -22,6 +22,13 @@ export class VideoDecodeManager {
   private err: EngineDecodeError | null = null;
   private collected: VideoFrame[] = [];
 
+  // pump path
+  private mode: "scrub" | "pump" = "scrub";
+  private buffer: VideoFrame[] = [];
+  private cursor = 0;
+  private static AHEAD_MICROS = 500_000;
+  private static QUEUE_LIMIT = 8;
+
   private constructor(private track: DemuxedTrack, private chunks: EncodedVideoChunk[]) {}
 
   static async create(track: DemuxedTrack, chunks: EncodedVideoChunk[]): Promise<VideoDecodeManager> {
@@ -40,7 +47,14 @@ export class VideoDecodeManager {
     const support = await VideoDecoder.isConfigSupported(config);
     if (!support.supported) throw new Error(`EngineUnsupported: codec ${track.codec}`);
     m.decoder = new VideoDecoder({
-      output: (f) => { m.open++; m.collected.push(f); },
+      output: (f) => {
+        m.open++;
+        if (m.mode === "pump") {
+          m.buffer.push(f);
+        } else {
+          m.collected.push(f);
+        }
+      },
       error: (e: Error) => { m.err = { message: e.message }; },
     });
     m.decoder.configure(config);
@@ -61,7 +75,45 @@ export class VideoDecodeManager {
   lastError(): EngineDecodeError | undefined { return this.err ?? undefined; }
   closeFrame(frame: VideoFrame): void { frame.close(); this.open--; }
 
+  seekTo(targetUs: number): void {
+    this.mode = "pump";
+    this.decoder.flush().catch(() => { /* flush during reset */ });
+    for (const f of this.buffer) { f.close(); this.open--; }
+    this.buffer = [];
+    this.cursor = this.keyframeIndexBefore(targetUs);
+  }
+
+  pump(): void {
+    const ahead = this.buffer.length
+      ? this.buffer[this.buffer.length - 1]!.timestamp - this.buffer[0]!.timestamp
+      : 0;
+    while (
+      this.cursor < this.chunks.length &&
+      ahead < VideoDecodeManager.AHEAD_MICROS &&
+      this.decoder.decodeQueueSize < VideoDecodeManager.QUEUE_LIMIT
+    ) {
+      this.decoder.decode(this.chunks[this.cursor]!);
+      this.cursor++;
+    }
+  }
+
+  frameForMicros(targetUs: number): VideoFrame | undefined {
+    this.buffer.sort((a, b) => a.timestamp - b.timestamp);
+    let idx = -1;
+    for (let i = 0; i < this.buffer.length; i++) {
+      if (this.buffer[i]!.timestamp <= targetUs) idx = i;
+      else break;
+    }
+    if (idx < 0) return undefined;
+    for (let i = 0; i < idx; i++) { this.buffer[i]!.close(); this.open--; }
+    this.buffer = this.buffer.slice(idx);
+    return this.buffer[0];
+  }
+
+  bufferedCount(): number { return this.buffer.length; }
+
   async frameAtMicros(targetUs: number): Promise<VideoFrame> {
+    this.mode = "scrub";
     this.err = null;
     // drop anything buffered from a previous call
     for (const f of this.collected) { f.close(); this.open--; }
@@ -107,6 +159,8 @@ export class VideoDecodeManager {
   dispose(): void {
     for (const f of this.collected) { try { f.close(); this.open--; } catch { /* already closed */ } }
     this.collected = [];
+    for (const f of this.buffer) { try { f.close(); this.open--; } catch { /* already closed */ } }
+    this.buffer = [];
     if (this.decoder.state !== "closed") this.decoder.close();
   }
 }
