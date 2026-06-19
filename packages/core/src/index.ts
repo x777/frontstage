@@ -9,3 +9,4 @@ export * from "./generation-log.js";
 export * from "./volume-scale.js";
 export * from "./clip.js";
 export * from "./timeline.js";
+export * from "./clip-mutations.js";
