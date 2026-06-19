@@ -117,6 +117,12 @@ export class VideoDecodeManager {
     return this.buffer[0];
   }
 
+  clearPumpBuffer(): void {
+    for (const f of this.buffer) { f.close(); this.open--; }
+    this.buffer = [];
+    this.cursor = 0;
+  }
+
   bufferedCount(): number { return this.buffer.length; }
 
   async frameAtMicros(targetUs: number): Promise<VideoFrame> {

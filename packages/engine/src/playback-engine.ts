@@ -49,6 +49,7 @@ export class PlaybackEngine {
 
   // mode (exact vs low-latency scrub) is used in Plan 2c
   async seek(frame: number, _mode: "exact" | "scrub"): Promise<void> {
+    if (this._isPlaying) this.pause();
     if (!this.timeline || !this.decoder) return;
     const seq = ++this.seekSeq;
     const durationFrames = this.durationFrames;
@@ -114,7 +115,9 @@ export class PlaybackEngine {
   pause(): void {
     this._isPlaying = false;
     cancelAnimationFrame(this.raf);
+    this.raf = 0;
     this.clock?.pause();
+    this.decoder?.clearPumpBuffer();
     this.emit();
   }
 
