@@ -1,5 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": ".", "lib": ["ES2022", "DOM"], "types": ["@webgpu/types"] },
+  "compilerOptions": {
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM"],
+    "types": ["@webgpu/types"],
+    "paths": { "mp4box": ["../../packages/engine/src/demux/mp4box.d.ts"] }
+  },
   "include": ["src", "e2e", "*.ts"]
 }

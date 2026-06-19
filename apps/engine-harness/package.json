@@ -9,6 +9,10 @@
     "e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@palmier/core": "workspace:*",
+    "@palmier/engine": "workspace:*"
+  },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@webgpu/types": "^0.1.40",

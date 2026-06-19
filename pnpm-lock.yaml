@@ -19,6 +19,13 @@ importers:
         version: 2.1.9(@types/node@22.19.21)
 
   apps/engine-harness:
+    dependencies:
+      '@palmier/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@palmier/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
     devDependencies:
       '@playwright/test':
         specifier: ^1.48.0
