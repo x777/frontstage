@@ -16,6 +16,8 @@ export class PlaybackEngine {
   private _currentFrame = 0;
   private cbs = new Set<StateCb>();
 
+  private seekSeq = 0;
+
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
   static async create(canvas: HTMLCanvasElement): Promise<PlaybackEngine> {
@@ -38,10 +40,12 @@ export class PlaybackEngine {
     await this.seek(0, "exact");
   }
 
+  // mode (exact vs low-latency scrub) is used in Plan 2c
   async seek(frame: number, _mode: "exact" | "scrub"): Promise<void> {
     if (!this.timeline || !this.decoder) return;
-    const clamped = Math.max(0, Math.min(frame, this.durationFrames));
-    this._currentFrame = clamped;
+    const seq = ++this.seekSeq;
+    const durationFrames = this.durationFrames;
+    const clamped = Math.max(0, Math.min(frame, Math.max(0, durationFrames - 1)));
     const plan = buildRenderPlan(this.timeline, clamped, new Map([[
       this.firstVideoMediaRef(), this.natSize,
     ]]));
@@ -51,20 +55,27 @@ export class PlaybackEngine {
       frameToSeconds(clip.trimStartFrame + (clamped - clip.startFrame) * clip.speed, this.timeline.fps) * 1_000_000,
     );
     const vframe = await this.decoder.frameAtMicros(Math.max(0, sourceUs));
-    if (layer) {
-      // Decoded frames are software copies (cloned in VideoDecodeManager to survive decoder.close()).
-      // importExternalTexture requires an ImageBitmap-backed VideoFrame — promote via OffscreenCanvas.
-      const off = new OffscreenCanvas(vframe.displayWidth, vframe.displayHeight);
-      const ctx2d = off.getContext("2d")!;
-      ctx2d.drawImage(vframe, 0, 0);
-      const bitmap = off.transferToImageBitmap();
-      const gpuFrame = new VideoFrame(bitmap, { timestamp: vframe.timestamp });
-      bitmap.close();
-      this.renderer.present(gpuFrame, layer.transform, { width: this.timeline.width, height: this.timeline.height });
-      gpuFrame.close();
+    try {
+      if (seq !== this.seekSeq) return;
+      this._currentFrame = clamped;
+      if (layer) {
+        // Decoded frames are software copies (cloned in VideoDecodeManager to survive decoder.close()).
+        // importExternalTexture requires an ImageBitmap-backed VideoFrame — promote via OffscreenCanvas.
+        const off = new OffscreenCanvas(vframe.displayWidth, vframe.displayHeight);
+        off.getContext("2d")!.drawImage(vframe, 0, 0);
+        const bitmap = off.transferToImageBitmap();
+        const gpuFrame = new VideoFrame(bitmap, { timestamp: vframe.timestamp });
+        bitmap.close();
+        try {
+          this.renderer.present(gpuFrame, layer.transform, { width: this.timeline.width, height: this.timeline.height });
+        } finally {
+          gpuFrame.close();
+        }
+      }
+      this.emit();
+    } finally {
+      this.decoder.closeFrame(vframe);
     }
-    this.decoder.closeFrame(vframe);
-    this.emit();
   }
 
   private firstVideoMediaRef(): string {

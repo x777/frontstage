@@ -29,3 +29,15 @@ test("loads a clip, scrubs, renders frames, and does not leak", async ({ page })
   const frameAfter = await page.evaluate(() => window.__engine!.currentFrame);
   expect(frameAfter).toBeGreaterThan(0);
 });
+
+test("overlapping seeks do not leak and end consistent", async ({ page }) => {
+  await page.goto("/player.html");
+  await page.waitForFunction(() => window.__engineReady === true, { timeout: 20_000 });
+  const r = await page.evaluate(async () => {
+    const e = window.__engine!;
+    await Promise.all([e.seek(3, "scrub"), e.seek(12, "scrub")]); // overlap
+    return { open: e.openFrameCount(), frame: e.currentFrame };
+  });
+  expect(r.open).toBeLessThanOrEqual(2);
+  expect(r.frame).toBeGreaterThanOrEqual(0);
+});
