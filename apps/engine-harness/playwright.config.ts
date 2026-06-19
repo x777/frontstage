@@ -18,7 +18,6 @@ export default defineConfig({
           args: [
             "--enable-unsafe-webgpu",
             "--ignore-gpu-blocklist",
-            "--no-sandbox",
           ],
         },
       },

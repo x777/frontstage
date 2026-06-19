@@ -25,6 +25,7 @@ async function main(): Promise<void> {
     device.queue.submit([enc1.finish()]);
     await device.queue.onSubmittedWorkDone();
 
+    // Readback uses a separate 1x1 rgba8unorm texture (not the display canvas) — this proves the GPU path runs, not the display surface contents.
     // Pass 2: use rgba8unorm texture for pixel readback (avoids bgra format issues)
     const readTex = device.createTexture({
       size: [1, 1],
@@ -41,7 +42,7 @@ async function main(): Promise<void> {
       }],
     });
     pass2.end();
-    const bytesPerRow = 256;
+    const bytesPerRow = 256; // WebGPU requires bytesPerRow to be a multiple of 256
     const readback = device.createBuffer({ size: bytesPerRow, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     enc2.copyTextureToBuffer({ texture: readTex }, { buffer: readback, bytesPerRow }, [1, 1]);
     device.queue.submit([enc2.finish()]);
