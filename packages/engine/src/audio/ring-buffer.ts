@@ -33,8 +33,9 @@ export class SabRingBuffer {
   write(interleaved: Float32Array): number {
     const read = Atomics.load(this.header, 0);
     const write = Atomics.load(this.header, 1);
+    // One slot reserved to disambiguate full vs empty; usable capacity is capacityFrames - 1 frames.
     const avail = (this.capacityFrames - ((write - read + this.capacityFrames) % this.capacityFrames) - 1);
-    const inFrames = interleaved.length / this.channels;
+    const inFrames = Math.floor(interleaved.length / this.channels);
     const n = Math.min(inFrames, avail);
     for (let i = 0; i < n; i++) {
       const base = ((write + i) % this.capacityFrames) * this.channels;

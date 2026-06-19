@@ -37,6 +37,7 @@ class RingProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < frames; i++) {
       if (i < n) {
         const base = ((read + i) % this.capacity) * this.channels;
+        // Math.min clamps ch to last source channel, upmixing when output has more channels than source.
         for (let ch = 0; ch < out.length; ch++) {
           out[ch]![i] = this.data[base + Math.min(ch, this.channels - 1)]!;
         }

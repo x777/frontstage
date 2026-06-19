@@ -4,12 +4,15 @@ interface AudioGraphRunResult {
   isolated: boolean;
   t0: number;
   t1: number;
+  ringDrained: boolean;
+  initialAvail: number;
 }
 
 declare global {
   interface Window {
     __audioGraphReady: boolean;
     __audioGraphRun: () => Promise<AudioGraphRunResult>;
+    __ringDrained: boolean;
   }
 }
 
@@ -37,6 +40,7 @@ async function main(): Promise<void> {
       }
     });
 
+    const initialAvail = graph.availableRead;
     await graph.start();
 
     window.__audioGraphRun = async (): Promise<AudioGraphRunResult> => {
@@ -44,7 +48,9 @@ async function main(): Promise<void> {
       const t0 = graph.currentTime;
       await new Promise<void>((resolve) => setTimeout(resolve, 350));
       const t1 = graph.currentTime;
-      return { isolated, t0, t1 };
+      const ringDrained = graph.availableRead < initialAvail;
+      window.__ringDrained = ringDrained;
+      return { isolated, t0, t1, ringDrained, initialAvail };
     };
 
     status.textContent = "ok";
