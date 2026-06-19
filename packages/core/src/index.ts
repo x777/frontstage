@@ -18,3 +18,4 @@ export * from "./project/memory-store.js";
 export * from "./project/project-io.js";
 export * from "./mat2d.js";
 export * from "./render-plan.js";
+export * from "./fit-transform.js";
