@@ -18,6 +18,7 @@ export class PlaybackEngine {
 
   private seekSeq = 0;
   private decodeGate: Promise<void> = Promise.resolve();
+  private lastSeekError: unknown = undefined;
 
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
@@ -57,10 +58,11 @@ export class PlaybackEngine {
     );
     // Serialize decoder access: chain onto the previous decode so concurrent seeks
     // don't interleave on the shared persistent VideoDecoder.
-    let vframe!: VideoFrame;
+    let vframe: VideoFrame | undefined;
     this.decodeGate = this.decodeGate.then(async () => {
+      if (seq !== this.seekSeq) return;
       vframe = await this.decoder!.frameAtMicros(Math.max(0, sourceUs));
-    }).catch(() => { /* stale errors are swallowed; vframe stays undefined */ });
+    }).catch((e) => { this.lastSeekError = e; console.warn("seek decode error:", e); });
     await this.decodeGate;
     if (!vframe) return;
     try {
@@ -71,7 +73,7 @@ export class PlaybackEngine {
       }
       this.emit();
     } finally {
-      this.decoder.closeFrame(vframe);
+      this.decoder?.closeFrame(vframe);
     }
   }
 

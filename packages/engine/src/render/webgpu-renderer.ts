@@ -265,63 +265,68 @@ export class FrameRenderer {
       device.queue.submit([encoder.finish()]);
     } else {
       // Software-copy path: VideoFrame.copyTo → RGBA pixels → writeTexture → sample as texture_2d
-      const bytesPerRow = natW * 4;
+      // bytesPerRow must be 256-aligned for writeTexture; copyTo accepts any value >= natW*4
+      const unpadded = natW * 4;
+      const bytesPerRow = Math.ceil(unpadded / 256) * 256;
       const pixelBuf = new Uint8Array(bytesPerRow * natH);
-      await frame.copyTo(pixelBuf, { format: "RGBA" });
+      await frame.copyTo(pixelBuf, { format: "RGBA", layout: [{ offset: 0, stride: bytesPerRow }] });
 
       const frameTex = device.createTexture({
         size: [natW, natH],
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       });
-      device.queue.writeTexture(
-        { texture: frameTex },
-        pixelBuf,
-        { bytesPerRow },
-        [natW, natH],
-      );
+      try {
+        device.queue.writeTexture(
+          { texture: frameTex },
+          pixelBuf,
+          { bytesPerRow },
+          [natW, natH],
+        );
 
-      const makeBg = (pipeline: GPURenderPipeline): GPUBindGroup =>
-        device.createBindGroup({
-          layout: this.copyBgl,
-          entries: [
-            { binding: 0, resource: frameTex.createView() },
-            { binding: 1, resource: this.sampler },
-            { binding: 2, resource: { buffer: uBuf } },
-          ],
-        });
+        const makeBg = (pipeline: GPURenderPipeline): GPUBindGroup =>
+          device.createBindGroup({
+            layout: this.copyBgl,
+            entries: [
+              { binding: 0, resource: frameTex.createView() },
+              { binding: 1, resource: this.sampler },
+              { binding: 2, resource: { buffer: uBuf } },
+            ],
+          });
 
-      const encoder = device.createCommandEncoder();
-      {
-        const pass = encoder.beginRenderPass({
-          colorAttachments: [{
-            view: this.ctx.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: "clear",
-            storeOp: "store",
-          }],
-        });
-        pass.setPipeline(this.copyCanvasPipeline);
-        pass.setBindGroup(0, makeBg(this.copyCanvasPipeline));
-        pass.draw(4);
-        pass.end();
+        const encoder = device.createCommandEncoder();
+        {
+          const pass = encoder.beginRenderPass({
+            colorAttachments: [{
+              view: this.ctx.getCurrentTexture().createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: "clear",
+              storeOp: "store",
+            }],
+          });
+          pass.setPipeline(this.copyCanvasPipeline);
+          pass.setBindGroup(0, makeBg(this.copyCanvasPipeline));
+          pass.draw(4);
+          pass.end();
+        }
+        {
+          const pass = encoder.beginRenderPass({
+            colorAttachments: [{
+              view: this.readbackTex.createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: "clear",
+              storeOp: "store",
+            }],
+          });
+          pass.setPipeline(this.copyReadbackPipeline);
+          pass.setBindGroup(0, makeBg(this.copyReadbackPipeline));
+          pass.draw(4);
+          pass.end();
+        }
+        device.queue.submit([encoder.finish()]);
+      } finally {
+        frameTex.destroy();
       }
-      {
-        const pass = encoder.beginRenderPass({
-          colorAttachments: [{
-            view: this.readbackTex.createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: "clear",
-            storeOp: "store",
-          }],
-        });
-        pass.setPipeline(this.copyReadbackPipeline);
-        pass.setBindGroup(0, makeBg(this.copyReadbackPipeline));
-        pass.draw(4);
-        pass.end();
-      }
-      device.queue.submit([encoder.finish()]);
-      frameTex.destroy();
     }
     uBuf.destroy();
   }

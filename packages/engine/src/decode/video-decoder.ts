@@ -105,7 +105,7 @@ export class VideoDecodeManager {
   }
 
   dispose(): void {
-    for (const f of this.collected) { try { f.close(); } catch { /* already closed */ } }
+    for (const f of this.collected) { try { f.close(); this.open--; } catch { /* already closed */ } }
     this.collected = [];
     if (this.decoder.state !== "closed") this.decoder.close();
   }
