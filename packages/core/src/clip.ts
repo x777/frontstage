@@ -1,5 +1,5 @@
 import { type AnimPair, type KeyframeTrack, lerpAnimPair, lerpNumber, sampleTrack, smoothstep, trackIsActive } from "./keyframe.js";
-import { type Crop, type Transform, lerpCrop, transformTopLeft } from "./transform.js";
+import { type Crop, type Transform, lerpCrop } from "./transform.js";
 import { linearFromDb } from "./volume-scale.js";
 import type { ClipType } from "./clip-type.js";
 import type { TextStyle } from "./text-style.js";
@@ -111,6 +111,7 @@ export function topLeftAt(clip: Clip, frame: number): { x: number; y: number } {
 export function transformAt(clip: Clip, frame: number): Transform {
   const tl = topLeftAt(clip, frame);
   const sz = sizeAt(clip, frame);
+  // Preserves flip flags; Swift transformAt drops them (known parity divergence, decision pending).
   return {
     ...clip.transform,
     centerX: tl.x + sz.width / 2,
