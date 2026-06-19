@@ -26,5 +26,6 @@ describe("demuxMp4", () => {
     expect(r.audio!.samples.length).toBeGreaterThan(0);
     expect(r.audio!.description).toBeInstanceOf(Uint8Array);
     expect((r.audio!.description as Uint8Array).byteLength).toBeGreaterThan(0);
+    expect(r.audio!.channels).toBe(1);
   });
 });

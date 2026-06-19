@@ -33,13 +33,17 @@ export class AudioDecodeManager {
     return new AudioDecodeManager(track, chunks);
   }
 
-  async decodeAll(onPcm: (pcm: PcmChunk) => void): Promise<void> {
-    const config: AudioDecoderConfig = {
+  private buildConfig(): AudioDecoderConfig {
+    return {
       codec: this.track.codec,
       sampleRate: this.track.sampleRate,
       numberOfChannels: this.track.channels,
       ...(this.track.description ? { description: this.track.description } : {}),
     };
+  }
+
+  async decodeAll(onPcm: (pcm: PcmChunk) => void): Promise<void> {
+    const config = this.buildConfig();
     let decodeError: Error | null = null;
     const decoder = new AudioDecoder({
       output: (audioData) => {
@@ -63,7 +67,11 @@ export class AudioDecodeManager {
     });
     decoder.configure(config);
     for (const c of this.chunks) decoder.decode(c);
-    await decoder.flush();
+    try {
+      await decoder.flush();
+    } catch {
+      // flush rejects when the decoder errored; decodeError is already captured above
+    }
     decoder.close();
     if (decodeError) throw decodeError;
   }
