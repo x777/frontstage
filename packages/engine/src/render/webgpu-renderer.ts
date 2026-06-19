@@ -1,4 +1,4 @@
-import type { Mat2d } from "@palmier/core";
+import type { Mat2d, Size } from "@palmier/core";
 
 const WGSL = /* wgsl */ `
 struct VertexOut {
@@ -51,11 +51,6 @@ fn fs(v: VertexOut) -> @location(0) vec4f {
 `;
 
 export type ReadPixelFn = (x: number, y: number) => Promise<[number, number, number, number]>;
-
-export interface SourceSize {
-  width: number;
-  height: number;
-}
 
 export class FrameRenderer {
   private device: GPUDevice;
@@ -134,7 +129,7 @@ export class FrameRenderer {
     return new FrameRenderer(device, ctx, canvasPipeline, readbackPipeline, sampler, readbackTex, cw, ch);
   }
 
-  present(frame: VideoFrame, mat: Mat2d): void {
+  present(frame: VideoFrame, mat: Mat2d, renderSize: Size): void {
     const device = this.device;
     const natW = frame.displayWidth;
     const natH = frame.displayHeight;
@@ -145,7 +140,7 @@ export class FrameRenderer {
       mat.c, mat.d,
       mat.e, mat.f,
       natW, natH,
-      this.cw, this.ch,
+      renderSize.width, renderSize.height,
       0, 0,
     ]);
     const uBuf = device.createBuffer({
@@ -203,6 +198,7 @@ export class FrameRenderer {
 
     // Single submit — external texture valid for the entire synchronous block
     device.queue.submit([encoder.finish()]);
+    uBuf.destroy();
   }
 
   async readPixel(x: number, y: number): Promise<[number, number, number, number]> {
@@ -227,7 +223,23 @@ export class FrameRenderer {
     return pixel;
   }
 
-  destroy(): void {
+  resize(w: number, h: number): void {
+    this.cw = w;
+    this.ch = h;
+    const canvas = this.ctx.canvas as HTMLCanvasElement;
+    canvas.width = w;
+    canvas.height = h;
+    this.readbackTex.destroy();
+    this.readbackTex = this.device.createTexture({
+      size: [w, h],
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const canvasFmt = navigator.gpu.getPreferredCanvasFormat();
+    this.ctx.configure({ device: this.device, format: canvasFmt, alphaMode: "opaque" });
+  }
+
+  dispose(): void {
     this.readbackTex.destroy();
   }
 }

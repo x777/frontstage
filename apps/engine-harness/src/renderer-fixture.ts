@@ -35,7 +35,7 @@ async function main(): Promise<void> {
     const transform = fitTransform({ width: VIDEO_W, height: VIDEO_H }, { width: W, height: H });
     const mat = affineTransform(transform, { width: VIDEO_W, height: VIDEO_H }, { width: W, height: H });
 
-    renderer.present(frame, mat);
+    renderer.present(frame, mat, { width: W, height: H });
     frame.close();
 
     window.__readPixel = readPixelFactory(renderer);
