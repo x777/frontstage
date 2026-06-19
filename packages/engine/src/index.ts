@@ -4,3 +4,4 @@ export * from "./demux/mp4-demuxer.js";
 export * from "./render/webgpu-renderer.js";
 export * from "./decode/video-decoder.js";
 export * from "./playback-engine.js";
+export * from "./clock/play-clock.js";

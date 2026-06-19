@@ -85,6 +85,21 @@ async function main(): Promise<void> {
       void engine.seek(Number(slider.value), "scrub");
     });
 
+    // Wire the play/pause button
+    const playPauseBtn = document.getElementById("playpause") as HTMLButtonElement;
+    playPauseBtn.addEventListener("click", () => {
+      if (engine.isPlaying) {
+        engine.pause();
+        playPauseBtn.textContent = "Play";
+      } else {
+        engine.play();
+        playPauseBtn.textContent = "Pause";
+      }
+    });
+    engine.onStateChange((s) => {
+      playPauseBtn.textContent = s.isPlaying ? "Pause" : "Play";
+    });
+
     window.__engine = engine;
     window.__engineReady = true;
     status.textContent = `ok — ${durationFrames} frames`;

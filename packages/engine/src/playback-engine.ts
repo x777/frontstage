@@ -6,6 +6,7 @@ import type { MediaByteSource } from "./media/media-source.js";
 import { demuxMp4 } from "./demux/mp4-demuxer.js";
 import { buildVideoChunks, VideoDecodeManager } from "./decode/video-decoder.js";
 import { FrameRenderer } from "./render/webgpu-renderer.js";
+import { PlayClock } from "./clock/play-clock.js";
 
 type StateCb = (s: { currentFrame: number; isPlaying: boolean }) => void;
 
@@ -14,11 +15,15 @@ export class PlaybackEngine {
   private decoder?: VideoDecodeManager;
   private natSize: Size = { width: 0, height: 0 };
   private _currentFrame = 0;
+  private _isPlaying = false;
   private cbs = new Set<StateCb>();
 
   private seekSeq = 0;
   private decodeGate: Promise<void> = Promise.resolve();
   private lastSeekError: unknown = undefined;
+
+  private clock?: PlayClock;
+  private raf = 0;
 
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
@@ -52,12 +57,7 @@ export class PlaybackEngine {
       this.firstVideoMediaRef(), this.natSize,
     ]]));
     const layer = plan.layers[0];
-    const clip = this.timeline.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video")!;
-    const sourceUs = Math.round(
-      frameToSeconds(clip.trimStartFrame + (clamped - clip.startFrame) * clip.speed, this.timeline.fps) * 1_000_000,
-    );
-    // Serialize decoder access: chain onto the previous decode so concurrent seeks
-    // don't interleave on the shared persistent VideoDecoder.
+    const sourceUs = this.sourceMicrosForFrame(clamped);
     let vframe: VideoFrame | undefined;
     this.decodeGate = this.decodeGate.then(async () => {
       if (seq !== this.seekSeq) return;
@@ -77,14 +77,66 @@ export class PlaybackEngine {
     }
   }
 
+  play(): void {
+    if (!this.timeline || !this.decoder || this._isPlaying) return;
+    this._isPlaying = true;
+    this.clock = new PlayClock(this.timeline.fps);
+    const clip = this.firstVideoClip();
+    const sourceMicros = this.sourceMicrosForFrame(this._currentFrame);
+    this.decoder.seekTo(sourceMicros).then(() => {
+      this.clock!.start(this._currentFrame);
+      this.raf = requestAnimationFrame(() => void tick());
+    }).catch((e) => { console.warn("play seekTo error:", e); this._isPlaying = false; this.emit(); });
+
+    const tick = async (): Promise<void> => {
+      if (!this._isPlaying || !this.clock || !this.decoder || !this.timeline) return;
+      this.decoder.pump();
+      const frame = Math.floor(this.clock.frame);
+      if (frame >= this.durationFrames) {
+        this.pause();
+        this._currentFrame = Math.max(0, this.durationFrames - 1);
+        this.emit();
+        return;
+      }
+      this._currentFrame = frame;
+      const f = this.decoder.frameForMicros(this.sourceMicrosForFrame(frame));
+      const plan = buildRenderPlan(this.timeline, frame, new Map([[clip.mediaRef, this.natSize]]));
+      if (f && plan.layers[0]) {
+        await this.renderer.present(f, plan.layers[0].transform, { width: this.timeline.width, height: this.timeline.height });
+      }
+      this.emit();
+      if (this._isPlaying) this.raf = requestAnimationFrame(() => void tick());
+    };
+  }
+
+  pause(): void {
+    this._isPlaying = false;
+    cancelAnimationFrame(this.raf);
+    this.clock?.pause();
+    this.emit();
+  }
+
+  get isPlaying(): boolean { return this._isPlaying; }
+
+  private sourceMicrosForFrame(frame: number): number {
+    const clip = this.firstVideoClip();
+    return Math.round(
+      frameToSeconds(clip.trimStartFrame + (frame - clip.startFrame) * clip.speed, this.timeline!.fps) * 1_000_000,
+    );
+  }
+
+  private firstVideoClip() {
+    return this.timeline!.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video")!;
+  }
+
   private firstVideoMediaRef(): string {
-    return this.timeline!.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video")!.mediaRef;
+    return this.firstVideoClip().mediaRef;
   }
 
   get currentFrame(): number { return this._currentFrame; }
   get durationFrames(): number { return this.timeline ? timelineTotalFrames(this.timeline) : 0; }
   openFrameCount(): number { return this.decoder?.openFrameCount() ?? 0; }
   onStateChange(cb: StateCb): () => void { this.cbs.add(cb); return () => this.cbs.delete(cb); }
-  private emit(): void { for (const cb of this.cbs) cb({ currentFrame: this._currentFrame, isPlaying: false }); }
-  dispose(): void { this.decoder?.dispose(); this.renderer.dispose(); }
+  private emit(): void { for (const cb of this.cbs) cb({ currentFrame: this._currentFrame, isPlaying: this._isPlaying }); }
+  dispose(): void { this.pause(); this.decoder?.dispose(); this.renderer.dispose(); }
 }
