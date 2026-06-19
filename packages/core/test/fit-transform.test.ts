@@ -20,6 +20,15 @@ describe("fitTransform", () => {
     expect(t.width).toBeCloseTo((1080 / 1920) / (1920 / 1080)); // sourceAspect / canvasAspect
   });
   test("invalid sizes → identity", () => {
-    expect(fitTransform({ width: 0, height: 0 }, { width: 100, height: 100 }).width).toBe(1);
+    const t = fitTransform({ width: 0, height: 0 }, { width: 100, height: 100 });
+    expect(t.width).toBe(1);
+    expect(t.height).toBe(1);
+    expect(t.centerX).toBe(0.5);
+    expect(t.centerY).toBe(0.5);
+  });
+  test("zero canvas dimensions → identity (no Infinity)", () => {
+    const t = fitTransform({ width: 1920, height: 1080 }, { width: 0, height: 0 });
+    expect(t.width).toBe(1);
+    expect(t.height).toBe(1);
   });
 });

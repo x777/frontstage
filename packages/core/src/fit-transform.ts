@@ -3,7 +3,7 @@ import { defaultTransform, type Transform } from "./transform.js";
 
 const ASPECT_TOLERANCE = 0.02;
 
-/** Centered fit of `source` into `canvas` (letterbox/pillarbox), as a normalized Transform. Port of the macOS EditorViewModel.fitTransform. */
+/** Port of the macOS EditorViewModel.fitTransform (letterbox/pillarbox fit). */
 export function fitTransform(source: Size, canvas: Size): Transform {
   if (source.width <= 0 || source.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
     return defaultTransform();
