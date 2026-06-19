@@ -1,0 +1,18 @@
+{
+  "name": "@palmier/engine-harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@webgpu/types": "^0.1.40",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0"
+  }
+}
