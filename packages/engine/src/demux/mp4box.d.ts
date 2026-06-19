@@ -32,6 +32,30 @@ declare module "mp4box" {
     timescale: number;
   }
 
+  export interface AvcCBox {
+    write(stream: DataStreamInstance): void;
+  }
+
+  export interface SampleEntry {
+    avcC?: AvcCBox;
+  }
+
+  export interface MP4Trak {
+    mdia: {
+      minf: {
+        stbl: {
+          stsd: {
+            entries: SampleEntry[];
+          };
+        };
+      };
+    };
+  }
+
+  export interface DataStreamInstance {
+    buffer: ArrayBuffer;
+  }
+
   export interface MP4File {
     onReady: ((info: MP4Info) => void) | null;
     onError: ((e: string) => void) | null;
@@ -40,8 +64,18 @@ declare module "mp4box" {
     appendBuffer(buffer: MP4ArrayBuffer): number;
     start(): void;
     flush(): void;
+    getTrackById(id: number): MP4Trak | null;
   }
 
-  const MP4Box: { createFile(): MP4File };
+  export interface DataStreamConstructor {
+    new (buffer?: ArrayBuffer, byteOffset?: number, endianness?: boolean): DataStreamInstance;
+    BIG_ENDIAN: boolean;
+    LITTLE_ENDIAN: boolean;
+  }
+
+  const MP4Box: {
+    createFile(): MP4File;
+    DataStream: DataStreamConstructor;
+  };
   export default MP4Box;
 }

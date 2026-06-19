@@ -15,6 +15,8 @@ describe("demuxMp4", () => {
     expect(r.video!.codedHeight).toBe(240);
     expect(r.video!.samples.length).toBeGreaterThan(0);
     expect(r.video!.samples[0]!.isSync).toBe(true);
+    expect(r.video!.description).toBeInstanceOf(Uint8Array);
+    expect((r.video!.description as Uint8Array).byteLength).toBeGreaterThan(0);
   });
   test("extracts the AAC audio track", async () => {
     const r = await demuxMp4(blob);

@@ -15,6 +15,7 @@ export interface DemuxedTrack {
   codedHeight: number;
   timescale: number;
   samples: DemuxedSample[];
+  description?: Uint8Array;
 }
 
 export interface DemuxedAudioTrack {
@@ -31,6 +32,16 @@ export interface DemuxResult {
 }
 
 const toMicros = (ts: number, timescale: number): number => Math.round((ts / timescale) * 1_000_000);
+
+function avccDescription(file: ReturnType<typeof MP4Box.createFile>, trackId: number): Uint8Array | undefined {
+  const trak = file.getTrackById(trackId);
+  const entry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+  const avcC = entry?.avcC;
+  if (!avcC) return undefined;
+  const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+  avcC.write(stream);
+  return new Uint8Array(stream.buffer, 8); // strip 8-byte box header (size + type)
+}
 
 export async function demuxMp4(blob: Blob): Promise<DemuxResult> {
   const file = MP4Box.createFile();
@@ -54,6 +65,7 @@ export async function demuxMp4(blob: Blob): Promise<DemuxResult> {
           codedHeight: v.video.height,
           timescale: v.timescale,
           samples: videoSamples,
+          description: avccDescription(file, v.id),
         };
         file.setExtractionOptions(v.id, "video", { nbSamples: Number.MAX_SAFE_INTEGER });
       }
