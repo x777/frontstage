@@ -9,7 +9,7 @@ function clampTrack<V>(track: KeyframeTrack<V> | undefined, duration: number): K
 
 function rescaleTrack<V>(track: KeyframeTrack<V> | undefined, scale: number): KeyframeTrack<V> | undefined {
   if (!track) return undefined;
-  if (!Number.isFinite(scale) || scale <= 0) return track;
+  if (!Number.isFinite(scale) || scale <= 0) return { keyframes: track.keyframes };
   const moved = track.keyframes.map((k) => ({ ...k, frame: Math.round(k.frame * scale) }));
   // Upsert semantics: later wins on frame collision.
   const byFrame = new Map<number, (typeof moved)[number]>();
