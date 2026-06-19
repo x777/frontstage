@@ -27,4 +27,16 @@ describe("mat2d", () => {
     close(affineTransform(t, { width: 100, height: 100 }, { width: 100, height: 100 }),
       { a: -1, e: 100 });
   });
+  test("vertical flip negates y scale and shifts y origin", () => {
+    const t = { ...defaultTransform(), flipVertical: true };
+    close(affineTransform(t, { width: 100, height: 100 }, { width: 100, height: 100 }),
+      { a: 1, d: -1, f: 100 });
+  });
+  test("90-degree rotation produces the expected rotation sub-matrix", () => {
+    const t = { ...defaultTransform(), rotation: 90 };
+    // placed is identity (full-canvas, matching sizes); center-pivot translates only affect e/f,
+    // so a,b,c,d are the pure 90 deg CW rotation in this matrix convention.
+    close(affineTransform(t, { width: 100, height: 100 }, { width: 100, height: 100 }),
+      { a: 0, b: 1, c: -1, d: 0 });
+  });
 });
