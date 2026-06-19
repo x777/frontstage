@@ -7,3 +7,5 @@ export * from "./text-style.js";
 export * from "./media.js";
 export * from "./generation-log.js";
 export * from "./volume-scale.js";
+export * from "./clip.js";
+export * from "./timeline.js";
