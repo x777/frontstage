@@ -26,19 +26,19 @@ describe("buildRenderPlan", () => {
     expect(plan.layers[0]!.clipId).toBe("c");
     expect(plan.layers[0]!.zIndex).toBe(0);
     expect(plan.layers[0]!.opacity).toBe(1);
+    expect(plan.layers[0]!.mediaRef).toBe("m");
+    expect(plan.layers[0]!.transform).toMatchObject({ a: expect.any(Number), e: expect.any(Number) });
   });
   test("frame outside the clip yields no layers", () => {
     const tl = { ...defaultTimeline(), tracks: [track([clip({ startFrame: 0, durationFrames: 5 })])] };
     expect(buildRenderPlan(tl, 50, sizes).layers).toHaveLength(0);
   });
-  test("audio clips and hidden tracks are excluded", () => {
-    const tl = {
-      ...defaultTimeline(),
-      tracks: [
-        track([clip({ id: "a", mediaType: "audio" })], { type: "audio" }),
-        track([clip({ id: "v" })], { hidden: true }),
-      ],
-    };
+  test("audio clips are excluded", () => {
+    const tl = { ...defaultTimeline(), tracks: [track([clip({ id: "a", mediaType: "audio" })], { type: "audio" })] };
+    expect(buildRenderPlan(tl, 10, sizes).layers).toHaveLength(0);
+  });
+  test("hidden tracks are excluded", () => {
+    const tl = { ...defaultTimeline(), tracks: [track([clip({ id: "v" })], { hidden: true })] };
     expect(buildRenderPlan(tl, 10, sizes).layers).toHaveLength(0);
   });
 });

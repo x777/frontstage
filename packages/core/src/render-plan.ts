@@ -24,7 +24,7 @@ export function buildRenderPlan(timeline: Timeline, frame: number, sourceSizes: 
     const track = timeline.tracks[ti]!;
     if (track.hidden) continue;
     for (const clip of track.clips) {
-      if (clip.mediaType === "text") continue; // text rendering: later milestone
+      if (clip.mediaType === "text") continue; // text is composited by a separate text pass, not as a media layer
       if (!clipTypeIsVisual(clip.mediaType)) continue; // skip audio
       if (!clipContains(clip, frame)) continue;
       const natSize = sourceSizes.get(clip.mediaRef) ?? renderSize;
