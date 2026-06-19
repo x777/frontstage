@@ -61,18 +61,36 @@ export class VideoDecodeManager {
     }
     await decoder.flush();
     decoder.close();
+    // Pick best frame: latest frame with timestamp ≤ targetUs; if none, fall back to earliest.
     let best: VideoFrame | undefined;
+    let fallback: VideoFrame | undefined;
     for (const f of collected) {
-      if (f.timestamp <= targetUs && (!best || f.timestamp > best.timestamp)) {
-        if (best) { best.close(); this.open--; }
-        best = f;
+      if (f.timestamp <= targetUs) {
+        if (!best || f.timestamp > best.timestamp) {
+          if (best) { best.close(); this.open--; }
+          best = f;
+        } else {
+          f.close(); this.open--;
+        }
       } else {
-        f.close(); this.open--;
+        if (!fallback || f.timestamp < fallback.timestamp) {
+          if (fallback) { fallback.close(); this.open--; }
+          fallback = f;
+        } else {
+          f.close(); this.open--;
+        }
       }
     }
-    if (!best && collected.length > 0) { best = collected[collected.length - 1]; }
+    // Use best if found; otherwise take the earliest frame past targetUs.
+    if (!best && fallback) { best = fallback; fallback = undefined; }
+    if (fallback) { fallback.close(); this.open--; }
     if (!best) throw new Error("no frame decoded");
-    return best;
+    // Clone before decoder.close(): on Chromium/D3D11, decoder.close() may release zero-copy
+    // GPU texture backing even while the JS VideoFrame object is still in scope.
+    const cloned = best.clone();
+    best.close(); this.open--; // close original
+    this.open++;               // track clone
+    return cloned;
   }
 
   closeFrame(frame: VideoFrame): void { frame.close(); this.open--; }
