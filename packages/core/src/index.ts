@@ -10,3 +10,4 @@ export * from "./volume-scale.js";
 export * from "./clip.js";
 export * from "./timeline.js";
 export * from "./clip-mutations.js";
+export * from "./schema/schemas.js";
