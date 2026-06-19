@@ -220,6 +220,7 @@ export class FrameRenderer {
     const data = new Uint8Array(buf.getMappedRange(0, 4));
     const pixel: [number, number, number, number] = [data[0]!, data[1]!, data[2]!, data[3]!];
     buf.unmap();
+    buf.destroy();
     return pixel;
   }
 
