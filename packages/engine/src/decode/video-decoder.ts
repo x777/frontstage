@@ -11,91 +11,102 @@ export function buildVideoChunks(track: DemuxedTrack, fileBytes: ArrayBuffer): E
   );
 }
 
+export interface EngineDecodeError { message: string; }
+
+interface KeyframeEntry { chunkIndex: number; micros: number; }
+
 export class VideoDecodeManager {
+  private decoder!: VideoDecoder;
   private open = 0;
-  private constructor(
-    private decoder: VideoDecoder,
-    private track: DemuxedTrack,
-    private chunks: EncodedVideoChunk[],
-  ) {}
+  private keyframes: KeyframeEntry[] = [];
+  private err: EngineDecodeError | null = null;
+  private collected: VideoFrame[] = [];
+
+  private constructor(private track: DemuxedTrack, private chunks: EncodedVideoChunk[]) {}
 
   static async create(track: DemuxedTrack, chunks: EncodedVideoChunk[]): Promise<VideoDecodeManager> {
-    const mgr = new VideoDecodeManager(undefined as unknown as VideoDecoder, track, chunks);
+    const m = new VideoDecodeManager(track, chunks);
+    m.keyframes = chunks
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => c.type === "key")
+      .map(({ c, i }) => ({ chunkIndex: i, micros: c.timestamp }));
     const config: VideoDecoderConfig = {
       codec: track.codec,
       codedWidth: track.codedWidth,
       codedHeight: track.codedHeight,
       ...(track.description ? { description: track.description } : {}),
+      optimizeForLatency: true,
     };
     const support = await VideoDecoder.isConfigSupported(config);
     if (!support.supported) throw new Error(`EngineUnsupported: codec ${track.codec}`);
-    const decoder = new VideoDecoder({ output: () => {}, error: (e) => { throw e; } });
-    decoder.configure(config);
-    (mgr as unknown as { decoder: VideoDecoder }).decoder = decoder;
-    return mgr;
+    m.decoder = new VideoDecoder({
+      output: (f) => { m.open++; m.collected.push(f); },
+      error: (e: Error) => { m.err = { message: e.message }; },
+    });
+    m.decoder.configure(config);
+    return m;
+  }
+
+  private keyframeIndexBefore(targetUs: number): number {
+    let lo = 0, hi = this.keyframes.length - 1, ans = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.keyframes[mid]!.micros <= targetUs) { ans = this.keyframes[mid]!.chunkIndex; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return ans;
   }
 
   openFrameCount(): number { return this.open; }
+  lastError(): EngineDecodeError | undefined { return this.err ?? undefined; }
+  closeFrame(frame: VideoFrame): void { frame.close(); this.open--; }
 
   async frameAtMicros(targetUs: number): Promise<VideoFrame> {
-    let keyIdx = 0;
-    for (let i = 0; i < this.chunks.length; i++) {
-      if (this.chunks[i]!.type === "key" && this.chunks[i]!.timestamp <= targetUs) keyIdx = i;
+    this.err = null;
+    // drop anything buffered from a previous call
+    for (const f of this.collected) { f.close(); this.open--; }
+    this.collected = [];
+    const startIdx = this.keyframeIndexBefore(targetUs);
+    for (let i = startIdx; i < this.chunks.length; i++) {
+      this.decoder.decode(this.chunks[i]!);
+      if (this.chunks[i]!.timestamp >= targetUs) break;
     }
-    const collected: VideoFrame[] = [];
-    const config: VideoDecoderConfig = {
-      codec: this.track.codec,
-      codedWidth: this.track.codedWidth,
-      codedHeight: this.track.codedHeight,
-      ...(this.track.description ? { description: this.track.description } : {}),
-    };
-    const decoder = new VideoDecoder({
-      output: (f) => { this.open++; collected.push(f); },
-      error: (e) => { throw e; },
-    });
-    decoder.configure(config);
-    for (let i = keyIdx; i < this.chunks.length; i++) {
-      const c = this.chunks[i]!;
-      decoder.decode(c);
-      if (c.timestamp >= targetUs) break;
+    await this.decoder.flush();
+    const capturedErr = this.err as EngineDecodeError | null;
+    if (capturedErr !== null) {
+      for (const f of this.collected) { try { f.close(); } catch (_e) { /* ignore */ } this.open--; }
+      this.collected = [];
+      throw new Error(`EngineDecode: ${capturedErr.message}`);
     }
-    await decoder.flush();
-    decoder.close();
-    // Pick best frame: latest frame with timestamp ≤ targetUs; if none, fall back to earliest.
+    // pick closest <= target; fall back to earliest frame past target
     let best: VideoFrame | undefined;
     let fallback: VideoFrame | undefined;
-    for (const f of collected) {
+    for (const f of this.collected) {
       if (f.timestamp <= targetUs) {
         if (!best || f.timestamp > best.timestamp) {
           if (best) { best.close(); this.open--; }
           best = f;
-        } else {
-          f.close(); this.open--;
-        }
+        } else { f.close(); this.open--; }
       } else {
         if (!fallback || f.timestamp < fallback.timestamp) {
           if (fallback) { fallback.close(); this.open--; }
           fallback = f;
-        } else {
-          f.close(); this.open--;
-        }
+        } else { f.close(); this.open--; }
       }
     }
-    // Use best if found; otherwise take the earliest frame past targetUs.
-    if (!best && fallback) { best = fallback; fallback = undefined; }
-    if (fallback) { fallback.close(); this.open--; }
+    this.collected = [];
+    if (best) {
+      if (fallback) { fallback.close(); this.open--; }
+    } else {
+      best = fallback;
+    }
     if (!best) throw new Error("no frame decoded");
-    // Clone before decoder.close(): on Chromium/D3D11, decoder.close() may release zero-copy
-    // GPU texture backing even while the JS VideoFrame object is still in scope.
-    const cloned = best.clone();
-    best.close(); this.open--; // close original
-    this.open++;               // track clone
-    return cloned;
+    return best; // decoder stays alive → frame GPU-backed → directly importable
   }
 
-  closeFrame(frame: VideoFrame): void { frame.close(); this.open--; }
-
   dispose(): void {
+    for (const f of this.collected) { try { f.close(); } catch { /* already closed */ } }
+    this.collected = [];
     if (this.decoder.state !== "closed") this.decoder.close();
   }
 }

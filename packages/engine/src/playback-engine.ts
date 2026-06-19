@@ -17,6 +17,7 @@ export class PlaybackEngine {
   private cbs = new Set<StateCb>();
 
   private seekSeq = 0;
+  private decodeGate: Promise<void> = Promise.resolve();
 
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
@@ -54,23 +55,19 @@ export class PlaybackEngine {
     const sourceUs = Math.round(
       frameToSeconds(clip.trimStartFrame + (clamped - clip.startFrame) * clip.speed, this.timeline.fps) * 1_000_000,
     );
-    const vframe = await this.decoder.frameAtMicros(Math.max(0, sourceUs));
+    // Serialize decoder access: chain onto the previous decode so concurrent seeks
+    // don't interleave on the shared persistent VideoDecoder.
+    let vframe!: VideoFrame;
+    this.decodeGate = this.decodeGate.then(async () => {
+      vframe = await this.decoder!.frameAtMicros(Math.max(0, sourceUs));
+    }).catch(() => { /* stale errors are swallowed; vframe stays undefined */ });
+    await this.decodeGate;
+    if (!vframe) return;
     try {
       if (seq !== this.seekSeq) return;
       this._currentFrame = clamped;
       if (layer) {
-        // Decoded frames are software copies (cloned in VideoDecodeManager to survive decoder.close()).
-        // importExternalTexture requires an ImageBitmap-backed VideoFrame — promote via OffscreenCanvas.
-        const off = new OffscreenCanvas(vframe.displayWidth, vframe.displayHeight);
-        off.getContext("2d")!.drawImage(vframe, 0, 0);
-        const bitmap = off.transferToImageBitmap();
-        const gpuFrame = new VideoFrame(bitmap, { timestamp: vframe.timestamp });
-        bitmap.close();
-        try {
-          this.renderer.present(gpuFrame, layer.transform, { width: this.timeline.width, height: this.timeline.height });
-        } finally {
-          gpuFrame.close();
-        }
+        await this.renderer.present(vframe, layer.transform, { width: this.timeline.width, height: this.timeline.height });
       }
       this.emit();
     } finally {

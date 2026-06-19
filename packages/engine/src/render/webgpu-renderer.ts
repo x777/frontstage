@@ -1,19 +1,17 @@
 import type { Mat2d, Size } from "@palmier/core";
 
-const WGSL = /* wgsl */ `
+// Shader for importExternalTexture path (zero-copy GPU-backed frames)
+const WGSL_EXT = /* wgsl */ `
 struct VertexOut {
   @builtin(position) pos: vec4f,
   @location(0) uv: vec2f,
 };
 
 struct Uniforms {
-  // Mat2d affine: maps (x_src_px, y_src_px) → (x_canvas_px, y_canvas_px)
   a: f32, b: f32,
   c: f32, d: f32,
   e: f32, f: f32,
-  // Source natural size in pixels
   natW: f32, natH: f32,
-  // Canvas size in pixels
   canvasW: f32, canvasH: f32,
   _pad0: f32, _pad1: f32,
 };
@@ -24,23 +22,17 @@ struct Uniforms {
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32) -> VertexOut {
-  // Full-screen quad UVs — texture sample coords in [0,1]
   var quads = array<vec2f, 4>(
     vec2f(0.0, 0.0), vec2f(1.0, 0.0),
     vec2f(0.0, 1.0), vec2f(1.0, 1.0),
   );
   let uv = quads[vi];
-
-  // Convert UV → source pixel → canvas pixel via affine matrix
   let sx = uv.x * u.natW;
   let sy = uv.y * u.natH;
   let cx = u.a * sx + u.c * sy + u.e;
   let cy = u.b * sx + u.d * sy + u.f;
-
-  // Canvas pixel → NDC
   let ndcX = (cx / u.canvasW) * 2.0 - 1.0;
   let ndcY = 1.0 - (cy / u.canvasH) * 2.0;
-
   return VertexOut(vec4f(ndcX, ndcY, 0.0, 1.0), uv);
 }
 
@@ -50,33 +42,90 @@ fn fs(v: VertexOut) -> @location(0) vec4f {
 }
 `;
 
+// Shader for copyExternalImageToTexture path (software/CPU-backed frames)
+const WGSL_TEX = /* wgsl */ `
+struct VertexOut {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+};
+
+struct Uniforms {
+  a: f32, b: f32,
+  c: f32, d: f32,
+  e: f32, f: f32,
+  natW: f32, natH: f32,
+  canvasW: f32, canvasH: f32,
+  _pad0: f32, _pad1: f32,
+};
+
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+@vertex
+fn vs(@builtin(vertex_index) vi: u32) -> VertexOut {
+  var quads = array<vec2f, 4>(
+    vec2f(0.0, 0.0), vec2f(1.0, 0.0),
+    vec2f(0.0, 1.0), vec2f(1.0, 1.0),
+  );
+  let uv = quads[vi];
+  let sx = uv.x * u.natW;
+  let sy = uv.y * u.natH;
+  let cx = u.a * sx + u.c * sy + u.e;
+  let cy = u.b * sx + u.d * sy + u.f;
+  let ndcX = (cx / u.canvasW) * 2.0 - 1.0;
+  let ndcY = 1.0 - (cy / u.canvasH) * 2.0;
+  return VertexOut(vec4f(ndcX, ndcY, 0.0, 1.0), uv);
+}
+
+@fragment
+fn fs(v: VertexOut) -> @location(0) vec4f {
+  return textureSample(tex, samp, v.uv);
+}
+`;
+
 export type ReadPixelFn = (x: number, y: number) => Promise<[number, number, number, number]>;
 
 export class FrameRenderer {
   private device: GPUDevice;
   private ctx: GPUCanvasContext;
-  private canvasPipeline: GPURenderPipeline;
-  private readbackPipeline: GPURenderPipeline;
+  // external-texture pipelines
+  private extCanvasPipeline: GPURenderPipeline;
+  private extReadbackPipeline: GPURenderPipeline;
+  // copy-path pipelines
+  private copyCanvasPipeline: GPURenderPipeline;
+  private copyReadbackPipeline: GPURenderPipeline;
   private sampler: GPUSampler;
   private readbackTex: GPUTexture;
   private canvasFmt: GPUTextureFormat;
+  // bind group layouts
+  private extBgl: GPUBindGroupLayout;
+  private copyBgl: GPUBindGroupLayout;
 
   private constructor(
     device: GPUDevice,
     ctx: GPUCanvasContext,
-    canvasPipeline: GPURenderPipeline,
-    readbackPipeline: GPURenderPipeline,
+    extCanvasPipeline: GPURenderPipeline,
+    extReadbackPipeline: GPURenderPipeline,
+    copyCanvasPipeline: GPURenderPipeline,
+    copyReadbackPipeline: GPURenderPipeline,
     sampler: GPUSampler,
     readbackTex: GPUTexture,
     canvasFmt: GPUTextureFormat,
+    extBgl: GPUBindGroupLayout,
+    copyBgl: GPUBindGroupLayout,
   ) {
     this.device = device;
     this.ctx = ctx;
-    this.canvasPipeline = canvasPipeline;
-    this.readbackPipeline = readbackPipeline;
+    this.extCanvasPipeline = extCanvasPipeline;
+    this.extReadbackPipeline = extReadbackPipeline;
+    this.copyCanvasPipeline = copyCanvasPipeline;
+    this.copyReadbackPipeline = copyReadbackPipeline;
     this.sampler = sampler;
     this.readbackTex = readbackTex;
     this.canvasFmt = canvasFmt;
+    this.extBgl = extBgl;
+    this.copyBgl = copyBgl;
   }
 
   static async create(canvas: HTMLCanvasElement): Promise<FrameRenderer> {
@@ -90,9 +139,10 @@ export class FrameRenderer {
     const ctx = canvas.getContext("webgpu")!;
     ctx.configure({ device, format: canvasFmt, alphaMode: "opaque" });
 
-    const module = device.createShaderModule({ code: WGSL });
+    const extModule = device.createShaderModule({ code: WGSL_EXT });
+    const texModule = device.createShaderModule({ code: WGSL_TEX });
 
-    const bgl = device.createBindGroupLayout({
+    const extBgl = device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
@@ -100,9 +150,18 @@ export class FrameRenderer {
       ],
     });
 
-    const layout = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
+    const copyBgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } },
+      ],
+    });
 
-    const makePipeline = (fmt: GPUTextureFormat): GPURenderPipeline =>
+    const extLayout = device.createPipelineLayout({ bindGroupLayouts: [extBgl] });
+    const copyLayout = device.createPipelineLayout({ bindGroupLayouts: [copyBgl] });
+
+    const makePipeline = (module: GPUShaderModule, layout: GPUPipelineLayout, fmt: GPUTextureFormat): GPURenderPipeline =>
       device.createRenderPipeline({
         layout,
         vertex: { module, entryPoint: "vs" },
@@ -110,8 +169,10 @@ export class FrameRenderer {
         primitive: { topology: "triangle-strip" },
       });
 
-    const canvasPipeline = makePipeline(canvasFmt);
-    const readbackPipeline = makePipeline("rgba8unorm");
+    const extCanvasPipeline = makePipeline(extModule, extLayout, canvasFmt);
+    const extReadbackPipeline = makePipeline(extModule, extLayout, "rgba8unorm");
+    const copyCanvasPipeline = makePipeline(texModule, copyLayout, canvasFmt);
+    const copyReadbackPipeline = makePipeline(texModule, copyLayout, "rgba8unorm");
 
     const sampler = device.createSampler({ minFilter: "linear", magFilter: "linear" });
 
@@ -123,15 +184,20 @@ export class FrameRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
 
-    return new FrameRenderer(device, ctx, canvasPipeline, readbackPipeline, sampler, readbackTex, canvasFmt);
+    return new FrameRenderer(
+      device, ctx,
+      extCanvasPipeline, extReadbackPipeline,
+      copyCanvasPipeline, copyReadbackPipeline,
+      sampler, readbackTex, canvasFmt,
+      extBgl, copyBgl,
+    );
   }
 
-  present(frame: VideoFrame, mat: Mat2d, renderSize: Size): void {
+  async present(frame: VideoFrame, mat: Mat2d, renderSize: Size): Promise<void> {
     const device = this.device;
     const natW = frame.displayWidth;
     const natH = frame.displayHeight;
 
-    // Uniform buffer: Mat2d (6 floats) + natSize (2 floats) + canvasSize (2 floats) + 2 pad = 12 floats = 48 bytes
     const uData = new Float32Array([
       mat.a, mat.b,
       mat.c, mat.d,
@@ -146,62 +212,123 @@ export class FrameRenderer {
     });
     device.queue.writeBuffer(uBuf, 0, uData);
 
-    // importExternalTexture expires after submit — import and submit must be synchronous
-    const extTex = device.importExternalTexture({ source: frame });
-
-    const makeBg = (pipeline: GPURenderPipeline): GPUBindGroup =>
-      device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: extTex },
-          { binding: 1, resource: this.sampler },
-          { binding: 2, resource: { buffer: uBuf } },
-        ],
-      });
-
-    const encoder = device.createCommandEncoder();
-
-    // Pass 1: display canvas
-    {
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: this.ctx.getCurrentTexture().createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 1 },
-          loadOp: "clear",
-          storeOp: "store",
-        }],
-      });
-      pass.setPipeline(this.canvasPipeline);
-      pass.setBindGroup(0, makeBg(this.canvasPipeline));
-      pass.draw(4);
-      pass.end();
+    // Try importExternalTexture first (zero-copy GPU-backed frames).
+    // Falls back to VideoFrame.copyTo + writeTexture for software-backed frames.
+    let extTex: GPUExternalTexture | null = null;
+    try {
+      extTex = device.importExternalTexture({ source: frame });
+    } catch {
+      // frame has no GPU back resource; use software copy path below
     }
 
-    // Pass 2: rgba8unorm readback texture
-    {
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: this.readbackTex.createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 1 },
-          loadOp: "clear",
-          storeOp: "store",
-        }],
-      });
-      pass.setPipeline(this.readbackPipeline);
-      pass.setBindGroup(0, makeBg(this.readbackPipeline));
-      pass.draw(4);
-      pass.end();
-    }
+    if (extTex !== null) {
+      const capturedExtTex = extTex;
+      const makeBg = (pipeline: GPURenderPipeline): GPUBindGroup =>
+        device.createBindGroup({
+          layout: this.extBgl,
+          entries: [
+            { binding: 0, resource: capturedExtTex },
+            { binding: 1, resource: this.sampler },
+            { binding: 2, resource: { buffer: uBuf } },
+          ],
+        });
 
-    // Single submit — external texture valid for the entire synchronous block
-    device.queue.submit([encoder.finish()]);
+      const encoder = device.createCommandEncoder();
+      {
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: this.ctx.getCurrentTexture().createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(this.extCanvasPipeline);
+        pass.setBindGroup(0, makeBg(this.extCanvasPipeline));
+        pass.draw(4);
+        pass.end();
+      }
+      {
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: this.readbackTex.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(this.extReadbackPipeline);
+        pass.setBindGroup(0, makeBg(this.extReadbackPipeline));
+        pass.draw(4);
+        pass.end();
+      }
+      device.queue.submit([encoder.finish()]);
+    } else {
+      // Software-copy path: VideoFrame.copyTo → RGBA pixels → writeTexture → sample as texture_2d
+      const bytesPerRow = natW * 4;
+      const pixelBuf = new Uint8Array(bytesPerRow * natH);
+      await frame.copyTo(pixelBuf, { format: "RGBA" });
+
+      const frameTex = device.createTexture({
+        size: [natW, natH],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      });
+      device.queue.writeTexture(
+        { texture: frameTex },
+        pixelBuf,
+        { bytesPerRow },
+        [natW, natH],
+      );
+
+      const makeBg = (pipeline: GPURenderPipeline): GPUBindGroup =>
+        device.createBindGroup({
+          layout: this.copyBgl,
+          entries: [
+            { binding: 0, resource: frameTex.createView() },
+            { binding: 1, resource: this.sampler },
+            { binding: 2, resource: { buffer: uBuf } },
+          ],
+        });
+
+      const encoder = device.createCommandEncoder();
+      {
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: this.ctx.getCurrentTexture().createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(this.copyCanvasPipeline);
+        pass.setBindGroup(0, makeBg(this.copyCanvasPipeline));
+        pass.draw(4);
+        pass.end();
+      }
+      {
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: this.readbackTex.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(this.copyReadbackPipeline);
+        pass.setBindGroup(0, makeBg(this.copyReadbackPipeline));
+        pass.draw(4);
+        pass.end();
+      }
+      device.queue.submit([encoder.finish()]);
+      frameTex.destroy();
+    }
     uBuf.destroy();
   }
 
   async readPixel(x: number, y: number): Promise<[number, number, number, number]> {
     const device = this.device;
-    // bytesPerRow must be a multiple of 256
-    const bytesPerRow = 256; // WebGPU COPY_BYTES_PER_ROW_ALIGNMENT
+    const bytesPerRow = 256;
     const buf = device.createBuffer({
       size: bytesPerRow,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
