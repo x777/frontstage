@@ -84,26 +84,28 @@ export class PlaybackEngine {
     const clip = this.firstVideoClip();
     const sourceMicros = this.sourceMicrosForFrame(this._currentFrame);
     this.decoder.seekTo(sourceMicros).then(() => {
+      if (!this._isPlaying) return;        // pause() won the race
       this.clock!.start(this._currentFrame);
       this.raf = requestAnimationFrame(() => void tick());
-    }).catch((e) => { console.warn("play seekTo error:", e); this._isPlaying = false; this.emit(); });
+    }).catch((e) => {
+      console.warn("play seek error:", e);
+      if (this._isPlaying) { this._isPlaying = false; this.emit(); }
+    });
 
     const tick = async (): Promise<void> => {
       if (!this._isPlaying || !this.clock || !this.decoder || !this.timeline) return;
       this.decoder.pump();
       const frame = Math.floor(this.clock.frame);
       if (frame >= this.durationFrames) {
-        this.pause();
         this._currentFrame = Math.max(0, this.durationFrames - 1);
-        this.emit();
+        this.pause();   // emits the final state (isPlaying:false, clamped frame)
         return;
       }
       this._currentFrame = frame;
       const f = this.decoder.frameForMicros(this.sourceMicrosForFrame(frame));
       const plan = buildRenderPlan(this.timeline, frame, new Map([[clip.mediaRef, this.natSize]]));
-      if (f && plan.layers[0]) {
-        await this.renderer.present(f, plan.layers[0].transform, { width: this.timeline.width, height: this.timeline.height });
-      }
+      this.raf = 0;                               // no pending rAF while present is in flight
+      if (f && plan.layers[0]) await this.renderer.present(f, plan.layers[0].transform, { width: this.timeline.width, height: this.timeline.height });
       this.emit();
       if (this._isPlaying) this.raf = requestAnimationFrame(() => void tick());
     };

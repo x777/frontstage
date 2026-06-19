@@ -27,3 +27,15 @@ test("start from non-zero frame", () => {
   t = 1000;
   expect(clock.frame).toBeCloseTo(40, 5);
 });
+
+test("resume continuity: pause then restart accumulates frames correctly", () => {
+  let t = 0;
+  const clock = new PlayClock(30, () => t);
+  clock.start(0);
+  t = 1000;  // ~30 frames elapsed
+  clock.pause();
+  const mid = clock.frame;
+  clock.start(mid);  // resume from paused position
+  t = 2000;  // another 1000ms elapsed
+  expect(clock.frame).toBeCloseTo(mid + 30, 5);
+});

@@ -90,10 +90,8 @@ async function main(): Promise<void> {
     playPauseBtn.addEventListener("click", () => {
       if (engine.isPlaying) {
         engine.pause();
-        playPauseBtn.textContent = "Play";
       } else {
         engine.play();
-        playPauseBtn.textContent = "Pause";
       }
     });
     engine.onStateChange((s) => {
