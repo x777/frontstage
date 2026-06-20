@@ -155,6 +155,12 @@ export class SourceCoordinator {
     return layers;
   }
 
+  clearPumpBuffers(): void {
+    for (const entry of this.sources.values()) {
+      if (entry.type === "video") entry.mgr.clearPumpBuffer();
+    }
+  }
+
   openFrameCount(): number {
     let count = 0;
     for (const entry of this.sources.values()) {

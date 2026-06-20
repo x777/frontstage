@@ -112,3 +112,33 @@ test("multi-track seek composites: top-left blended differs from base-only botto
   const frame = await page.evaluate(() => window.__engine!.currentFrame);
   expect(frame).toBe(1);
 });
+
+test("multi-track playback composites green image layer mid-play", async ({ page }) => {
+  await page.goto("/multitrack.html");
+  await page.waitForFunction(() => window.__multitrackReady === true, { timeout: 30_000 });
+
+  // Seek to frame 0, then play
+  await page.evaluate(() => window.__engine!.seek(0, "exact"));
+  await page.evaluate(() => window.__engine!.play());
+
+  // Wait ~500ms for frames to advance
+  await page.waitForTimeout(500);
+
+  // Pause to capture a stable frame
+  await page.evaluate(() => window.__engine!.pause());
+
+  // currentFrame must have advanced by at least a few frames
+  const frame = await page.evaluate(() => window.__engine!.currentFrame);
+  expect(frame).toBeGreaterThan(3);
+
+  // Top-left quadrant should still be green (image layer composited during playback)
+  const [tlR, tlG, tlB, tlA] = await page.evaluate(() => window.__readPixel(80, 60));
+  expect(tlA).toBeGreaterThan(0);
+  expect(tlG).toBeGreaterThan(200);
+  expect(tlR).toBeLessThan(50);
+  expect(tlB).toBeLessThan(50);
+
+  // openFrameCount bounded — no frame leak during playback
+  const open = await page.evaluate(() => window.__engine!.openFrameCount());
+  expect(open).toBeLessThanOrEqual(8);
+});

@@ -1,10 +1,9 @@
 import {
-  type Timeline, type Size, buildRenderPlan,
+  type Timeline,
   timelineTotalFrames, frameToSeconds,
 } from "@palmier/core";
 import type { MediaByteSource } from "./media/media-source.js";
 import { demuxMp4 } from "./demux/mp4-demuxer.js";
-import { buildVideoChunks, VideoDecodeManager } from "./decode/video-decoder.js";
 import { buildAudioChunks, AudioDecodeManager, type PcmChunk } from "./decode/audio-decoder.js";
 import { AudioGraph } from "./audio/audio-graph.js";
 import { FrameRenderer } from "./render/webgpu-renderer.js";
@@ -15,9 +14,7 @@ type StateCb = (s: { currentFrame: number; isPlaying: boolean }) => void;
 
 export class PlaybackEngine {
   private timeline?: Timeline;
-  private decoder?: VideoDecodeManager;
   private coordinator?: SourceCoordinator;
-  private natSize: Size = { width: 0, height: 0 };
   private _currentFrame = 0;
   private _isPlaying = false;
   private cbs = new Set<StateCb>();
@@ -45,15 +42,12 @@ export class PlaybackEngine {
     this.timeline = timeline;
     this.canvas.width = timeline.width;
     this.canvas.height = timeline.height;
+    // Demux first video clip's media for the audio path only
     const clip = timeline.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video");
     if (!clip) throw new Error("no video clip in timeline");
     const blob = await media.open(clip.mediaRef);
     const bytes = await blob.arrayBuffer();
     const demux = await demuxMp4(new Blob([bytes]));
-    if (!demux.video) throw new Error("no video track");
-    this.natSize = { width: demux.video.codedWidth, height: demux.video.codedHeight };
-    const chunks = buildVideoChunks(demux.video, bytes);
-    this.decoder = await VideoDecodeManager.create(demux.video, chunks);
     this.coordinator = await SourceCoordinator.create(timeline, media);
     if (demux.audio) {
       const aChunks = buildAudioChunks(demux.audio, bytes);
@@ -90,16 +84,15 @@ export class PlaybackEngine {
   }
 
   play(): void {
-    if (!this.timeline || !this.decoder || this._isPlaying) return;
+    if (!this.timeline || !this.coordinator || this._isPlaying) return;
     this._isPlaying = true;
-    const clip = this.firstVideoClip();
     const startFrame = this._currentFrame;
     void (async () => {
       const pseq = ++this.playSeq;
       this.audio?.reset();
       this.pcmChunks = [];
       this.pcmCursor = 0;
-      await this.decoder!.seekTo(this.sourceMicrosForFrame(startFrame));
+      await this.coordinator!.seekAllTo(startFrame);
       if (!this._isPlaying) return;
       if (this.audio && this.audioDecode) {
         try {
@@ -130,8 +123,8 @@ export class PlaybackEngine {
     });
 
     const tick = async (): Promise<void> => {
-      if (!this._isPlaying || !this.clock || !this.decoder || !this.timeline) return;
-      this.decoder.pump();
+      if (!this._isPlaying || !this.clock || !this.coordinator || !this.timeline) return;
+      this.coordinator.pumpAll();
       // Drain ring: push as many chunks as fit in the ring each tick
       while (
         this.audio &&
@@ -148,10 +141,9 @@ export class PlaybackEngine {
         return;
       }
       this._currentFrame = frame;
-      const f = this.decoder.frameForMicros(this.sourceMicrosForFrame(frame));
-      const plan = buildRenderPlan(this.timeline, frame, new Map([[clip.mediaRef, this.natSize]]));
+      const layers = this.coordinator!.layersForPlayback(frame);
       this.raf = 0;
-      if (f && plan.layers[0]) await this.renderer.present(f, plan.layers[0].transform, { width: this.timeline.width, height: this.timeline.height });
+      await this.renderer.composite(layers, { width: this.timeline!.width, height: this.timeline!.height });
       this.emit();
       if (this._isPlaying) this.raf = requestAnimationFrame(() => void tick());
     };
@@ -164,7 +156,7 @@ export class PlaybackEngine {
     this.clock?.pause();
     this.audio?.stop();
     this.audio?.reset();
-    this.decoder?.clearPumpBuffer();
+    this.coordinator?.clearPumpBuffers();
     this.emit();
   }
 
@@ -181,13 +173,9 @@ export class PlaybackEngine {
     return this.timeline!.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video")!;
   }
 
-  private firstVideoMediaRef(): string {
-    return this.firstVideoClip().mediaRef;
-  }
-
   get currentFrame(): number { return this._currentFrame; }
   get durationFrames(): number { return this.timeline ? timelineTotalFrames(this.timeline) : 0; }
-  openFrameCount(): number { return (this.decoder?.openFrameCount() ?? 0) + (this.coordinator?.openFrameCount() ?? 0); }
+  openFrameCount(): number { return this.coordinator?.openFrameCount() ?? 0; }
   onStateChange(cb: StateCb): () => void { this.cbs.add(cb); return () => this.cbs.delete(cb); }
   private emit(): void { for (const cb of this.cbs) cb({ currentFrame: this._currentFrame, isPlaying: this._isPlaying }); }
   get __audioCurrentTime(): (() => number) | undefined {
@@ -198,5 +186,5 @@ export class PlaybackEngine {
     return this.renderer.readPixel(x, y);
   }
 
-  dispose(): void { this.pause(); this.audio?.dispose(); this.decoder?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
+  dispose(): void { this.pause(); this.audio?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
 }
