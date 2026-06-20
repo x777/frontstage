@@ -23,3 +23,10 @@ test("composite blends a 50% layer over a base in z-order", async ({ page }) => 
   expect(blend[2]).toBeGreaterThan(90);
   expect(blend[2]).toBeLessThan(165);
 });
+
+test("composite draws an image layer", async ({ page }) => {
+  await page.goto("/composite.html");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 15_000 });
+  const green = await page.evaluate(() => (window as any).__imageLayerCheck());
+  expect(green[1]).toBeGreaterThan(150);
+});

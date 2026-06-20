@@ -1,10 +1,10 @@
-import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer } from "@palmier/engine";
+import { FrameRenderer, readPixelFactory, ImageSource, type ReadPixelFn, type CompositeLayer } from "@palmier/engine";
 import { affineTransform, defaultTransform, defaultCrop } from "@palmier/core";
 
 const W = 200, H = 200;
 
 declare global {
-  interface Window { __readPixel: ReadPixelFn; __status: string }
+  interface Window { __readPixel: ReadPixelFn; __imageLayerCheck: () => Promise<number[]>; __status: string }
 }
 
 function solidFrame(w: number, h: number, css: string): VideoFrame {
@@ -13,6 +13,15 @@ function solidFrame(w: number, h: number, css: string): VideoFrame {
   c.fillStyle = css;
   c.fillRect(0, 0, w, h);
   return new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
+}
+
+async function greenImageBlob(): Promise<ArrayBuffer> {
+  const o = new OffscreenCanvas(W, H);
+  const c = o.getContext("2d")!;
+  c.fillStyle = "rgb(0,255,0)";
+  c.fillRect(0, 0, W, H);
+  const blob = await o.convertToBlob({ type: "image/png" });
+  return blob.arrayBuffer();
 }
 
 async function main() {
@@ -39,7 +48,20 @@ async function main() {
     baseFrame.close();
     topFrame.close();
 
-    window.__readPixel = readPixelFactory(r);
+    // prepare image layer source (green PNG) for __imageLayerCheck
+    const imgBytes = await greenImageBlob();
+    const imgSource = await ImageSource.create(imgBytes);
+    const imgLayers: CompositeLayer[] = [
+      { frame: imgSource.frame(), transform: full, opacity: 1, crop: defaultCrop() },
+    ];
+
+    const readPixel = readPixelFactory(r);
+    window.__readPixel = readPixel;
+    window.__imageLayerCheck = async () => {
+      await r.composite(imgLayers, size);
+      return readPixel(W / 2, H / 2);
+    };
+
     window.__status = "ok";
     document.getElementById("status")!.textContent = "ok";
   } catch (e) {
