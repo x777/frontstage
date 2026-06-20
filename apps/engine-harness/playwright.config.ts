@@ -1,6 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
+  workers: 1,
+  fullyParallel: false,
   testDir: "./e2e",
   timeout: 30_000,
   webServer: { command: "pnpm dev", port: 5180, reuseExistingServer: !process.env.CI },
