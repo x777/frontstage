@@ -48,7 +48,6 @@ async function main() {
     baseFrame.close();
     topFrame.close();
 
-    // prepare image layer source (green PNG) for __imageLayerCheck
     const imgBytes = await greenImageBlob();
     const imgSource = await ImageSource.create(imgBytes);
     const imgLayers: CompositeLayer[] = [
