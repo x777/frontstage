@@ -303,23 +303,26 @@ export class FrameRenderer {
       });
     }
 
-    const frameTexView = this.frameTex.createView();
+    // Recreate readbackTex if size changed
+    if (this.readbackTex.width !== rw || this.readbackTex.height !== rh) {
+      this.readbackTex.destroy();
+      this.readbackTex = device.createTexture({
+        size: [rw, rh],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+      });
+    }
+
+    type LayerRecord =
+      | { kind: "ext"; extTex: GPUExternalTexture; uBuf: GPUBuffer }
+      | { kind: "copy"; copyTex: GPUTexture; uBuf: GPUBuffer };
+
     const perLayerTempTextures: GPUTexture[] = [];
     const perLayerUBufs: GPUBuffer[] = [];
+    const records: LayerRecord[] = [];
 
+    // Phase 1 (async, no encoder open): import or copy each layer's pixels
     try {
-      const encoder = device.createCommandEncoder();
-
-      // Single render pass into frameTex; clear to transparent black first
-      const compPass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: frameTexView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: "clear",
-          storeOp: "store",
-        }],
-      });
-
       for (const layer of layers) {
         const mat = layer.transform;
         const natW = layer.frame.displayWidth;
@@ -352,18 +355,7 @@ export class FrameRenderer {
         }
 
         if (extTex !== null) {
-          const capturedExt = extTex;
-          const bg = device.createBindGroup({
-            layout: this.extBgl,
-            entries: [
-              { binding: 0, resource: capturedExt },
-              { binding: 1, resource: this.sampler },
-              { binding: 2, resource: { buffer: uBuf } },
-            ],
-          });
-          compPass.setPipeline(this.extCompPipeline);
-          compPass.setBindGroup(0, bg);
-          compPass.draw(4);
+          records.push({ kind: "ext", extTex, uBuf });
         } else {
           const unpadded = natW * 4;
           const bytesPerRow = Math.ceil(unpadded / 256) * 256;
@@ -384,12 +376,43 @@ export class FrameRenderer {
             [natW, natH],
           );
 
+          records.push({ kind: "copy", copyTex, uBuf });
+        }
+      }
+
+      // Phase 2 (synchronous): one encoder, three passes, one submit
+      const frameTexView = this.frameTex.createView();
+      const encoder = device.createCommandEncoder();
+
+      // Composite pass: draw all layers into frameTex
+      const compPass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: frameTexView,
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: "clear",
+          storeOp: "store",
+        }],
+      });
+      for (const rec of records) {
+        if (rec.kind === "ext") {
+          const bg = device.createBindGroup({
+            layout: this.extBgl,
+            entries: [
+              { binding: 0, resource: rec.extTex },
+              { binding: 1, resource: this.sampler },
+              { binding: 2, resource: { buffer: rec.uBuf } },
+            ],
+          });
+          compPass.setPipeline(this.extCompPipeline);
+          compPass.setBindGroup(0, bg);
+          compPass.draw(4);
+        } else {
           const bg = device.createBindGroup({
             layout: this.copyBgl,
             entries: [
-              { binding: 0, resource: copyTex.createView() },
+              { binding: 0, resource: rec.copyTex.createView() },
               { binding: 1, resource: this.sampler },
-              { binding: 2, resource: { buffer: uBuf } },
+              { binding: 2, resource: { buffer: rec.uBuf } },
             ],
           });
           compPass.setPipeline(this.copyCompPipeline);
@@ -397,17 +420,9 @@ export class FrameRenderer {
           compPass.draw(4);
         }
       }
-
       compPass.end();
-      device.queue.submit([encoder.finish()]);
-    } finally {
-      for (const t of perLayerTempTextures) t.destroy();
-      for (const b of perLayerUBufs) b.destroy();
-    }
 
-    // Blit frameTex → canvas
-    {
-      const blitEnc = device.createCommandEncoder();
+      // Blit frameTex → canvas
       const blitBg = device.createBindGroup({
         layout: this.blitBgl,
         entries: [
@@ -415,7 +430,7 @@ export class FrameRenderer {
           { binding: 1, resource: this.sampler },
         ],
       });
-      const canvasPass = blitEnc.beginRenderPass({
+      const canvasPass = encoder.beginRenderPass({
         colorAttachments: [{
           view: this.ctx.getCurrentTexture().createView(),
           clearValue: { r: 0, g: 0, b: 0, a: 1 },
@@ -427,29 +442,9 @@ export class FrameRenderer {
       canvasPass.setBindGroup(0, blitBg);
       canvasPass.draw(4);
       canvasPass.end();
-      device.queue.submit([blitEnc.finish()]);
-    }
 
-    // Blit frameTex → readbackTex
-    {
-      // Recreate readbackTex if size changed
-      if (this.readbackTex.width !== rw || this.readbackTex.height !== rh) {
-        this.readbackTex.destroy();
-        this.readbackTex = device.createTexture({
-          size: [rw, rh],
-          format: "rgba8unorm",
-          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
-        });
-      }
-      const blitEnc = device.createCommandEncoder();
-      const blitBg = device.createBindGroup({
-        layout: this.blitBgl,
-        entries: [
-          { binding: 0, resource: frameTexView },
-          { binding: 1, resource: this.sampler },
-        ],
-      });
-      const rbPass = blitEnc.beginRenderPass({
+      // Blit frameTex → readbackTex
+      const rbPass = encoder.beginRenderPass({
         colorAttachments: [{
           view: this.readbackTex.createView(),
           clearValue: { r: 0, g: 0, b: 0, a: 1 },
@@ -461,7 +456,11 @@ export class FrameRenderer {
       rbPass.setBindGroup(0, blitBg);
       rbPass.draw(4);
       rbPass.end();
-      device.queue.submit([blitEnc.finish()]);
+
+      device.queue.submit([encoder.finish()]);
+    } finally {
+      for (const t of perLayerTempTextures) t.destroy();
+      for (const b of perLayerUBufs) b.destroy();
     }
   }
 
