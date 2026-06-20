@@ -67,4 +67,9 @@ export class SabRingBuffer {
     Atomics.store(this.header, 0, (read + n) % this.capacityFrames);
     return n;
   }
+
+  reset(): void {
+    Atomics.store(this.header, 0, 0);
+    Atomics.store(this.header, 1, 0);
+  }
 }

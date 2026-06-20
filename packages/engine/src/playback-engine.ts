@@ -21,6 +21,7 @@ export class PlaybackEngine {
   private cbs = new Set<StateCb>();
 
   private seekSeq = 0;
+  private playSeq = 0;
   private decodeGate: Promise<void> = Promise.resolve();
   private lastSeekError: unknown = undefined;
 
@@ -102,16 +103,25 @@ export class PlaybackEngine {
     const clip = this.firstVideoClip();
     const startFrame = this._currentFrame;
     void (async () => {
+      const pseq = ++this.playSeq;
+      this.audio?.reset();
       this.pcmChunks = [];
       this.pcmCursor = 0;
       await this.decoder!.seekTo(this.sourceMicrosForFrame(startFrame));
       if (!this._isPlaying) return;
       if (this.audio && this.audioDecode) {
         try {
-          await this.audioDecode.decodeAll((pcm) => { this.pcmChunks.push(pcm); });
+          await this.audioDecode.decodeAll((pcm) => {
+            if (pseq !== this.playSeq) return;
+            this.pcmChunks.push(pcm);
+          });
         } catch (e) {
           console.warn("audio decode error:", e);
         }
+        if (pseq !== this.playSeq) return;
+        const startMicros = this.sourceMicrosForFrame(this._currentFrame);
+        this.pcmCursor = this.pcmChunks.findIndex((c) => c.timestampUs >= startMicros);
+        if (this.pcmCursor < 0) this.pcmCursor = this.pcmChunks.length;
         if (!this._isPlaying) return;
         await this.audio.start();
       }
@@ -130,14 +140,14 @@ export class PlaybackEngine {
     const tick = async (): Promise<void> => {
       if (!this._isPlaying || !this.clock || !this.decoder || !this.timeline) return;
       this.decoder.pump();
-      // Feed ring incrementally: push next chunk only when there's room
-      if (this.audio && this.pcmCursor < this.pcmChunks.length) {
-        const chunk = this.pcmChunks[this.pcmCursor]!;
-        const chunkFrames = Math.floor(chunk.data.length / chunk.channels);
-        if (this.audio.freeSpaceFrames >= chunkFrames) {
-          this.audio.pushPcm(chunk);
-          this.pcmCursor++;
-        }
+      // Drain ring: push as many chunks as fit in the ring each tick
+      while (
+        this.audio &&
+        this.pcmCursor < this.pcmChunks.length &&
+        this.audio.freeSpaceFrames >= this.pcmChunks[this.pcmCursor]!.data.length / this.pcmChunks[this.pcmCursor]!.channels
+      ) {
+        this.audio.pushPcm(this.pcmChunks[this.pcmCursor]!);
+        this.pcmCursor++;
       }
       const frame = Math.floor(this.clock.frame);
       if (frame >= this.durationFrames) {
@@ -161,6 +171,7 @@ export class PlaybackEngine {
     this.raf = 0;
     this.clock?.pause();
     this.audio?.stop();
+    this.audio?.reset();
     this.decoder?.clearPumpBuffer();
     this.emit();
   }

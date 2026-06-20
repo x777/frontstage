@@ -43,6 +43,10 @@ export class AudioGraph {
     void this.ctx.suspend();
   }
 
+  reset(): void {
+    this.ring.reset();
+  }
+
   get currentTime(): number {
     return this.ctx.currentTime;
   }
