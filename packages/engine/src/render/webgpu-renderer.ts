@@ -39,15 +39,15 @@ fn vs(@builtin(vertex_index) vi: u32) -> VertexOut {
     vec2f(0.0, 1.0), vec2f(1.0, 1.0),
   );
   let uv = quads[vi];
-  let sx = uv.x * u.natW;
-  let sy = uv.y * u.natH;
+  let cu = u.cropL + uv.x * (1.0 - u.cropL - u.cropR);
+  let cv = u.cropT + uv.y * (1.0 - u.cropT - u.cropB);
+  let sx = cu * u.natW;
+  let sy = cv * u.natH;
   let cx = u.a * sx + u.c * sy + u.e;
   let cy = u.b * sx + u.d * sy + u.f;
   let ndcX = (cx / u.canvasW) * 2.0 - 1.0;
   let ndcY = 1.0 - (cy / u.canvasH) * 2.0;
-  let cropUV = vec2f(u.cropL + uv.x * (1.0 - u.cropL - u.cropR),
-                     u.cropT + uv.y * (1.0 - u.cropT - u.cropB));
-  return VertexOut(vec4f(ndcX, ndcY, 0.0, 1.0), cropUV);
+  return VertexOut(vec4f(ndcX, ndcY, 0.0, 1.0), vec2f(cu, cv));
 }
 
 @fragment
@@ -87,15 +87,15 @@ fn vs(@builtin(vertex_index) vi: u32) -> VertexOut {
     vec2f(0.0, 1.0), vec2f(1.0, 1.0),
   );
   let uv = quads[vi];
-  let sx = uv.x * u.natW;
-  let sy = uv.y * u.natH;
+  let cu = u.cropL + uv.x * (1.0 - u.cropL - u.cropR);
+  let cv = u.cropT + uv.y * (1.0 - u.cropT - u.cropB);
+  let sx = cu * u.natW;
+  let sy = cv * u.natH;
   let cx = u.a * sx + u.c * sy + u.e;
   let cy = u.b * sx + u.d * sy + u.f;
   let ndcX = (cx / u.canvasW) * 2.0 - 1.0;
   let ndcY = 1.0 - (cy / u.canvasH) * 2.0;
-  let cropUV = vec2f(u.cropL + uv.x * (1.0 - u.cropL - u.cropR),
-                     u.cropT + uv.y * (1.0 - u.cropT - u.cropB));
-  return VertexOut(vec4f(ndcX, ndcY, 0.0, 1.0), cropUV);
+  return VertexOut(vec4f(ndcX, ndcY, 0.0, 1.0), vec2f(cu, cv));
 }
 
 @fragment

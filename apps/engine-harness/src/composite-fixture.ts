@@ -4,7 +4,7 @@ import { affineTransform, defaultTransform, defaultCrop } from "@palmier/core";
 const W = 200, H = 200;
 
 declare global {
-  interface Window { __readPixel: ReadPixelFn; __imageLayerCheck: () => Promise<number[]>; __status: string }
+  interface Window { __readPixel: ReadPixelFn; __imageLayerCheck: () => Promise<number[]>; __cropCheck: () => Promise<{ left: number[]; right: number[] }>; __status: string }
 }
 
 function solidFrame(w: number, h: number, css: string): VideoFrame {
@@ -59,6 +59,18 @@ async function main() {
     window.__imageLayerCheck = async () => {
       await r.composite(imgLayers, size);
       return readPixel(W / 2, H / 2);
+    };
+
+    // Crop golden: green full-frame layer cropped to left half (right:0.5)
+    const greenFrame = solidFrame(W, H, "rgb(0,255,0)");
+    const cropLayer: CompositeLayer[] = [
+      { frame: greenFrame, transform: full, opacity: 1, crop: { left: 0, top: 0, right: 0.5, bottom: 0 } },
+    ];
+    window.__cropCheck = async () => {
+      await r.composite(cropLayer, size);
+      const left = await readPixel(50, 100);
+      const right = await readPixel(150, 100);
+      return { left, right };
     };
 
     window.__status = "ok";

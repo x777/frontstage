@@ -30,3 +30,13 @@ test("composite draws an image layer", async ({ page }) => {
   const green = await page.evaluate(() => (window as any).__imageLayerCheck());
   expect(green[1]).toBeGreaterThan(150);
 });
+
+test("composite crops a layer to a sub-rect (no stretch)", async ({ page }) => {
+  await page.goto("/composite.html");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 15_000 });
+  const { left, right } = await page.evaluate(() => (window as any).__cropCheck());
+  // left half (x=50): visible green content
+  expect(left[1]).toBeGreaterThan(150);
+  // right half (x=150): cropped away — background (black), not green
+  expect(right[1]).toBeLessThan(60);
+});
