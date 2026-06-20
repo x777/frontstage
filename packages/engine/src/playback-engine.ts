@@ -9,12 +9,14 @@ import { buildAudioChunks, AudioDecodeManager, type PcmChunk } from "./decode/au
 import { AudioGraph } from "./audio/audio-graph.js";
 import { FrameRenderer } from "./render/webgpu-renderer.js";
 import { PlayClock } from "./clock/play-clock.js";
+import { SourceCoordinator } from "./compositor/source-coordinator.js";
 
 type StateCb = (s: { currentFrame: number; isPlaying: boolean }) => void;
 
 export class PlaybackEngine {
   private timeline?: Timeline;
   private decoder?: VideoDecodeManager;
+  private coordinator?: SourceCoordinator;
   private natSize: Size = { width: 0, height: 0 };
   private _currentFrame = 0;
   private _isPlaying = false;
@@ -52,6 +54,7 @@ export class PlaybackEngine {
     this.natSize = { width: demux.video.codedWidth, height: demux.video.codedHeight };
     const chunks = buildVideoChunks(demux.video, bytes);
     this.decoder = await VideoDecodeManager.create(demux.video, chunks);
+    this.coordinator = await SourceCoordinator.create(timeline, media);
     if (demux.audio) {
       const aChunks = buildAudioChunks(demux.audio, bytes);
       try {
@@ -69,32 +72,21 @@ export class PlaybackEngine {
   // mode (exact vs low-latency scrub) is used in Plan 2c
   async seek(frame: number, _mode: "exact" | "scrub"): Promise<void> {
     if (this._isPlaying) this.pause();
-    if (!this.timeline || !this.decoder) return;
+    if (!this.timeline || !this.coordinator) return;
     const seq = ++this.seekSeq;
     const durationFrames = this.durationFrames;
     const clamped = Math.max(0, Math.min(frame, Math.max(0, durationFrames - 1)));
-    const plan = buildRenderPlan(this.timeline, clamped, new Map([[
-      this.firstVideoMediaRef(), this.natSize,
-    ]]));
-    const layer = plan.layers[0];
-    const sourceUs = this.sourceMicrosForFrame(clamped);
-    let vframe: VideoFrame | undefined;
     this.decodeGate = this.decodeGate.then(async () => {
       if (seq !== this.seekSeq) return;
-      vframe = await this.decoder!.frameAtMicros(Math.max(0, sourceUs));
-    }).catch((e) => { this.lastSeekError = e; console.warn("seek decode error:", e); });
+      const { layers, cleanup } = await this.coordinator!.layersForScrub(clamped);
+      try {
+        if (seq !== this.seekSeq) { cleanup(); return; }
+        this._currentFrame = clamped;
+        await this.renderer.composite(layers, { width: this.timeline!.width, height: this.timeline!.height });
+        this.emit();
+      } finally { cleanup(); }
+    }).catch((e) => { this.lastSeekError = e; console.warn("seek error:", e); });
     await this.decodeGate;
-    if (!vframe) return;
-    try {
-      if (seq !== this.seekSeq) return;
-      this._currentFrame = clamped;
-      if (layer) {
-        await this.renderer.present(vframe, layer.transform, { width: this.timeline.width, height: this.timeline.height });
-      }
-      this.emit();
-    } finally {
-      this.decoder?.closeFrame(vframe);
-    }
   }
 
   play(): void {
@@ -202,5 +194,9 @@ export class PlaybackEngine {
     return this.audio ? () => this.audio!.currentTime : undefined;
   }
 
-  dispose(): void { this.pause(); this.audio?.dispose(); this.decoder?.dispose(); this.renderer.dispose(); }
+  readPixel(x: number, y: number): Promise<[number, number, number, number]> {
+    return this.renderer.readPixel(x, y);
+  }
+
+  dispose(): void { this.pause(); this.audio?.dispose(); this.decoder?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
 }
