@@ -1,6 +1,4 @@
-import { type Size, affineTransform } from "@palmier/core";
-import type { TextLayer } from "@palmier/core";
-import type { RGBA } from "@palmier/core";
+import { type Size, type TextLayer, type RGBA } from "@palmier/core";
 
 const css = (c: RGBA): string =>
   `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;

@@ -13,6 +13,7 @@ const W = 200, H = 200;
 declare global {
   interface Window {
     __readPixel: ReadPixelFn;
+    __maxLuma: (x0: number, y0: number, x1: number, y1: number) => Promise<number>;
     __status: string;
   }
 }
@@ -52,7 +53,7 @@ async function main() {
         background: { enabled: false, color: { r: 0, g: 0, b: 0, a: 0.6 } },
         border: { enabled: false, color: { r: 0, g: 0, b: 0, a: 1 } },
       },
-      transform: { ...defaultTransform(), centerX: 0.54 },
+      transform: defaultTransform(),
       opacity: 1,
       zIndex: 1,
     };
@@ -66,9 +67,21 @@ async function main() {
 
     await r.composite(layers, size);
     base.close();
+    rasterizer.dispose();
 
     const readPixel = readPixelFactory(r);
     window.__readPixel = readPixel;
+    window.__maxLuma = async (x0: number, y0: number, x1: number, y1: number): Promise<number> => {
+      let max = 0;
+      for (let y = y0; y < y1; y += 4) {
+        for (let x = x0; x < x1; x += 4) {
+          const px = await readPixel(x, y);
+          const luma = px[0] + px[1] + px[2];
+          if (luma > max) max = luma;
+        }
+      }
+      return max;
+    };
     window.__status = "ok";
     document.getElementById("status")!.textContent = "ok";
   } catch (e) {
