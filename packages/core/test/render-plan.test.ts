@@ -3,6 +3,7 @@ import type { Clip } from "../src/clip.js";
 import { buildRenderPlan } from "../src/render-plan.js";
 import { defaultTimeline, type Track } from "../src/timeline.js";
 import { defaultCrop, defaultTransform } from "../src/transform.js";
+import { defaultTextStyle } from "../src/text-style.js";
 
 function clip(over: Partial<Clip> = {}): Clip {
   return {
@@ -40,5 +41,47 @@ describe("buildRenderPlan", () => {
   test("hidden tracks are excluded", () => {
     const tl = { ...defaultTimeline(), tracks: [track([clip({ id: "v" })], { hidden: true })] };
     expect(buildRenderPlan(tl, 10, sizes).layers).toHaveLength(0);
+  });
+  test("buildRenderPlan emits a textLayer for a visible text clip", () => {
+    const textClip = clip({
+      id: "t",
+      mediaType: "text",
+      sourceClipType: "text",
+      textContent: "Hi",
+      textStyle: defaultTextStyle(),
+    });
+    const tl = { ...defaultTimeline(), tracks: [track([textClip])] };
+    const plan = buildRenderPlan(tl, 10, sizes);
+    expect(plan.textLayers).toHaveLength(1);
+    expect(plan.layers).toHaveLength(0);
+    const t = plan.textLayers[0]!;
+    expect(t.text).toBe("Hi");
+    expect(t.zIndex).toBe(0);
+    expect(t.opacity).toBeGreaterThan(0);
+    expect(t.clipId).toBe("t");
+  });
+  test("text clip on a hidden track emits no textLayer", () => {
+    const textClip = clip({
+      id: "t",
+      mediaType: "text",
+      sourceClipType: "text",
+      textContent: "Hi",
+      textStyle: defaultTextStyle(),
+    });
+    const tl = { ...defaultTimeline(), tracks: [track([textClip], { hidden: true })] };
+    const plan = buildRenderPlan(tl, 10, sizes);
+    expect(plan.textLayers).toHaveLength(0);
+  });
+  test("text clip with empty text emits no textLayer", () => {
+    const textClip = clip({
+      id: "t",
+      mediaType: "text",
+      sourceClipType: "text",
+      textContent: "",
+      textStyle: defaultTextStyle(),
+    });
+    const tl = { ...defaultTimeline(), tracks: [track([textClip])] };
+    const plan = buildRenderPlan(tl, 10, sizes);
+    expect(plan.textLayers).toHaveLength(0);
   });
 });
