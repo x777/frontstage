@@ -37,7 +37,8 @@ export class SourceCoordinator {
     const sourceSizes = new Map<string, Size>();
 
     // Cache demux results by mediaRef so same media is demuxed once
-    const demuxCache = new Map<string, { track: ReturnType<typeof Object.assign>, fileBytes: ArrayBuffer }>();
+    type DemuxVideo = NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>;
+    const demuxCache = new Map<string, { track: DemuxVideo; fileBytes: ArrayBuffer }>();
 
     for (const track of timeline.tracks) {
       if (track.hidden) continue;
@@ -92,10 +93,14 @@ export class SourceCoordinator {
       if (!clip) continue;
 
       if (entry.type === "video") {
-        const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
-        const vf = await entry.mgr.frameAtMicros(srcUs);
-        owned.push({ mgr: entry.mgr, vf });
-        layers.push({ frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
+        try {
+          const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
+          const vf = await entry.mgr.frameAtMicros(srcUs);
+          owned.push({ mgr: entry.mgr, vf });
+          layers.push({ frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
+        } catch (e) {
+          console.warn(`compositor: skipping clip ${layer.clipId} (decode failed):`, e);
+        }
       } else {
         layers.push({ frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
       }
