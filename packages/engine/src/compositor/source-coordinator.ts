@@ -1,9 +1,10 @@
-import { buildRenderPlan, frameToSeconds, type Clip, type Size, type Timeline } from "@palmier/core";
+import { affineTransform, buildRenderPlan, defaultCrop, defaultTransform, frameToSeconds, type Clip, type Size, type Timeline } from "@palmier/core";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
 import { buildVideoChunks, VideoDecodeManager } from "../decode/video-decoder.js";
 import { ImageSource } from "../media/image-source.js";
 import type { MediaByteSource } from "../media/media-source.js";
 import type { CompositeLayer } from "../render/composite-layer.js";
+import { TextRasterizer } from "../render/text-rasterizer.js";
 
 export function clipSourceMicros(clip: Clip, frame: number, fps: number): number {
   return Math.round(frameToSeconds(clip.trimStartFrame + (frame - clip.startFrame) * clip.speed, fps) * 1e6);
@@ -24,12 +25,16 @@ interface ImageEntry {
 type SourceEntry = VideoEntry | ImageEntry;
 
 export class SourceCoordinator {
+  private readonly textRasterizer: TextRasterizer;
+
   private constructor(
     private readonly timeline: Timeline,
     private readonly sources: Map<string, SourceEntry>,
     private readonly clipById: Map<string, Clip>,
     private readonly _sourceSizes: Map<string, Size>,
-  ) {}
+  ) {
+    this.textRasterizer = new TextRasterizer();
+  }
 
   static async create(timeline: Timeline, media: MediaByteSource): Promise<SourceCoordinator> {
     const sources = new Map<string, SourceEntry>();
@@ -90,7 +95,8 @@ export class SourceCoordinator {
 
   async layersForScrub(frame: number): Promise<{ layers: CompositeLayer[]; cleanup: () => void }> {
     const plan = buildRenderPlan(this.timeline, frame, this._sourceSizes);
-    const layers: CompositeLayer[] = [];
+    const renderSize: Size = { width: this.timeline.width, height: this.timeline.height };
+    const tagged: Array<{ layer: CompositeLayer; zIndex: number }> = [];
     const owned: Array<{ mgr: VideoDecodeManager; vf: VideoFrame }> = [];
 
     for (const layer of plan.layers) {
@@ -105,14 +111,25 @@ export class SourceCoordinator {
           const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
           const vf = await entry.mgr.frameAtMicros(srcUs);
           owned.push({ mgr: entry.mgr, vf });
-          layers.push({ frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
+          tagged.push({ layer: { frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
         } catch (e) {
           console.warn(`compositor: skipping clip ${layer.clipId} (decode failed):`, e);
         }
       } else {
-        layers.push({ frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
+        tagged.push({ layer: { frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
       }
     }
+
+    for (const textLayer of plan.textLayers) {
+      const tf = affineTransform(defaultTransform(), renderSize, renderSize);
+      tagged.push({
+        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity: textLayer.opacity, crop: defaultCrop() },
+        zIndex: textLayer.zIndex,
+      });
+    }
+
+    tagged.sort((a, b) => a.zIndex - b.zIndex);
+    const layers = tagged.map(t => t.layer);
 
     const cleanup = () => {
       for (const { mgr, vf } of owned) {
@@ -141,7 +158,8 @@ export class SourceCoordinator {
 
   layersForPlayback(frame: number): CompositeLayer[] {
     const plan = buildRenderPlan(this.timeline, frame, this._sourceSizes);
-    const layers: CompositeLayer[] = [];
+    const renderSize: Size = { width: this.timeline.width, height: this.timeline.height };
+    const tagged: Array<{ layer: CompositeLayer; zIndex: number }> = [];
 
     for (const layer of plan.layers) {
       const entry = this.sources.get(layer.clipId);
@@ -154,13 +172,22 @@ export class SourceCoordinator {
         const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
         const vf = entry.mgr.frameForMicros(srcUs);
         if (vf === undefined) continue; // skip if not buffered yet
-        layers.push({ frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
+        tagged.push({ layer: { frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
       } else {
-        layers.push({ frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop });
+        tagged.push({ layer: { frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
       }
     }
 
-    return layers;
+    for (const textLayer of plan.textLayers) {
+      const tf = affineTransform(defaultTransform(), renderSize, renderSize);
+      tagged.push({
+        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity: textLayer.opacity, crop: defaultCrop() },
+        zIndex: textLayer.zIndex,
+      });
+    }
+
+    tagged.sort((a, b) => a.zIndex - b.zIndex);
+    return tagged.map(t => t.layer);
   }
 
   clearPumpBuffers(): void {
@@ -183,5 +210,6 @@ export class SourceCoordinator {
       else entry.src.dispose();
     }
     this.sources.clear();
+    this.textRasterizer.dispose();
   }
 }
