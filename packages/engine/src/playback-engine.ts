@@ -93,7 +93,7 @@ export class PlaybackEngine {
       this.pcmChunks = [];
       this.pcmCursor = 0;
       await this.coordinator!.seekAllTo(startFrame);
-      if (!this._isPlaying) return;
+      if (!this._isPlaying || pseq !== this.playSeq) return;
       if (this.audio && this.audioDecode) {
         try {
           await this.audioDecode.decodeAll((pcm) => {

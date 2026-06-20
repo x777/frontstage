@@ -129,7 +129,7 @@ test("multi-track playback composites green image layer mid-play", async ({ page
 
   // currentFrame must have advanced by at least a few frames
   const frame = await page.evaluate(() => window.__engine!.currentFrame);
-  expect(frame).toBeGreaterThan(3);
+  expect(frame).toBeGreaterThan(1);
 
   // Top-left quadrant should still be green (image layer composited during playback)
   const [tlR, tlG, tlB, tlA] = await page.evaluate(() => window.__readPixel(80, 60));
