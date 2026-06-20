@@ -12,6 +12,7 @@ export class AudioGraph {
     private ctx: AudioContext,
     private node: AudioWorkletNode,
     private ring: SabRingBuffer,
+    private capacityFrames: number,
   ) {}
 
   static async create(channels: number, sampleRate: number): Promise<AudioGraph> {
@@ -27,7 +28,7 @@ export class AudioGraph {
       processorOptions: { sab: ring.sab, channels, capacityFrames },
     });
     node.connect(ctx.destination);
-    return new AudioGraph(ctx, node, ring);
+    return new AudioGraph(ctx, node, ring, capacityFrames);
   }
 
   pushPcm(pcm: PcmChunk): void {
@@ -48,6 +49,11 @@ export class AudioGraph {
 
   get availableRead(): number {
     return this.ring.availableRead();
+  }
+
+  get freeSpaceFrames(): number {
+    // One slot reserved (ring disambiguates full vs empty), so usable capacity is capacityFrames - 1
+    return this.capacityFrames - 1 - this.ring.availableRead();
   }
 
   dispose(): void {

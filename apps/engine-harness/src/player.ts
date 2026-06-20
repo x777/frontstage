@@ -8,11 +8,13 @@ declare global {
   interface Window {
     __engine: PlaybackEngine | undefined;
     __engineReady: boolean;
+    __audioCurrentTime: (() => number) | undefined;
   }
 }
 
 window.__engine = undefined;
 window.__engineReady = false;
+window.__audioCurrentTime = undefined;
 
 const CLIP_URL = "/test/fixtures/clip.mp4";
 const FPS = 30;
@@ -99,6 +101,7 @@ async function main(): Promise<void> {
     });
 
     window.__engine = engine;
+    window.__audioCurrentTime = engine.__audioCurrentTime;
     window.__engineReady = true;
     status.textContent = `ok — ${durationFrames} frames`;
   } catch (e) {
