@@ -9,11 +9,11 @@ test("play keeps video frame in sync with the audio clock", async ({ page }) => 
     e.play();
     await new Promise((res) => setTimeout(res, 800));
     const frame = e.currentFrame;
-    const audioFrames = window.__audioCurrentTime?.() ?? 0;
+    const audioSeconds = window.__audioCurrentTime?.() ?? 0;
     e.pause();
-    return { frame, audioFrames, fps: 30 };
+    return { frame, audioSeconds, fps: 30 };
   });
   // ~0.8s played → ~24 frames at 30fps; video frame tracks audio time within ±3 frames
   expect(r.frame).toBeGreaterThan(15);
-  if (r.audioFrames > 0) expect(Math.abs(r.frame - r.audioFrames * r.fps)).toBeLessThanOrEqual(3);
+  if (r.audioSeconds > 0) expect(Math.abs(r.frame - r.audioSeconds * r.fps)).toBeLessThanOrEqual(3);
 });

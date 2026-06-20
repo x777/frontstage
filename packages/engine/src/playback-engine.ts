@@ -102,16 +102,17 @@ export class PlaybackEngine {
     const clip = this.firstVideoClip();
     const startFrame = this._currentFrame;
     void (async () => {
+      this.pcmChunks = [];
+      this.pcmCursor = 0;
       await this.decoder!.seekTo(this.sourceMicrosForFrame(startFrame));
       if (!this._isPlaying) return;
       if (this.audio && this.audioDecode) {
-        this.pcmChunks = [];
-        this.pcmCursor = 0;
         try {
           await this.audioDecode.decodeAll((pcm) => { this.pcmChunks.push(pcm); });
         } catch (e) {
           console.warn("audio decode error:", e);
         }
+        if (!this._isPlaying) return;
         await this.audio.start();
       }
       if (!this._isPlaying) return;
