@@ -10,3 +10,4 @@ export * from "./playback-engine.js";
 export * from "./clock/play-clock.js";
 export * from "./audio/ring-buffer.js";
 export * from "./audio/audio-graph.js";
+export * from "./compositor/source-coordinator.js";
