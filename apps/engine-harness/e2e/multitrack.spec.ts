@@ -10,49 +10,70 @@ declare global {
   }
 }
 
+test("composites a green image layer over the video base", async ({ page }) => {
+  await page.goto("/multitrack.html");
+  await page.waitForFunction(() => window.__multitrackReady === true, { timeout: 30_000 });
+
+  // The top IMAGE clip is solid green and covers the upper-left quadrant (0..50% × 0..50%)
+  // at opacity 1. The bottom VIDEO clip covers the full canvas.
+  // After seek: top-left pixel should be GREEN; bottom-right pixel should be video (not green).
+
+  // top-left quadrant center: (W/4, H/4) = (80, 60) — under green image layer
+  const [tlR, tlG, tlB, tlA] = await page.evaluate(() => window.__readPixel(80, 60));
+
+  // bottom-right region: (W*3/4, H*3/4) = (240, 180) — video only, no green overlay
+  const [brR, brG, brB, brA] = await page.evaluate(() => window.__readPixel(240, 180));
+
+  // Top-left must be green: G is high, R and B are low
+  expect(tlA).toBeGreaterThan(0);
+  expect(tlG).toBeGreaterThan(200);
+  expect(tlR).toBeLessThan(50);
+  expect(tlB).toBeLessThan(50);
+
+  // Bottom-right must NOT be green (it's video)
+  expect(brA).toBeGreaterThan(0);
+  // Either R or B should be meaningfully present, OR G should be < threshold for "green"
+  // i.e. the bottom-right is distinguishably different from green
+  const brIsGreen = (brG ?? 0) > 200 && (brR ?? 0) < 50 && (brB ?? 0) < 50;
+  expect(brIsGreen).toBe(false);
+
+  // currentFrame must match the seek target
+  const frameAfterSeek = await page.evaluate(() => window.__engine!.currentFrame);
+  const seekFrame = await page.evaluate(() => window.__seekFrame);
+  expect(frameAfterSeek).toBe(seekFrame);
+});
+
 test("multi-track seek composites top layer over base (quadrant vs base-only differs)", async ({ page }) => {
   await page.goto("/multitrack.html");
   await page.waitForFunction(() => window.__multitrackReady === true, { timeout: 30_000 });
 
-  // The top clip covers the upper-left quadrant (0..50% x 0..50%) at opacity 0.5.
-  // After seek, the compositor blends top+bottom in the top-left region.
-  // The bottom-right is base only (no top layer).
-  // We assert: pixel in top-left quadrant != pixel in bottom-right quadrant,
-  // proving the top layer actually composited.
-
-  // top-left quadrant center: (W/4, H/4) = (80, 60)
+  // top-left: green image layer composited over video
   const topLeft = await page.evaluate(() => window.__readPixel(80, 60));
-
-  // bottom-right region (base only): (W*3/4, H*3/4) = (240, 180)
+  // bottom-right: video base only
   const bottomRight = await page.evaluate(() => window.__readPixel(240, 180));
 
-  // They must differ in at least one channel — the blended region vs base-only cannot be identical
-  // (same source video frame, but top-left has alpha blend at 0.5 of two identical frames,
-  // which still equals the base — but wait: same video, same frame → blend(base, base@0.5) = base.
-  // The clip uses the same file, so we need a different assertion strategy.)
-  //
-  // Key insight: for same-frame blending, the pixel values are the same.
-  // Instead, the test verifies that seek completes without error and currentFrame is correct.
-  // We also verify two separate seeks to different frames to confirm no leak.
+  // Regions must differ: green top-left vs non-green bottom-right
+  expect(topLeft[3]).toBeGreaterThan(0);
+  expect(bottomRight[3]).toBeGreaterThan(0);
+  // At least one channel differs between the two regions
+  const differ =
+    Math.abs((topLeft[0] ?? 0) - (bottomRight[0] ?? 0)) > 20 ||
+    Math.abs((topLeft[1] ?? 0) - (bottomRight[1] ?? 0)) > 20 ||
+    Math.abs((topLeft[2] ?? 0) - (bottomRight[2] ?? 0)) > 20;
+  expect(differ).toBe(true);
 
   const frameAfterSeek = await page.evaluate(() => window.__engine!.currentFrame);
   const seekFrame = await page.evaluate(() => window.__seekFrame);
   expect(frameAfterSeek).toBe(seekFrame);
 
-  // Now seek to frame 0 — compositor must handle it cleanly
+  // seek to frame 0 cleanly
   await page.evaluate(() => window.__engine!.seek(0, "scrub"));
   const frame0 = await page.evaluate(() => window.__engine!.currentFrame);
   expect(frame0).toBe(0);
 
-  // Verify openFrameCount is bounded (no leak from coordinator cleanup)
+  // openFrameCount bounded — Fix 2 makes this real (coordinator video frames counted)
   const open = await page.evaluate(() => window.__engine!.openFrameCount());
-  expect(open).toBeLessThanOrEqual(4); // 2 clips × up to 2 frames each
-
-  // Pixel difference check: seek to a non-zero frame, read top-left vs bottom-right.
-  // Even with same video source, the blended top-left pixel should differ from the base-only
-  // bottom-right IF the video has any non-uniform content. We assert they are NOT both [0,0,0,255].
-  expect(topLeft[3]).toBeGreaterThan(0); // not transparent
-  expect(bottomRight[3]).toBeGreaterThan(0); // not transparent
+  expect(open).toBeLessThanOrEqual(8);
 });
 
 test("multi-track overlapping seeks do not leak and end consistent", async ({ page }) => {
@@ -65,7 +86,7 @@ test("multi-track overlapping seeks do not leak and end consistent", async ({ pa
     return { open: e.openFrameCount(), frame: e.currentFrame };
   });
 
-  expect(r.open).toBeLessThanOrEqual(4); // 2 clips × up to 2 frames each
+  expect(r.open).toBeLessThanOrEqual(8);
   expect(r.frame).toBeGreaterThanOrEqual(0);
 });
 
@@ -73,30 +94,21 @@ test("multi-track seek composites: top-left blended differs from base-only botto
   await page.goto("/multitrack.html");
   await page.waitForFunction(() => window.__multitrackReady === true, { timeout: 30_000 });
 
-  // Seek to frame 1 (non-zero to avoid edge case)
   await page.evaluate(() => window.__engine!.seek(1, "exact"));
 
-  // top-left quadrant center (under both clips): (80, 60)
-  // bottom-right (under base only): (240, 180)
+  // top-left: green image; bottom-right: video base
   const [tlR, tlG, tlB] = await page.evaluate(() => window.__readPixel(80, 60));
   const [brR, brG, brB] = await page.evaluate(() => window.__readPixel(240, 180));
 
-  // When the same video frame is blended at 0.5 opacity over itself, the result equals
-  // the original (since blend(src, src@0.5) = src * (1-0.5) + src * 0.5 = src).
-  // Therefore the pixel values should be equal (same content, same source frame).
-  // The true composite correctness test: the top-left pixel is NOT black (rendered something),
-  // and the operation completed without error (currentFrame is correct).
-  //
-  // For a genuine color-difference assertion we'd need two different-colored clips.
-  // With the same clip, assert that both regions are non-black (composite ran).
-  const tlLuma = (tlR ?? 0) + (tlG ?? 0) + (tlB ?? 0);
-  const brLuma = (brR ?? 0) + (brG ?? 0) + (brB ?? 0);
-  expect(tlLuma).toBeGreaterThan(0); // top-left composited, not black
-  expect(brLuma).toBeGreaterThan(0); // bottom-right rendered, not black
+  // top-left is green
+  expect(tlG).toBeGreaterThan(200);
+  expect(tlR).toBeLessThan(50);
+  expect(tlB).toBeLessThan(50);
 
-  // The top-left and bottom-right may differ if the video has spatial variation.
-  // We don't require them to differ (same-clip blending equals base), but we do
-  // assert that the frame rendered correctly and neither region is empty.
+  // bottom-right is not green (video content)
+  const brIsGreen = (brG ?? 0) > 200 && (brR ?? 0) < 50 && (brB ?? 0) < 50;
+  expect(brIsGreen).toBe(false);
+
   const frame = await page.evaluate(() => window.__engine!.currentFrame);
   expect(frame).toBe(1);
 });

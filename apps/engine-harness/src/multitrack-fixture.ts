@@ -22,12 +22,24 @@ const FPS = 30;
 const W = 320;
 const H = 240;
 
+async function makeGreenPng(): Promise<ArrayBuffer> {
+  const oc = new OffscreenCanvas(W, H);
+  const ctx = oc.getContext("2d")!;
+  ctx.fillStyle = "rgb(0,255,0)";
+  ctx.fillRect(0, 0, W, H);
+  const blob = await oc.convertToBlob({ type: "image/png" });
+  return blob.arrayBuffer();
+}
+
 async function main(): Promise<void> {
   const status = document.getElementById("status")!;
   try {
-    const resp = await fetch(CLIP_URL);
-    if (!resp.ok) throw new Error(`fetch ${CLIP_URL}: ${resp.status}`);
-    const fileBytes = await resp.arrayBuffer();
+    const [videoResp, greenPngBytes] = await Promise.all([
+      fetch(CLIP_URL),
+      makeGreenPng(),
+    ]);
+    if (!videoResp.ok) throw new Error(`fetch ${CLIP_URL}: ${videoResp.status}`);
+    const fileBytes = await videoResp.arrayBuffer();
     const demux = await demuxMp4(new Blob([fileBytes]));
     if (!demux.video) throw new Error("no video track");
 
@@ -39,7 +51,7 @@ async function main(): Promise<void> {
     const natSize = { width: demux.video.codedWidth, height: demux.video.codedHeight };
     const canvasSize = { width: W, height: H };
 
-    // bottom track: full-frame clip, opacity 1
+    // track 0 (bottom): full-frame video clip, opacity 1
     const bottomTransform = fitTransform(natSize, canvasSize);
     const bottomClip: Clip = {
       id: "clip-bottom",
@@ -61,14 +73,14 @@ async function main(): Promise<void> {
       crop: defaultCrop(),
     };
 
-    // top track: scaled to upper-left quadrant, opacity 0.5
-    // centerX=0.25, centerY=0.25, width=0.5, height=0.5 → top-left 0..50% of canvas
-    const topTransform = { ...fitTransform(natSize, canvasSize), width: 0.5, height: 0.5, centerX: 0.25, centerY: 0.25 };
+    // track 1 (top): solid green IMAGE in the upper-left quadrant, opacity 1
+    // centerX=0.25, centerY=0.25, width=0.5, height=0.5 → covers top-left 50%×50%
+    const topTransform = { ...fitTransform({ width: W, height: H }, canvasSize), width: 0.5, height: 0.5, centerX: 0.25, centerY: 0.25 };
     const topClip: Clip = {
       id: "clip-top",
-      mediaRef: "clip.mp4",
-      mediaType: "video",
-      sourceClipType: "video",
+      mediaRef: "green.png",
+      mediaType: "image",
+      sourceClipType: "image",
       startFrame: 0,
       durationFrames,
       trimStartFrame: 0,
@@ -79,7 +91,7 @@ async function main(): Promise<void> {
       fadeOutFrames: 0,
       fadeInInterpolation: "linear",
       fadeOutInterpolation: "linear",
-      opacity: 0.5,
+      opacity: 1,
       transform: topTransform,
       crop: defaultCrop(),
     };
@@ -96,7 +108,8 @@ async function main(): Promise<void> {
     };
 
     const source: MediaByteSource = {
-      open(_ref: string): Promise<Blob> {
+      open(ref: string): Promise<Blob> {
+        if (ref === "green.png") return Promise.resolve(new Blob([greenPngBytes], { type: "image/png" }));
         return Promise.resolve(new Blob([fileBytes], { type: "video/mp4" }));
       },
     };

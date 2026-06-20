@@ -155,6 +155,14 @@ export class SourceCoordinator {
     return layers;
   }
 
+  openFrameCount(): number {
+    let count = 0;
+    for (const entry of this.sources.values()) {
+      if (entry.type === "video") count += entry.mgr.openFrameCount();
+    }
+    return count;
+  }
+
   dispose(): void {
     for (const entry of this.sources.values()) {
       if (entry.type === "video") entry.mgr.dispose();

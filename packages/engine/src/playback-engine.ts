@@ -80,7 +80,7 @@ export class PlaybackEngine {
       if (seq !== this.seekSeq) return;
       const { layers, cleanup } = await this.coordinator!.layersForScrub(clamped);
       try {
-        if (seq !== this.seekSeq) { cleanup(); return; }
+        if (seq !== this.seekSeq) return;
         this._currentFrame = clamped;
         await this.renderer.composite(layers, { width: this.timeline!.width, height: this.timeline!.height });
         this.emit();
@@ -187,7 +187,7 @@ export class PlaybackEngine {
 
   get currentFrame(): number { return this._currentFrame; }
   get durationFrames(): number { return this.timeline ? timelineTotalFrames(this.timeline) : 0; }
-  openFrameCount(): number { return this.decoder?.openFrameCount() ?? 0; }
+  openFrameCount(): number { return (this.decoder?.openFrameCount() ?? 0) + (this.coordinator?.openFrameCount() ?? 0); }
   onStateChange(cb: StateCb): () => void { this.cbs.add(cb); return () => this.cbs.delete(cb); }
   private emit(): void { for (const cb of this.cbs) cb({ currentFrame: this._currentFrame, isPlaying: this._isPlaying }); }
   get __audioCurrentTime(): (() => number) | undefined {
