@@ -19,3 +19,4 @@ export * from "./project/project-io.js";
 export * from "./mat2d.js";
 export * from "./render-plan.js";
 export * from "./fit-transform.js";
+export * from "./audio-plan.js";
