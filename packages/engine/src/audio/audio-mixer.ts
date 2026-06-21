@@ -97,6 +97,7 @@ export class AudioMixer {
   reset(fromFrame: number, fps: number): void {
     this.cursor = Math.round((fromFrame / fps) * this._sampleRate);
     this.planCache.clear();
+    this.__lastPeak = 0;
   }
 
   feed(graph: AudioGraph, timeline: Timeline, fps: number): void {
@@ -119,7 +120,7 @@ export class AudioMixer {
         const v = Math.abs(mixed[i]!);
         if (v > peak) peak = v;
       }
-      this.__lastPeak = peak;
+      this.__lastPeak = Math.max(this.__lastPeak, peak);
       this.__mixFed += CHUNK;
 
       graph.pushPcm({ timestampUs: 0, sampleRate: this._sampleRate, channels: this._channels, data: mixed });
