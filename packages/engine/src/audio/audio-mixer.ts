@@ -1,4 +1,4 @@
-import { buildAudioPlan, type AudioPlan } from "@palmier/core";
+import { buildAudioPlan, timelineTotalFrames, type AudioPlan } from "@palmier/core";
 import type { Timeline } from "@palmier/core";
 import type { MediaByteSource } from "../media/media-source.js";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
@@ -15,6 +15,7 @@ export class AudioMixer {
   private _sampleRate: number;
   private cursor = 0;
   private planCache = new Map<number, AudioPlan>();
+  private _ended = false;
   // Exposed for testing: peak absolute value of the most recently fed mixed chunk
   __lastPeak = 0;
   __mixFed = 0;
@@ -45,15 +46,13 @@ export class AudioMixer {
       demuxCache.set(clip.mediaRef, { bytes, audio: demux.audio });
     }
 
-    const sources: MixSource[] = [];
-    const clipIds: string[] = [];
+    // Decode PCM once per mediaRef and share across clips referencing the same media
+    const pcmCache = new Map<string, Float32Array>();
     let outChannels: number | undefined;
     let outSampleRate: number | undefined;
 
-    for (const clip of allClips) {
-      const entry = demuxCache.get(clip.mediaRef)!;
-      if (!entry.audio) continue; // media has no audio track
-
+    for (const [ref, entry] of demuxCache) {
+      if (!entry.audio) continue;
       const { bytes, audio } = entry;
       const chunks = buildAudioChunks(audio, bytes);
       let manager: AudioDecodeManager;
@@ -66,14 +65,24 @@ export class AudioMixer {
       const pcmParts: Float32Array[] = [];
       await manager.decodeAll((pcm) => { pcmParts.push(pcm.data); });
 
-      // Concatenate interleaved PCM parts
       const totalLen = pcmParts.reduce((n, p) => n + p.length, 0);
       if (totalLen === 0) continue;
       const pcm = new Float32Array(totalLen);
       let off = 0;
       for (const part of pcmParts) { pcm.set(part, off); off += part.length; }
 
+      pcmCache.set(ref, pcm);
       if (outChannels === undefined) { outChannels = audio.channels; outSampleRate = audio.sampleRate; }
+    }
+
+    const sources: MixSource[] = [];
+    const clipIds: string[] = [];
+
+    for (const clip of allClips) {
+      const pcm = pcmCache.get(clip.mediaRef);
+      if (!pcm) continue;
+      const entry = demuxCache.get(clip.mediaRef)!;
+      const audio = entry.audio!;
 
       sources.push({
         pcm,
@@ -97,34 +106,46 @@ export class AudioMixer {
   reset(fromFrame: number, fps: number): void {
     this.cursor = Math.round((fromFrame / fps) * this._sampleRate);
     this.planCache.clear();
+    this._ended = false;
     this.__lastPeak = 0;
+  }
+
+  mixNext(timeline: Timeline, fps: number): Float32Array | undefined {
+    const endSample = Math.ceil(timelineTotalFrames(timeline) / fps * this._sampleRate);
+    if (this._ended || this.cursor >= endSample) {
+      this._ended = true;
+      return undefined;
+    }
+
+    const gainFor = (i: number, timelineFrame: number): number => {
+      let plan = this.planCache.get(timelineFrame);
+      if (!plan) {
+        plan = buildAudioPlan(timeline, timelineFrame);
+        this.planCache.set(timelineFrame, plan);
+      }
+      const clipId = this.clipIds[i];
+      return plan.clips.find((c) => c.clipId === clipId)?.gain ?? 0;
+    };
+
+    const mixed = mixWindow(this.sources, this.cursor, CHUNK, this._sampleRate, fps, gainFor);
+
+    let peak = 0;
+    for (let i = 0; i < mixed.length; i++) {
+      const v = Math.abs(mixed[i]!);
+      if (v > peak) peak = v;
+    }
+    this.__lastPeak = Math.max(this.__lastPeak, peak);
+    this.__mixFed += CHUNK;
+
+    this.cursor += CHUNK;
+    return mixed;
   }
 
   feed(graph: AudioGraph, timeline: Timeline, fps: number): void {
     while (graph.freeSpaceFrames >= CHUNK) {
-      const gainFor = (i: number, timelineFrame: number): number => {
-        let plan = this.planCache.get(timelineFrame);
-        if (!plan) {
-          plan = buildAudioPlan(timeline, timelineFrame);
-          this.planCache.set(timelineFrame, plan);
-        }
-        const clipId = this.clipIds[i];
-        return plan.clips.find((c) => c.clipId === clipId)?.gain ?? 0;
-      };
-
-      const mixed = mixWindow(this.sources, this.cursor, CHUNK, this._sampleRate, fps, gainFor);
-
-      // Track peak for test inspection
-      let peak = 0;
-      for (let i = 0; i < mixed.length; i++) {
-        const v = Math.abs(mixed[i]!);
-        if (v > peak) peak = v;
-      }
-      this.__lastPeak = Math.max(this.__lastPeak, peak);
-      this.__mixFed += CHUNK;
-
-      graph.pushPcm({ timestampUs: 0, sampleRate: this._sampleRate, channels: this._channels, data: mixed });
-      this.cursor += CHUNK;
+      const w = this.mixNext(timeline, fps);
+      if (!w) break;
+      graph.pushPcm({ timestampUs: 0, sampleRate: this._sampleRate, channels: this._channels, data: w });
     }
   }
 

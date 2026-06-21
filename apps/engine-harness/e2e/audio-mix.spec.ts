@@ -46,3 +46,24 @@ test("two overlapping audio clips mix louder than one, ring drains, frame advanc
   // Peak sample is non-zero (not a silent mix)
   expect(r.peakDual).toBeGreaterThan(0.001);
 });
+
+test("mixNext terminates and produces real audio", async ({ page }) => {
+  await page.goto("/audio-mix.html");
+  await page.waitForFunction(() => window.__audioMixReady === true, { timeout: 30_000 });
+
+  const r = await page.evaluate(() => {
+    const mixer = window.__engine?.__audioMixer;
+    // Expected: ceil(60 frames / 30fps * sampleRate / 2048)
+    const sampleRate = mixer?.sampleRate ?? 44100;
+    const expectedCount = Math.ceil(2 * sampleRate / 2048);
+    const result = window.__mixNextPeaks();
+    return { ...result, expectedCount };
+  });
+
+  // Loop terminates (count ≈ expected, within ±2 chunks due to rounding)
+  expect(r.count).toBeGreaterThan(0);
+  expect(Math.abs(r.count - r.expectedCount)).toBeLessThanOrEqual(2);
+
+  // Real audio (non-silent)
+  expect(r.anyNonZero).toBe(true);
+});

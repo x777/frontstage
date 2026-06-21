@@ -12,6 +12,7 @@ declare global {
     __getLastPeak: () => number;
     __getMixFed: () => number;
     __measurePeak: (volume: number) => Promise<number>;
+    __mixNextPeaks: () => { count: number; anyNonZero: boolean };
   }
 }
 
@@ -102,6 +103,24 @@ async function main(): Promise<void> {
       const peak = engine.__audioMixer?.__lastPeak ?? 0;
       engine.pause();
       return peak;
+    };
+
+    // Drive mixNext until undefined; returns peak stats for the terminates test.
+    window.__mixNextPeaks = (): { count: number; anyNonZero: boolean } => {
+      const mixer = engine.__audioMixer;
+      if (!mixer) return { count: 0, anyNonZero: false };
+      const timeline = makeTwoClipTimeline(1.0);
+      // Rewind so we consume from the beginning
+      mixer.reset(0, FPS);
+      const maxAbs = (w: Float32Array): number => {
+        let m = 0;
+        for (let i = 0; i < w.length; i++) { const v = Math.abs(w[i]!); if (v > m) m = v; }
+        return m;
+      };
+      const peaks: number[] = [];
+      let w: Float32Array | undefined;
+      while ((w = mixer.mixNext(timeline, FPS))) peaks.push(maxAbs(w));
+      return { count: peaks.length, anyNonZero: peaks.some((p) => p > 0.01) };
     };
 
     window.__audioMixReady = true;
