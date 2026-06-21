@@ -99,6 +99,9 @@ let sessionCounter = 0;
 let activeSession = null;
 
 ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec, outPath }) => {
+  if (activeSession !== null) {
+    throw new Error("export already in progress; call export:finish first");
+  }
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 8192 || height > 8192) {
     throw new Error("invalid export dimensions");
   }
@@ -111,7 +114,8 @@ ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec
   }
 
   const id = String(++sessionCounter);
-  const videoOnlyPath = audio ? path.join(os.tmpdir(), `export-vid-${id}.mp4`) : outPath;
+  const vidExt = codec === "prores_ks" ? ".mov" : ".mp4";
+  const videoOnlyPath = audio ? path.join(os.tmpdir(), `export-vid-${id}${vidExt}`) : outPath;
   const audioPath = audio ? path.join(os.tmpdir(), `export-aud-${id}.f32le`) : null;
 
   // Open audio temp file for writing if we have audio
@@ -138,6 +142,7 @@ ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec
 
   let videoStderr = "";
   videoProc.stderr.on("data", (d) => { videoStderr += d.toString(); });
+  videoProc.on("error", (err) => { videoStderr += "\nspawn error: " + err.message; });
 
   const session = { ffmpegPath, opts: { width, height, fps, audio, codec, outPath }, videoProc, videoStderr: () => videoStderr, audioPath, audioFd, videoOnlyPath, id };
   exportSessions.set(id, session);

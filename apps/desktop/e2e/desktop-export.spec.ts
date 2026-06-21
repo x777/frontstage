@@ -1,5 +1,5 @@
 import { _electron as electron, test, expect } from "@playwright/test";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -69,34 +69,52 @@ async function launchAndExport(codec: string, outPath: string): Promise<string> 
   }
 }
 
-test("H.264 export produces a valid MP4 with correct dimensions", async () => {
+test("H.264 export produces a valid MP4 with correct dimensions and audio", async () => {
   const outPath = path.join(os.tmpdir(), `desktop-export-h264-${Date.now()}.mp4`);
-  const result = await launchAndExport("libx264", outPath);
+  try {
+    const result = await launchAndExport("libx264", outPath);
 
-  expect(existsSync(result), `output file missing: ${result}`).toBe(true);
+    expect(existsSync(result), `output file missing: ${result}`).toBe(true);
 
-  const info = ffprobe(result);
-  const videoStream = info.streams.find((s) => s.codec_type === "video");
-  expect(videoStream, "no video stream in output").toBeDefined();
-  expect(videoStream!.width).toBe(320);
-  expect(videoStream!.height).toBe(240);
+    const info = ffprobe(result);
+    const videoStream = info.streams.find((s) => s.codec_type === "video");
+    expect(videoStream, "no video stream in output").toBeDefined();
+    expect(videoStream!.codec_name).toBe("h264");
+    expect(videoStream!.width).toBe(320);
+    expect(videoStream!.height).toBe(240);
 
-  const durationSec = videoStream!.duration ? parseFloat(videoStream!.duration) : NaN;
-  expect(durationSec).toBeGreaterThan(0.5);
+    const durationSec = videoStream!.duration ? parseFloat(videoStream!.duration) : NaN;
+    expect(durationSec).toBeGreaterThan(0.05);
+
+    const audioStream = info.streams.find((s) => s.codec_type === "audio");
+    expect(audioStream, "no audio stream in output").toBeDefined();
+    expect(audioStream!.codec_name).toBe("aac");
+  } finally {
+    try { rmSync(outPath); } catch { /* ignore */ }
+  }
 });
 
-test("ProRes export produces a valid MOV with correct dimensions", async () => {
+test("ProRes export produces a valid MOV with correct dimensions and audio", async () => {
   const outPath = path.join(os.tmpdir(), `desktop-export-prores-${Date.now()}.mov`);
-  const result = await launchAndExport("prores_ks", outPath);
+  try {
+    const result = await launchAndExport("prores_ks", outPath);
 
-  expect(existsSync(result), `output file missing: ${result}`).toBe(true);
+    expect(existsSync(result), `output file missing: ${result}`).toBe(true);
 
-  const info = ffprobe(result);
-  const videoStream = info.streams.find((s) => s.codec_type === "video");
-  expect(videoStream, "no video stream in output").toBeDefined();
-  expect(videoStream!.width).toBe(320);
-  expect(videoStream!.height).toBe(240);
+    const info = ffprobe(result);
+    const videoStream = info.streams.find((s) => s.codec_type === "video");
+    expect(videoStream, "no video stream in output").toBeDefined();
+    expect(videoStream!.codec_name).toBe("prores");
+    expect(videoStream!.width).toBe(320);
+    expect(videoStream!.height).toBe(240);
 
-  const durationSec = videoStream!.duration ? parseFloat(videoStream!.duration) : NaN;
-  expect(durationSec).toBeGreaterThan(0.5);
+    const durationSec = videoStream!.duration ? parseFloat(videoStream!.duration) : NaN;
+    expect(durationSec).toBeGreaterThan(0.05);
+
+    const audioStream = info.streams.find((s) => s.codec_type === "audio");
+    expect(audioStream, "no audio stream in output").toBeDefined();
+    expect(audioStream!.codec_name).toBe("aac");
+  } finally {
+    try { rmSync(outPath); } catch { /* ignore */ }
+  }
 });

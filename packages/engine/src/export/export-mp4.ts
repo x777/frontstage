@@ -35,16 +35,14 @@ export async function runExport(timeline: Timeline, media: MediaByteSource, sink
         cleanup();
       }
 
-      const timestamp = Math.round(frame * 1e6 / fps);
-      const duration = Math.round(1e6 / fps);
-      const vf = new VideoFrame(offscreen, { timestamp, duration });
-
-      try {
-        await sink.ready();
-        await sink.pushVideoFrame(vf, { keyFrame: frame % fps === 0 });
-      } finally {
-        vf.close();
-      }
+      await sink.ready();
+      await sink.pushFrame({
+        offscreen,
+        renderer,
+        timestampUs: Math.round(frame * 1e6 / fps),
+        durationUs: Math.round(1e6 / fps),
+        keyFrame: frame % fps === 0,
+      });
     }
 
     if (mixer) {

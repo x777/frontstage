@@ -471,6 +471,35 @@ export class FrameRenderer {
     );
   }
 
+  async readRGBA(): Promise<Uint8Array> {
+    const device = this.device;
+    const w = this.readbackTex.width;
+    const h = this.readbackTex.height;
+    const unpadded = w * 4;
+    const bytesPerRow = Math.ceil(unpadded / 256) * 256;
+    const buf = device.createBuffer({
+      size: bytesPerRow * h,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const enc = device.createCommandEncoder();
+    enc.copyTextureToBuffer(
+      { texture: this.readbackTex, origin: { x: 0, y: 0, z: 0 } },
+      { buffer: buf, bytesPerRow },
+      [w, h],
+    );
+    device.queue.submit([enc.finish()]);
+    await buf.mapAsync(GPUMapMode.READ);
+    const raw = new Uint8Array(buf.getMappedRange());
+    // Strip 256-aligned row padding → tight w*h*4 RGBA
+    const tight = new Uint8Array(w * h * 4);
+    for (let row = 0; row < h; row++) {
+      tight.set(raw.subarray(row * bytesPerRow, row * bytesPerRow + unpadded), row * unpadded);
+    }
+    buf.unmap();
+    buf.destroy();
+    return tight;
+  }
+
   async readPixel(x: number, y: number): Promise<[number, number, number, number]> {
     const device = this.device;
     const bytesPerRow = 256;

@@ -1,5 +1,5 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
-import type { ExportSink } from "./export-sink.js";
+import type { ExportSink, PushFrameSource } from "./export-sink.js";
 import type { ExportOptions } from "./export-mp4.js";
 
 async function drain(encoder: VideoEncoder | AudioEncoder, limit: number): Promise<void> {
@@ -98,8 +98,13 @@ export class WebCodecsMp4Sink implements ExportSink {
     }
   }
 
-  pushVideoFrame(frame: VideoFrame, opts: { keyFrame: boolean }): void {
-    this.encoder.encode(frame, { keyFrame: opts.keyFrame });
+  pushFrame(source: PushFrameSource): void {
+    const vf = new VideoFrame(source.offscreen, { timestamp: source.timestampUs, duration: source.durationUs });
+    try {
+      this.encoder.encode(vf, { keyFrame: source.keyFrame });
+    } finally {
+      vf.close();
+    }
   }
 
   pushAudioData(data: AudioData): void {

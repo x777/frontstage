@@ -1,4 +1,4 @@
-import type { ExportSink } from "@palmier/engine";
+import type { ExportSink, PushFrameSource } from "@palmier/engine";
 
 export interface DesktopExportBridge {
   start(opts: { width: number; height: number; fps: number; audio?: { sampleRate: number; channels: number }; codec: string; outPath: string }): Promise<string>;
@@ -35,14 +35,24 @@ export class FfmpegIpcSink implements ExportSink {
     // IPC is async by nature; no encoder queue to drain here
   }
 
-  async pushVideoFrame(frame: VideoFrame, _opts?: { keyFrame: boolean }): Promise<void> {
+  // Extract RGBA from the composited offscreen canvas via VideoFrame.copyTo.
+  // The GPU readback path (copyTextureToBuffer + mapAsync) loses the device
+  // in a sustained loop on Electron/Windows on this box; VideoFrame.copyTo
+  // uses a different internal blit path that is stable (proven by spike test).
+  async pushFrame(source: PushFrameSource): Promise<void> {
     const rgba = new Uint8Array(this.width * this.height * 4);
-    await frame.copyTo(rgba, { format: "RGBA" });
+    const vf = new VideoFrame(source.offscreen, { timestamp: source.timestampUs });
+    try {
+      await vf.copyTo(rgba, { format: "RGBA" });
+    } finally {
+      vf.close();
+    }
     this.bridge.videoFrame(rgba);
   }
 
   async pushAudioData(data: AudioData): Promise<void> {
     const f32 = new Float32Array(data.numberOfFrames * data.numberOfChannels);
+    // f32 (interleaved) — all channels in plane 0, no left-channel-only reduction
     await data.copyTo(f32, { planeIndex: 0, format: "f32" });
     this.bridge.audioData(new Uint8Array(f32.buffer));
   }
