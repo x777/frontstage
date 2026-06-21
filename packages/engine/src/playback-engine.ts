@@ -1,11 +1,10 @@
 import {
   type Timeline,
-  timelineTotalFrames, frameToSeconds,
+  timelineTotalFrames,
 } from "@palmier/core";
 import type { MediaByteSource } from "./media/media-source.js";
-import { demuxMp4 } from "./demux/mp4-demuxer.js";
-import { buildAudioChunks, AudioDecodeManager, type PcmChunk } from "./decode/audio-decoder.js";
 import { AudioGraph } from "./audio/audio-graph.js";
+import { AudioMixer } from "./audio/audio-mixer.js";
 import { FrameRenderer } from "./render/webgpu-renderer.js";
 import { PlayClock } from "./clock/play-clock.js";
 import { SourceCoordinator } from "./compositor/source-coordinator.js";
@@ -28,9 +27,7 @@ export class PlaybackEngine {
   private raf = 0;
 
   private audio?: AudioGraph;
-  private audioDecode?: AudioDecodeManager;
-  private pcmChunks: PcmChunk[] = [];
-  private pcmCursor = 0;
+  private audioMixer?: AudioMixer;
 
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
@@ -42,23 +39,16 @@ export class PlaybackEngine {
     this.timeline = timeline;
     this.canvas.width = timeline.width;
     this.canvas.height = timeline.height;
-    // Demux first video clip's media for the audio path only
-    const clip = timeline.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video");
-    if (!clip) throw new Error("no video clip in timeline");
-    const blob = await media.open(clip.mediaRef);
-    const bytes = await blob.arrayBuffer();
-    const demux = await demuxMp4(new Blob([bytes]));
     this.coordinator = await SourceCoordinator.create(timeline, media);
-    if (demux.audio) {
-      const aChunks = buildAudioChunks(demux.audio, bytes);
-      try {
-        this.audio = await AudioGraph.create(demux.audio.channels, demux.audio.sampleRate);
-        this.audioDecode = await AudioDecodeManager.create(demux.audio, aChunks);
-      } catch (e) {
-        console.warn("audio init failed (non-fatal):", e);
-        this.audio = undefined;
-        this.audioDecode = undefined;
+    try {
+      this.audioMixer = await AudioMixer.create(timeline, media);
+      if (this.audioMixer) {
+        this.audio = await AudioGraph.create(this.audioMixer.channels, this.audioMixer.sampleRate);
       }
+    } catch (e) {
+      console.warn("audio init failed (non-fatal):", e);
+      this.audioMixer = undefined;
+      this.audio = undefined;
     }
     await this.seek(0, "exact");
   }
@@ -87,28 +77,19 @@ export class PlaybackEngine {
     if (!this.timeline || !this.coordinator || this._isPlaying) return;
     this._isPlaying = true;
     const startFrame = this._currentFrame;
+    const fps = this.timeline.fps;
     void (async () => {
       const pseq = ++this.playSeq;
       this.audio?.reset();
-      this.pcmChunks = [];
-      this.pcmCursor = 0;
       await this.coordinator!.seekAllTo(startFrame);
       if (!this._isPlaying || pseq !== this.playSeq) return;
-      if (this.audio && this.audioDecode) {
+      this.audioMixer?.reset(startFrame, fps);
+      if (this.audio) {
         try {
-          await this.audioDecode.decodeAll((pcm) => {
-            if (pseq !== this.playSeq) return;
-            this.pcmChunks.push(pcm);
-          });
+          await this.audio.start();
         } catch (e) {
-          console.warn("audio decode error:", e);
+          console.warn("audio start error:", e);
         }
-        if (pseq !== this.playSeq) return;
-        const startMicros = this.sourceMicrosForFrame(this._currentFrame);
-        this.pcmCursor = this.pcmChunks.findIndex((c) => c.timestampUs >= startMicros);
-        if (this.pcmCursor < 0) this.pcmCursor = this.pcmChunks.length;
-        if (!this._isPlaying) return;
-        await this.audio.start();
       }
       if (!this._isPlaying) return;
       this.clock = new PlayClock(
@@ -125,14 +106,8 @@ export class PlaybackEngine {
     const tick = async (): Promise<void> => {
       if (!this._isPlaying || !this.clock || !this.coordinator || !this.timeline) return;
       this.coordinator.pumpAll();
-      // Drain ring: push as many chunks as fit in the ring each tick
-      while (
-        this.audio &&
-        this.pcmCursor < this.pcmChunks.length &&
-        this.audio.freeSpaceFrames >= this.pcmChunks[this.pcmCursor]!.data.length / this.pcmChunks[this.pcmCursor]!.channels
-      ) {
-        this.audio.pushPcm(this.pcmChunks[this.pcmCursor]!);
-        this.pcmCursor++;
+      if (this.audio && this.audioMixer) {
+        this.audioMixer.feed(this.audio, this.timeline, this.timeline.fps);
       }
       const frame = Math.floor(this.clock.frame);
       if (frame >= this.durationFrames) {
@@ -150,28 +125,19 @@ export class PlaybackEngine {
   }
 
   pause(): void {
+    const fps = this.timeline?.fps ?? 30;
     this._isPlaying = false;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.clock?.pause();
     this.audio?.stop();
     this.audio?.reset();
+    this.audioMixer?.reset(this._currentFrame, fps);
     this.coordinator?.clearPumpBuffers();
     this.emit();
   }
 
   get isPlaying(): boolean { return this._isPlaying; }
-
-  private sourceMicrosForFrame(frame: number): number {
-    const clip = this.firstVideoClip();
-    return Math.round(
-      frameToSeconds(clip.trimStartFrame + (frame - clip.startFrame) * clip.speed, this.timeline!.fps) * 1_000_000,
-    );
-  }
-
-  private firstVideoClip() {
-    return this.timeline!.tracks.flatMap((t) => t.clips).find((c) => c.mediaType === "video")!;
-  }
 
   get currentFrame(): number { return this._currentFrame; }
   get durationFrames(): number { return this.timeline ? timelineTotalFrames(this.timeline) : 0; }
@@ -181,10 +147,11 @@ export class PlaybackEngine {
   get __audioCurrentTime(): (() => number) | undefined {
     return this.audio ? () => this.audio!.currentTime : undefined;
   }
+  get __audioMixer(): AudioMixer | undefined { return this.audioMixer; }
 
   readPixel(x: number, y: number): Promise<[number, number, number, number]> {
     return this.renderer.readPixel(x, y);
   }
 
-  dispose(): void { this.pause(); this.audio?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
+  dispose(): void { this.pause(); this.audio?.dispose(); this.audioMixer?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
 }

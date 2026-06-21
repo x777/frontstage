@@ -71,4 +71,46 @@ describe("buildAudioPlan", () => {
     expect(plan.clips[0]!.clipId).toBe("a1");
     expect(plan.clips[0]!.gain).toBe(1.0);
   });
+
+  test("video clip with volume appears in plan; image and text clips do not", () => {
+    const tl = {
+      ...defaultTimeline(),
+      tracks: [
+        {
+          id: "tv",
+          type: "video" as const,
+          muted: false,
+          hidden: false,
+          syncLocked: false,
+          clips: [
+            clip({ id: "v1", mediaRef: "vid", mediaType: "video", sourceClipType: "video", volume: 0.8 }),
+          ],
+        },
+        {
+          id: "ti",
+          type: "video" as const,
+          muted: false,
+          hidden: false,
+          syncLocked: false,
+          clips: [
+            clip({ id: "img1", mediaRef: "img", mediaType: "image", sourceClipType: "image", volume: 1.0 }),
+          ],
+        },
+        {
+          id: "tt",
+          type: "video" as const,
+          muted: false,
+          hidden: false,
+          syncLocked: false,
+          clips: [
+            clip({ id: "txt1", mediaRef: "txt", mediaType: "text", sourceClipType: "text", volume: 1.0 }),
+          ],
+        },
+      ],
+    };
+    const plan = buildAudioPlan(tl, 10);
+    expect(plan.clips).toHaveLength(1);
+    expect(plan.clips[0]!.clipId).toBe("v1");
+    expect(plan.clips[0]!.gain).toBeCloseTo(0.8);
+  });
 });

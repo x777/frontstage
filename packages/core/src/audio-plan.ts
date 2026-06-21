@@ -19,7 +19,7 @@ export function buildAudioPlan(timeline: Timeline, frame: number): AudioPlan {
   for (const track of timeline.tracks) {
     if (track.hidden) continue;
     for (const clip of track.clips) {
-      if (clip.mediaType !== "audio") continue;
+      if (clip.mediaType !== "audio" && clip.mediaType !== "video") continue;
       if (!clipContains(clip, frame)) continue;
       clips.push({
         clipId: clip.id,

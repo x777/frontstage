@@ -13,3 +13,4 @@ export * from "./audio/ring-buffer.js";
 export * from "./audio/audio-graph.js";
 export * from "./compositor/source-coordinator.js";
 export * from "./audio/mix.js";
+export * from "./audio/audio-mixer.js";
