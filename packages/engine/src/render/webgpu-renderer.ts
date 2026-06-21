@@ -190,7 +190,7 @@ export class FrameRenderer {
     this.frameTex = frameTex;
   }
 
-  static async create(canvas: HTMLCanvasElement): Promise<FrameRenderer> {
+  static async create(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<FrameRenderer> {
     if (!navigator.gpu) throw new Error("WebGPU not supported");
     let adapter = await navigator.gpu.requestAdapter({ powerPreference: "low-power" });
     if (!adapter) adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
@@ -198,7 +198,7 @@ export class FrameRenderer {
     const device = await adapter.requestDevice();
 
     const canvasFmt = navigator.gpu.getPreferredCanvasFormat();
-    const ctx = canvas.getContext("webgpu")!;
+    const ctx = canvas.getContext("webgpu") as GPUCanvasContext;
     ctx.configure({ device, format: canvasFmt, alphaMode: "opaque" });
 
     const extModule = device.createShaderModule({ code: WGSL_EXT });
@@ -491,6 +491,35 @@ export class FrameRenderer {
     buf.unmap();
     buf.destroy();
     return pixel;
+  }
+
+  async readFrame(): Promise<Uint8Array> {
+    const device = this.device;
+    const rw = this.readbackTex.width;
+    const rh = this.readbackTex.height;
+    const unpadded = rw * 4;
+    const bytesPerRow = Math.ceil(unpadded / 256) * 256;
+    const buf = device.createBuffer({
+      size: bytesPerRow * rh,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const enc = device.createCommandEncoder();
+    enc.copyTextureToBuffer(
+      { texture: this.readbackTex },
+      { buffer: buf, bytesPerRow },
+      [rw, rh],
+    );
+    device.queue.submit([enc.finish()]);
+    await buf.mapAsync(GPUMapMode.READ);
+    const src = new Uint8Array(buf.getMappedRange());
+    // Strip row padding: copy unpadded rows into tight RGBA buffer
+    const tight = new Uint8Array(rw * rh * 4);
+    for (let row = 0; row < rh; row++) {
+      tight.set(src.subarray(row * bytesPerRow, row * bytesPerRow + rw * 4), row * rw * 4);
+    }
+    buf.unmap();
+    buf.destroy();
+    return tight;
   }
 
   resize(w: number, h: number): void {

@@ -7,7 +7,7 @@
   "types": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@palmier/core": "workspace:*", "mp4box": "^0.5.2" },
+  "dependencies": { "@palmier/core": "workspace:*", "mp4box": "^0.5.2", "mp4-muxer": "^5" },
   "devDependencies": {
     "@webgpu/types": "^0.1.40",
     "@types/node": "^22",
