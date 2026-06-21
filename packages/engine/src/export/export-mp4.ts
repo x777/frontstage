@@ -64,23 +64,7 @@ export async function exportTimelineToMp4(
       const timestamp = Math.round(frame * 1e6 / fps);
       const duration = Math.round(1e6 / fps);
 
-      // Try constructing a VideoFrame directly from the OffscreenCanvas.
-      // If the composited result isn't captured (black frame), fall back to
-      // reading the RGBA readback texture.
-      let vf: VideoFrame;
-      try {
-        vf = new VideoFrame(offscreen, { timestamp, duration });
-      } catch {
-        // OffscreenCanvas path failed; use GPU readback
-        const rgba = await renderer.readFrame();
-        vf = new VideoFrame(rgba, {
-          format: "RGBA",
-          codedWidth: width,
-          codedHeight: height,
-          timestamp,
-          duration,
-        });
-      }
+      const vf = new VideoFrame(offscreen, { timestamp, duration });
 
       encoder.encode(vf, { keyFrame: frame % fps === 0 });
       vf.close();
@@ -93,6 +77,7 @@ export async function exportTimelineToMp4(
     const blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
     return blob;
   } finally {
+    try { if (encoder.state !== "closed") encoder.close(); } catch { /* already closed */ }
     renderer.dispose();
     coord.dispose();
   }

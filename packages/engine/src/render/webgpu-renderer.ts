@@ -493,37 +493,12 @@ export class FrameRenderer {
     return pixel;
   }
 
-  async readFrame(): Promise<Uint8Array> {
-    const device = this.device;
-    const rw = this.readbackTex.width;
-    const rh = this.readbackTex.height;
-    const unpadded = rw * 4;
-    const bytesPerRow = Math.ceil(unpadded / 256) * 256;
-    const buf = device.createBuffer({
-      size: bytesPerRow * rh,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    const enc = device.createCommandEncoder();
-    enc.copyTextureToBuffer(
-      { texture: this.readbackTex },
-      { buffer: buf, bytesPerRow },
-      [rw, rh],
-    );
-    device.queue.submit([enc.finish()]);
-    await buf.mapAsync(GPUMapMode.READ);
-    const src = new Uint8Array(buf.getMappedRange());
-    // Strip row padding: copy unpadded rows into tight RGBA buffer
-    const tight = new Uint8Array(rw * rh * 4);
-    for (let row = 0; row < rh; row++) {
-      tight.set(src.subarray(row * bytesPerRow, row * bytesPerRow + rw * 4), row * rw * 4);
-    }
-    buf.unmap();
-    buf.destroy();
-    return tight;
-  }
-
   resize(w: number, h: number): void {
-    const canvas = this.ctx.canvas as HTMLCanvasElement;
+    if (typeof HTMLCanvasElement === "undefined" || !(this.ctx.canvas instanceof HTMLCanvasElement)) {
+      // resize() is for the live preview canvas only; offscreen export renderers are fixed-size
+      return;
+    }
+    const canvas = this.ctx.canvas;
     canvas.width = w;
     canvas.height = h;
     this.readbackTex.destroy();
