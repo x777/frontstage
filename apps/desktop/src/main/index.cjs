@@ -98,6 +98,11 @@ let sessionCounter = 0;
 // but use a session ID so the protocol is forward-compatible.
 let activeSession = null;
 
+const CODECS = {
+  prores_ks: { ext: ".mov", vargs: ["-c:v", "prores_ks", "-profile:v", "3"] },
+  libx264: { ext: ".mp4", vargs: ["-c:v", "libx264", "-pix_fmt", "yuv420p"] },
+};
+
 ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec, outPath }) => {
   if (activeSession !== null) {
     throw new Error("export already in progress; call export:finish first");
@@ -105,6 +110,15 @@ ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 8192 || height > 8192) {
     throw new Error("invalid export dimensions");
   }
+
+  // Codec allowlist — reject anything not in the map
+  const spec = CODECS[codec];
+  if (!spec) throw new Error("unsupported codec: " + String(codec));
+
+  // Output-path containment — must resolve inside OS temp dir
+  const resolved = path.resolve(outPath);
+  const tmpRoot = path.resolve(os.tmpdir());
+  if (!resolved.startsWith(tmpRoot + path.sep)) throw new Error("output path must be within the temp dir");
 
   let ffmpegPath;
   try {
@@ -114,39 +128,42 @@ ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec
   }
 
   const id = String(++sessionCounter);
-  const vidExt = codec === "prores_ks" ? ".mov" : ".mp4";
-  const videoOnlyPath = audio ? path.join(os.tmpdir(), `export-vid-${id}${vidExt}`) : outPath;
+  const videoOnlyPath = audio ? path.join(os.tmpdir(), `export-vid-${id}${spec.ext}`) : resolved;
   const audioPath = audio ? path.join(os.tmpdir(), `export-aud-${id}.f32le`) : null;
 
-  // Open audio temp file for writing if we have audio
   let audioFd = null;
-  if (audioPath) {
-    audioFd = fs.openSync(audioPath, "w");
+  let videoProc = null;
+  try {
+    // Open audio temp file for writing if we have audio
+    if (audioPath) {
+      audioFd = fs.openSync(audioPath, "w");
+    }
+
+    const videoArgs = [
+      "-y",
+      "-f", "rawvideo",
+      "-pix_fmt", "rgba",
+      "-s", `${width}x${height}`,
+      "-r", String(fps),
+      "-i", "pipe:0",
+      ...spec.vargs,
+      videoOnlyPath,
+    ];
+
+    videoProc = spawn(ffmpegPath, videoArgs, { stdio: ["pipe", "pipe", "pipe"] });
+
+    let videoStderr = "";
+    videoProc.stderr.on("data", (d) => { videoStderr += d.toString(); });
+    videoProc.on("error", (err) => { videoStderr += "\nspawn error: " + err.message; });
+
+    const session = { ffmpegPath, opts: { width, height, fps, audio, codec, outPath: resolved }, videoProc, videoStderr: () => videoStderr, audioPath, audioFd, videoOnlyPath, id };
+    exportSessions.set(id, session);
+    activeSession = id;
+  } catch (e) {
+    try { if (audioFd != null) fs.closeSync(audioFd); } catch {}
+    activeSession = null;
+    throw e;
   }
-
-  // Determine pixel format output for codec
-  const pixFmt = codec === "prores_ks" ? "yuv444p10le" : "yuv420p";
-  const videoArgs = [
-    "-y",
-    "-f", "rawvideo",
-    "-pix_fmt", "rgba",
-    "-s", `${width}x${height}`,
-    "-r", String(fps),
-    "-i", "pipe:0",
-    "-c:v", codec,
-    ...(codec === "prores_ks" ? ["-profile:v", "3"] : ["-pix_fmt", pixFmt]),
-    videoOnlyPath,
-  ];
-
-  const videoProc = spawn(ffmpegPath, videoArgs, { stdio: ["pipe", "pipe", "pipe"] });
-
-  let videoStderr = "";
-  videoProc.stderr.on("data", (d) => { videoStderr += d.toString(); });
-  videoProc.on("error", (err) => { videoStderr += "\nspawn error: " + err.message; });
-
-  const session = { ffmpegPath, opts: { width, height, fps, audio, codec, outPath }, videoProc, videoStderr: () => videoStderr, audioPath, audioFd, videoOnlyPath, id };
-  exportSessions.set(id, session);
-  activeSession = id;
 
   return id;
 });

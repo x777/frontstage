@@ -471,6 +471,7 @@ export class FrameRenderer {
     );
   }
 
+  // WARNING: sustained calls in an Electron loop destabilise the GPU device (device-lost). Use VideoFrame.copyTo instead — see FfmpegIpcSink.pushFrame in apps/desktop/src/renderer/ffmpeg-sink.ts.
   async readRGBA(): Promise<Uint8Array> {
     const device = this.device;
     const w = this.readbackTex.width;

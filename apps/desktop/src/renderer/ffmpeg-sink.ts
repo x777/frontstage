@@ -35,10 +35,7 @@ export class FfmpegIpcSink implements ExportSink {
     // IPC is async by nature; no encoder queue to drain here
   }
 
-  // Extract RGBA from the composited offscreen canvas via VideoFrame.copyTo.
-  // The GPU readback path (copyTextureToBuffer + mapAsync) loses the device
-  // in a sustained loop on Electron/Windows on this box; VideoFrame.copyTo
-  // uses a different internal blit path that is stable (proven by spike test).
+  // Extract RGBA via VideoFrame.copyTo — NOT FrameRenderer.readRGBA() (packages/engine/src/render/webgpu-renderer.ts), which loses the GPU device in a sustained Electron loop.
   async pushFrame(source: PushFrameSource): Promise<void> {
     const rgba = new Uint8Array(this.width * this.height * 4);
     const vf = new VideoFrame(source.offscreen, { timestamp: source.timestampUs });
