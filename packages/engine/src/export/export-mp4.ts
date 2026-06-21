@@ -41,7 +41,7 @@ export async function runExport(timeline: Timeline, media: MediaByteSource, sink
 
       try {
         await sink.ready();
-        sink.pushVideoFrame(vf, { keyFrame: frame % fps === 0 });
+        await sink.pushVideoFrame(vf, { keyFrame: frame % fps === 0 });
       } finally {
         vf.close();
       }
@@ -62,7 +62,7 @@ export async function runExport(timeline: Timeline, media: MediaByteSource, sink
         });
         try {
           await sink.ready();
-          sink.pushAudioData(data);
+          await sink.pushAudioData(data);
         } finally {
           data.close();
         }

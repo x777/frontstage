@@ -12,7 +12,8 @@
   "dependencies": {
     "@palmier/core": "workspace:*",
     "@palmier/engine": "workspace:*",
-    "ffmpeg-static": "^5.2.0"
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
