@@ -3,6 +3,7 @@ import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { SourceCoordinator } from "../compositor/source-coordinator.js";
 import type { MediaByteSource } from "../media/media-source.js";
 import { FrameRenderer } from "../render/webgpu-renderer.js";
+import { AudioMixer } from "../audio/audio-mixer.js";
 
 export interface ExportOptions {
   bitrate?: number;
@@ -19,12 +20,18 @@ export async function exportTimelineToMp4(
   const offscreen = new OffscreenCanvas(width, height);
   const renderer = await FrameRenderer.create(offscreen);
   const coord = await SourceCoordinator.create(timeline, media);
+  const mixer = await AudioMixer.create(timeline, media);
 
-  const muxer = new Muxer({
-    target: new ArrayBufferTarget(),
+  const target = new ArrayBufferTarget();
+  const muxerOpts: ConstructorParameters<typeof Muxer>[0] = {
+    target,
     video: { codec: "avc", width, height },
     fastStart: "in-memory",
-  });
+  };
+  if (mixer) {
+    muxerOpts.audio = { codec: "aac", sampleRate: mixer.sampleRate, numberOfChannels: mixer.channels };
+  }
+  const muxer = new Muxer(muxerOpts);
 
   let encoderError: Error | null = null;
   const encoder = new VideoEncoder({
@@ -50,6 +57,22 @@ export async function exportTimelineToMp4(
     framerate: fps,
   });
 
+  let audioEncoder: AudioEncoder | undefined;
+  let audioError: Error | null = null;
+
+  if (mixer) {
+    audioEncoder = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta!),
+      error: (e) => { audioError = e; },
+    });
+    audioEncoder.configure({
+      codec: "mp4a.40.2",
+      sampleRate: mixer.sampleRate,
+      numberOfChannels: mixer.channels,
+      bitrate: 128_000,
+    });
+  }
+
   try {
     for (let frame = 0; frame < totalFrames; frame++) {
       if (encoderError) throw encoderError;
@@ -73,12 +96,36 @@ export async function exportTimelineToMp4(
     await encoder.flush();
     if (encoderError) throw encoderError;
 
+    if (mixer && audioEncoder) {
+      let win: Float32Array | undefined;
+      let t = 0;
+      while ((win = mixer.mixNext(timeline, fps))) {
+        if (audioError) throw audioError;
+        const numberOfFrames = win.length / mixer.channels;
+        const data = new AudioData({
+          format: "f32",
+          sampleRate: mixer.sampleRate,
+          numberOfFrames,
+          numberOfChannels: mixer.channels,
+          timestamp: Math.round(t * 1e6 / mixer.sampleRate),
+          data: win.buffer as ArrayBuffer,
+        });
+        audioEncoder.encode(data);
+        data.close();
+        t += numberOfFrames;
+      }
+      await audioEncoder.flush();
+      if (audioError) throw audioError;
+    }
+
     muxer.finalize();
-    const blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
+    const blob = new Blob([target.buffer], { type: "video/mp4" });
     return blob;
   } finally {
     try { if (encoder.state !== "closed") encoder.close(); } catch { /* already closed */ }
+    try { if (audioEncoder && audioEncoder.state !== "closed") audioEncoder.close(); } catch { /* already closed */ }
     renderer.dispose();
     coord.dispose();
+    mixer?.dispose();
   }
 }

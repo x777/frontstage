@@ -15,6 +15,10 @@ declare global {
       timelineWidth: number;
       timelineHeight: number;
       totalFrames: number;
+      hasAudio: boolean;
+      audioSampleRate: number | undefined;
+      videoDurationUs: number | undefined;
+      audioDurationUs: number | undefined;
     }>) | undefined;
     __status: string;
   }
@@ -123,6 +127,20 @@ async function main(): Promise<void> {
     window.__exportAndDemux = async () => {
       const blob = await exportTimelineToMp4(timeline, source);
       const demuxResult = await demuxMp4(blob);
+
+      const videoSamples = demuxResult.video?.samples;
+      const audioSamples = demuxResult.audio?.samples;
+
+      const lastVideoSample = videoSamples?.at(-1);
+      const videoDurationUs = lastVideoSample
+        ? lastVideoSample.cts + Math.round((lastVideoSample.durationTicks / demuxResult.video!.timescale) * 1_000_000)
+        : undefined;
+
+      const lastAudioSample = audioSamples?.at(-1);
+      const audioDurationUs = lastAudioSample
+        ? lastAudioSample.cts + Math.round((lastAudioSample.durationTicks / demuxResult.audio!.timescale) * 1_000_000)
+        : undefined;
+
       return {
         hasVideo: !!demuxResult.video,
         width: demuxResult.video?.codedWidth,
@@ -131,6 +149,10 @@ async function main(): Promise<void> {
         timelineWidth: W,
         timelineHeight: H,
         totalFrames,
+        hasAudio: !!demuxResult.audio,
+        audioSampleRate: demuxResult.audio?.sampleRate,
+        videoDurationUs,
+        audioDurationUs,
       };
     };
 
