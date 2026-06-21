@@ -20,6 +20,7 @@ function createWindow() {
       preload: path.join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       // Allow webgpu in renderer
       experimentalFeatures: true,
     },
@@ -40,6 +41,10 @@ app.on("window-all-closed", () => {
 
 // IPC: encode one RGBA frame via ffmpeg-static
 ipcMain.handle("spike:encode-frame", async (_event, rgba, w, h) => {
+  if (!Number.isInteger(w) || !Number.isInteger(h) || w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+    throw new Error("invalid frame dimensions");
+  }
+
   // ffmpeg-static returns path to the ffmpeg binary
   let ffmpegPath;
   try {
@@ -79,7 +84,7 @@ ipcMain.handle("spike:encode-frame", async (_event, rgba, w, h) => {
     });
 
     // Write RGBA bytes to stdin, then close
-    const buf = Buffer.from(rgba.buffer || rgba);
+    const buf = Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength);
     proc.stdin.write(buf);
     proc.stdin.end();
   });
