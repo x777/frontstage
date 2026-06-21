@@ -97,6 +97,13 @@ export class AudioMixer {
     }
 
     if (sources.length === 0) return undefined;
+
+    for (const src of sources) {
+      if (src.sampleRate !== outSampleRate || src.channels !== outChannels) {
+        throw new Error("EngineUnsupported: heterogeneous audio (mixed sample rates / channel counts) not yet supported");
+      }
+    }
+
     return new AudioMixer(sources, clipIds, outChannels!, outSampleRate!);
   }
 
@@ -108,6 +115,7 @@ export class AudioMixer {
     this.planCache.clear();
     this._ended = false;
     this.__lastPeak = 0;
+    this.__mixFed = 0;
   }
 
   mixNext(timeline: Timeline, fps: number): Float32Array | undefined {

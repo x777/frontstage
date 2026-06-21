@@ -9,6 +9,23 @@ export interface ExportOptions {
   bitrate?: number;
 }
 
+async function drain(encoder: VideoEncoder | AudioEncoder, limit: number): Promise<void> {
+  while (encoder.encodeQueueSize > limit) {
+    await new Promise<void>((resolve) => {
+      const onDequeue = () => resolve();
+      try {
+        encoder.addEventListener("dequeue", onDequeue, { once: true });
+      } catch {
+        // dequeue event unavailable — fall back to polling
+        const poll = setInterval(() => {
+          if (encoder.encodeQueueSize <= limit) { clearInterval(poll); resolve(); }
+        }, 1);
+        return;
+      }
+    });
+  }
+}
+
 export async function exportTimelineToMp4(
   timeline: Timeline,
   media: MediaByteSource,
@@ -89,6 +106,9 @@ export async function exportTimelineToMp4(
 
       const vf = new VideoFrame(offscreen, { timestamp, duration });
 
+      if (encoderError) throw encoderError;
+      await drain(encoder, 8);
+      if (encoderError) throw encoderError;
       encoder.encode(vf, { keyFrame: frame % fps === 0 });
       vf.close();
     }
@@ -110,6 +130,9 @@ export async function exportTimelineToMp4(
           timestamp: Math.round(t * 1e6 / mixer.sampleRate),
           data: win.buffer as ArrayBuffer,
         });
+        if (audioError) throw audioError;
+        await drain(audioEncoder, 8);
+        if (audioError) throw audioError;
         audioEncoder.encode(data);
         data.close();
         t += numberOfFrames;
