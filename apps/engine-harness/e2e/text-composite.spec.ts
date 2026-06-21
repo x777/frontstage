@@ -7,6 +7,7 @@ declare global {
   interface Window {
     __engine: PlaybackEngine | undefined;
     __textCompositeReady: boolean;
+    __offsetReady: boolean;
     __maxLuma: MaxLumaFn;
   }
 }
@@ -52,4 +53,21 @@ test("text composites over video at correct z-order (playback)", async ({ page }
 
   expect(centerMax).toBeGreaterThan(400);
   expect(cornerMax).toBeLessThan(centerMax - 100);
+});
+
+// Off-center transform golden: text at centerX:0.25, centerY:0.25 must appear in
+// the upper-left band, NOT at canvas center. This test FAILS with the old identity
+// composite (which would center the text regardless of transform).
+test("off-center text transform is honored (scale/position applied at composite)", async ({ page }) => {
+  await page.goto("/text-composite-offset.html");
+  await page.waitForFunction(() => window.__offsetReady === true, { timeout: 30_000 });
+
+  // canvas is 320×240; centerX:0.25 → x=80, centerY:0.25 → y=60
+  // upper-left band around the text anchor (x:30..130, y:30..90) should be bright
+  const upperLeftMax = await maxLuma(page, 30, 30, 130, 90);
+  // center band (x:100..220, y:90..150) should NOT have text — only black background
+  const centerMax = await maxLuma(page, 100, 90, 220, 150);
+
+  expect(upperLeftMax).toBeGreaterThan(400);               // text rendered at upper-left
+  expect(centerMax).toBeLessThan(upperLeftMax - 100);      // upper-left distinctly brighter (text not at center)
 });

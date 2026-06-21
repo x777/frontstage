@@ -7,7 +7,7 @@ export class TextRasterizer {
   private cache = new Map<string, VideoFrame>();
 
   rasterize(layer: TextLayer, renderSize: Size): VideoFrame {
-    const key = JSON.stringify([layer.text, layer.style, layer.transform, renderSize]);
+    const key = JSON.stringify([layer.text, layer.style, renderSize]);
     const hit = this.cache.get(key);
     if (hit) return hit;
 
@@ -15,8 +15,9 @@ export class TextRasterizer {
     const o = new OffscreenCanvas(W, H);
     const c = o.getContext("2d")!;
     const s = layer.style;
-    const cx = layer.transform.centerX * W;
-    const cy = layer.transform.centerY * H;
+    // Always center the raster at canvas center; transform is applied at composite time.
+    const cx = W / 2;
+    const cy = H / 2;
 
     c.font = `${s.fontSize * s.fontScale}px ${s.fontName}`;
     c.textAlign = s.alignment;
