@@ -2,7 +2,9 @@
   "name": "palmier-cross-platform",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "turbo": "^2.1.0",
     "typescript": "^5.5.0",
@@ -11,5 +13,15 @@
   "scripts": {
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
+  },
+  "pnpm": {
+    "approvedBuildsDependencies": [
+      "electron",
+      "ffmpeg-static"
+    ],
+    "onlyBuiltDependencies": [
+      "electron",
+      "ffmpeg-static"
+    ]
   }
 }

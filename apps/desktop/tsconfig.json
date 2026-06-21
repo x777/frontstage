@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM"],
+    "types": ["@webgpu/types", "@types/node"],
+    "moduleResolution": "Bundler",
+    "paths": { "mp4box": ["../../packages/engine/src/demux/mp4box.d.ts"] }
+  },
+  "include": ["src/renderer", "e2e", "*.ts"],
+  "exclude": ["src/main", "src/preload", "node_modules", "dist"]
+}

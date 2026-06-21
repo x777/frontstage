@@ -1,0 +1,25 @@
+{
+  "name": "@palmier/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/main/index.cjs",
+  "scripts": {
+    "dev:renderer": "vite --config vite.renderer.config.ts --port 5190",
+    "e2e": "playwright test",
+    "e2e:spike": "playwright test e2e/spike.spec.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@palmier/core": "workspace:*",
+    "@palmier/engine": "workspace:*",
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22",
+    "@webgpu/types": "^0.1.40",
+    "electron": "^31.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0"
+  }
+}
