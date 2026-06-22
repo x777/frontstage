@@ -1,9 +1,11 @@
 import { useEffect } from "react";
-import { theme, Layout, persistLayout } from "@palmier/ui";
+import { theme, Layout, persistLayout, PreviewPanel } from "@palmier/ui";
 import type { EditorStore } from "@palmier/core";
+import type { MediaByteSource } from "@palmier/engine";
 
 interface AppProps {
   store: EditorStore;
+  media: MediaByteSource;
 }
 
 function Placeholder({ label }: { label: string }) {
@@ -23,7 +25,7 @@ function Placeholder({ label }: { label: string }) {
   );
 }
 
-export function App({ store }: AppProps) {
+export function App({ store, media }: AppProps) {
   useEffect(() => {
     return store.subscribe(() => persistLayout(store));
   }, [store]);
@@ -32,7 +34,7 @@ export function App({ store }: AppProps) {
     <Layout
       store={store}
       media={<Placeholder label="Media" />}
-      preview={<Placeholder label="Preview" />}
+      preview={<PreviewPanel store={store} media={media} />}
       timeline={<Placeholder label="Timeline" />}
       inspector={<Placeholder label="Inspector" />}
     />

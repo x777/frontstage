@@ -4,7 +4,7 @@
     "rootDir": ".",
     "lib": ["ES2022", "DOM"],
     "jsx": "react-jsx",
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals", "@webgpu/types"]
   },
   "include": ["src", "test"]
 }

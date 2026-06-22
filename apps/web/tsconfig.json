@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "lib": ["ES2022", "DOM"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": ["@webgpu/types"]
   },
   "include": ["src", "e2e", "*.ts"]
 }
