@@ -22,3 +22,6 @@ export * from "./fit-transform.js";
 export * from "./audio-plan.js";
 export * from "./editor/editor-store.js";
 export * from "./editor/commands.js";
+export * from "./timeline/geometry.js";
+export * from "./timeline/snap.js";
+export * from "./timeline/drag-math.js";
