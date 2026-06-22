@@ -71,6 +71,7 @@ describe("commands", () => {
     const before = store.getSnapshot().timeline;
     store.dispatch(removeClipCommand("nonexistent"));
     expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
   });
 
   test("setClipPropertyCommand is a no-op if clip not found", () => {

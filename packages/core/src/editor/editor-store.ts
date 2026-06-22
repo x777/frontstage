@@ -103,14 +103,16 @@ export class EditorStore {
 
   dispatch(cmd: Command): void {
     const prior = this.state.timeline;
-    if (cmd.coalesceKey && cmd.coalesceKey === this.lastCoalesceKey) {
+    const next = cmd.apply(prior);
+    if (next === prior) return;
+    if (cmd.coalesceKey != null && cmd.coalesceKey === this.lastCoalesceKey) {
       // coalescing — don't push, prior is already captured
     } else {
       this.undoStack.push(prior);
       this.redoStack = [];
     }
     this.lastCoalesceKey = cmd.coalesceKey ?? null;
-    this.state = { ...this.state, timeline: cmd.apply(prior) };
+    this.state = { ...this.state, timeline: next };
     this.emit();
   }
 
