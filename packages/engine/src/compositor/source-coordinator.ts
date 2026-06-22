@@ -28,10 +28,12 @@ export class SourceCoordinator {
   private readonly textRasterizer: TextRasterizer;
 
   private constructor(
-    private readonly timeline: Timeline,
+    private timeline: Timeline,
     private readonly sources: Map<string, SourceEntry>,
     private readonly clipById: Map<string, Clip>,
     private readonly _sourceSizes: Map<string, Size>,
+    private readonly demuxCache: Map<string, { track: NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>; fileBytes: ArrayBuffer }>,
+    private readonly media: MediaByteSource,
   ) {
     this.textRasterizer = new TextRasterizer();
   }
@@ -41,7 +43,6 @@ export class SourceCoordinator {
     const clipById = new Map<string, Clip>();
     const sourceSizes = new Map<string, Size>();
 
-    // Cache demux results by mediaRef so same media is demuxed once
     type DemuxVideo = NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>;
     const demuxCache = new Map<string, { track: DemuxVideo; fileBytes: ArrayBuffer }>();
 
@@ -51,31 +52,7 @@ export class SourceCoordinator {
         for (const clip of track.clips) {
           if (clip.mediaType !== "video" && clip.mediaType !== "image") continue;
           clipById.set(clip.id, clip);
-
-          if (clip.mediaType === "video") {
-            let cached = demuxCache.get(clip.mediaRef);
-            if (!cached) {
-              const blob = await media.open(clip.mediaRef);
-              const fileBytes = await blob.arrayBuffer();
-              const demux = await demuxMp4(new Blob([fileBytes]));
-              if (!demux.video) throw new Error(`no video track in mediaRef: ${clip.mediaRef}`);
-              cached = { track: demux.video, fileBytes };
-              demuxCache.set(clip.mediaRef, cached);
-            }
-            const chunks = buildVideoChunks(cached.track, cached.fileBytes);
-            const mgr = await VideoDecodeManager.create(cached.track, chunks);
-            const natSize: Size = { width: cached.track.codedWidth, height: cached.track.codedHeight };
-            sources.set(clip.id, { type: "video", mgr, natSize });
-            sourceSizes.set(clip.mediaRef, natSize);
-          } else {
-            // image
-            const blob = await media.open(clip.mediaRef);
-            const bytes = await blob.arrayBuffer();
-            const src = await ImageSource.create(bytes);
-            const natSize = src.size();
-            sources.set(clip.id, { type: "image", src, natSize });
-            sourceSizes.set(clip.mediaRef, natSize);
-          }
+          await SourceCoordinator._addClipSource(clip, media, demuxCache, sources, sourceSizes);
         }
       }
     } catch (e) {
@@ -86,7 +63,70 @@ export class SourceCoordinator {
       throw e;
     }
 
-    return new SourceCoordinator(timeline, sources, clipById, sourceSizes);
+    return new SourceCoordinator(timeline, sources, clipById, sourceSizes, demuxCache, media);
+  }
+
+  private static async _addClipSource(
+    clip: Clip,
+    media: MediaByteSource,
+    demuxCache: Map<string, { track: NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>; fileBytes: ArrayBuffer }>,
+    sources: Map<string, SourceEntry>,
+    sourceSizes: Map<string, Size>,
+  ): Promise<void> {
+    if (clip.mediaType === "video") {
+      let cached = demuxCache.get(clip.mediaRef);
+      if (!cached) {
+        const blob = await media.open(clip.mediaRef);
+        const fileBytes = await blob.arrayBuffer();
+        const demux = await demuxMp4(new Blob([fileBytes]));
+        if (!demux.video) throw new Error(`no video track in mediaRef: ${clip.mediaRef}`);
+        cached = { track: demux.video, fileBytes };
+        demuxCache.set(clip.mediaRef, cached);
+      }
+      const chunks = buildVideoChunks(cached.track, cached.fileBytes);
+      const mgr = await VideoDecodeManager.create(cached.track, chunks);
+      const natSize: Size = { width: cached.track.codedWidth, height: cached.track.codedHeight };
+      sources.set(clip.id, { type: "video", mgr, natSize });
+      sourceSizes.set(clip.mediaRef, natSize);
+    } else {
+      const blob = await media.open(clip.mediaRef);
+      const bytes = await blob.arrayBuffer();
+      const src = await ImageSource.create(bytes);
+      const natSize = src.size();
+      sources.set(clip.id, { type: "image", src, natSize });
+      sourceSizes.set(clip.mediaRef, natSize);
+    }
+  }
+
+  async reconcile(timeline: Timeline): Promise<void> {
+    const newClips = new Map<string, Clip>();
+    for (const track of timeline.tracks) {
+      if (track.hidden) continue;
+      for (const clip of track.clips) {
+        if (clip.mediaType !== "video" && clip.mediaType !== "image") continue;
+        newClips.set(clip.id, clip);
+      }
+    }
+
+    // Remove sources for clips no longer present
+    for (const [clipId, entry] of this.sources) {
+      if (!newClips.has(clipId)) {
+        if (entry.type === "video") entry.mgr.dispose();
+        else entry.src.dispose();
+        this.sources.delete(clipId);
+        this.clipById.delete(clipId);
+      }
+    }
+
+    // Add sources for new clips
+    for (const [clipId, clip] of newClips) {
+      if (!this.sources.has(clipId)) {
+        this.clipById.set(clipId, clip);
+        await SourceCoordinator._addClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes);
+      }
+    }
+
+    this.timeline = timeline;
   }
 
   sourceSizes(): Map<string, Size> {

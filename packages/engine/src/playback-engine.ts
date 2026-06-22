@@ -29,6 +29,9 @@ export class PlaybackEngine {
   private audio?: AudioGraph;
   private audioMixer?: AudioMixer;
 
+  private media?: MediaByteSource;
+  __lastLayerCount = 0;
+
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
   static async create(canvas: HTMLCanvasElement): Promise<PlaybackEngine> {
@@ -37,6 +40,7 @@ export class PlaybackEngine {
 
   async load(timeline: Timeline, media: MediaByteSource): Promise<void> {
     this.timeline = timeline;
+    this.media = media;
     this.canvas.width = timeline.width;
     this.canvas.height = timeline.height;
     this.coordinator = await SourceCoordinator.create(timeline, media);
@@ -53,6 +57,38 @@ export class PlaybackEngine {
     await this.seek(0, "exact");
   }
 
+  async setTimeline(timeline: Timeline): Promise<void> {
+    if (!this.coordinator || !this.media) return;
+    this.timeline = timeline;
+    await this.coordinator.reconcile(timeline);
+
+    const prevChannels = this.audioMixer?.channels;
+    const prevSampleRate = this.audioMixer?.sampleRate;
+    this.audioMixer?.dispose();
+    try {
+      this.audioMixer = await AudioMixer.create(timeline, this.media);
+      if (this.audioMixer) {
+        const channelsChanged = this.audioMixer.channels !== prevChannels;
+        const rateChanged = this.audioMixer.sampleRate !== prevSampleRate;
+        if (channelsChanged || rateChanged || !this.audio) {
+          this.audio?.dispose();
+          this.audio = await AudioGraph.create(this.audioMixer.channels, this.audioMixer.sampleRate);
+        }
+      } else {
+        this.audio?.dispose();
+        this.audio = undefined;
+      }
+    } catch (e) {
+      console.warn("audio rebuild failed (non-fatal):", e);
+      this.audioMixer = undefined;
+      this.audio = undefined;
+    }
+
+    if (!this._isPlaying) {
+      await this.seek(this._currentFrame, "exact");
+    }
+  }
+
   // mode (exact vs low-latency scrub) is used in Plan 2c
   async seek(frame: number, _mode: "exact" | "scrub"): Promise<void> {
     if (this._isPlaying) this.pause();
@@ -66,6 +102,7 @@ export class PlaybackEngine {
       try {
         if (seq !== this.seekSeq) return;
         this._currentFrame = clamped;
+        this.__lastLayerCount = layers.length;
         await this.renderer.composite(layers, { width: this.timeline!.width, height: this.timeline!.height });
         this.emit();
       } finally { cleanup(); }
