@@ -5,6 +5,8 @@ import type { EditorStore, Timeline } from "@palmier/core";
 import { timelineTotalFrames } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { TransportBar } from "./TransportBar.js";
+import { TransformOverlay } from "./TransformOverlay.js";
+import { CropOverlay } from "./CropOverlay.js";
 import { useStore } from "../store/use-store.js";
 
 export interface PreviewPanelProps {
@@ -21,6 +23,7 @@ function snapshotSignature(tl: Timeline): string {
 
 export function PreviewPanel({ store, media }: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayContainerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
   const mountedRef = useRef(false);
   // Shared abort token: init reads this ref; cleanup sets it; second StrictMode mount resets it.
@@ -30,6 +33,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
   const prevTimelineRef = useRef<Timeline | null>(null);
   // used to force a re-render when the engine becomes ready
   const [engineReady, setEngineReady] = useState(false);
+  const [canvasRect, setCanvasRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
     // StrictMode double-mount guard: mountedRef stays true so the re-invoke doesn't create a
@@ -122,6 +126,30 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track the canvas displayed rect for overlay positioning
+  useEffect(() => {
+    const container = overlayContainerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    function measure() {
+      const containerRect = container!.getBoundingClientRect();
+      const cvRect = canvas!.getBoundingClientRect();
+      setCanvasRect({
+        left: cvRect.left - containerRect.left,
+        top: cvRect.top - containerRect.top,
+        width: cvRect.width,
+        height: cvRect.height,
+      });
+    }
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
+
   const timeline = useStore(store, (s) => s.timeline);
   const durationFrames = timelineTotalFrames(timeline);
 
@@ -135,6 +163,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
       }}
     >
       <div
+        ref={overlayContainerRef}
         style={{
           flex: 1,
           display: "flex",
@@ -143,6 +172,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           overflow: "hidden",
           background: "#000",
           minHeight: 0,
+          position: "relative",
         }}
       >
         <canvas
@@ -157,6 +187,13 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           width={timeline.width}
           height={timeline.height}
         />
+        <div
+          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+          data-testid="overlay-container"
+        >
+          {canvasRect && <TransformOverlay store={store} canvasRect={canvasRect} />}
+          {canvasRect && <CropOverlay store={store} canvasRect={canvasRect} />}
+        </div>
       </div>
       {engineReady && engineRef.current ? (
         <TransportBar

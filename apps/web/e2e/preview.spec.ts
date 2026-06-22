@@ -1,4 +1,157 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function waitForEngineReady(page: Page) {
+  await expect(page.locator('[data-testid="preview-canvas"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-testid="transport-playpause"]')).toBeVisible({ timeout: 15_000 });
+  await page.waitForSelector('[data-testid="preview-canvas"][data-engine-ready="1"]', { timeout: 10_000 });
+}
+
+test("transform overlay appears on selection and single undo reverts whole drag", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.reload();
+  await waitForEngineReady(page);
+
+  // Select the sample clip via the store
+  await page.evaluate(() => {
+    type StoreProxy = {
+      select(ids: string[]): void;
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ id: string }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const snap = store.getSnapshot();
+    const clipId = snap.timeline.tracks[0]!.clips[0]!.id;
+    store.select([clipId]);
+  });
+
+  // Wait for the transform overlay to appear
+  await expect(page.locator('[data-testid="transform-handle-move"]')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('[data-testid="transform-handle-tl"]')).toBeVisible();
+  await expect(page.locator('[data-testid="transform-handle-br"]')).toBeVisible();
+
+  // Record original transform
+  const originalCX = await page.evaluate(() => {
+    type StoreProxy = {
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ transform: { centerX: number } }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
+  });
+
+  // Drag the move handle by a known delta
+  const moveHandle = page.locator('[data-testid="transform-handle-move"]');
+  const handleBox = await moveHandle.boundingBox();
+  expect(handleBox).not.toBeNull();
+
+  const startX = handleBox!.x + handleBox!.width / 2;
+  const startY = handleBox!.y + handleBox!.height / 2;
+  const dragDelta = 40; // px in page space
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + dragDelta, startY + dragDelta, { steps: 5 });
+  await page.mouse.up();
+
+  // Clip's centerX should have changed
+  const newCX = await page.evaluate(() => {
+    type StoreProxy = {
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ transform: { centerX: number } }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
+  });
+  expect(newCX).not.toBe(originalCX);
+
+  // canUndo must be true
+  const canUndo = await page.evaluate(() => {
+    type StoreProxy = { canUndo(): boolean };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.canUndo();
+  });
+  expect(canUndo).toBe(true);
+
+  // ONE undo should revert the entire drag back to the original value
+  await page.evaluate(() => {
+    type StoreProxy = { undo(): void };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    store.undo();
+  });
+
+  const afterUndoCX = await page.evaluate(() => {
+    type StoreProxy = {
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ transform: { centerX: number } }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
+  });
+  expect(afterUndoCX).toBe(originalCX);
+
+  // After one undo, canUndo should be false (only one undo entry for the whole drag)
+  const canUndoAfter = await page.evaluate(() => {
+    type StoreProxy = { canUndo(): boolean };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.canUndo();
+  });
+  expect(canUndoAfter).toBe(false);
+});
+
+test("crop overlay appears on selection and drag updates crop", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.reload();
+  await waitForEngineReady(page);
+
+  // Select the sample clip
+  await page.evaluate(() => {
+    type StoreProxy = {
+      select(ids: string[]): void;
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ id: string }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const snap = store.getSnapshot();
+    const clipId = snap.timeline.tracks[0]!.clips[0]!.id;
+    store.select([clipId]);
+  });
+
+  // Crop handles should be visible
+  await expect(page.locator('[data-testid="crop-handle-left"]')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('[data-testid="crop-handle-right"]')).toBeVisible();
+  await expect(page.locator('[data-testid="crop-handle-top"]')).toBeVisible();
+  await expect(page.locator('[data-testid="crop-handle-bottom"]')).toBeVisible();
+
+  // Record original crop
+  const originalLeft = await page.evaluate(() => {
+    type StoreProxy = {
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ crop: { left: number } }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.getSnapshot().timeline.tracks[0]!.clips[0]!.crop.left;
+  });
+
+  // Drag the left crop handle rightward to increase left crop
+  const leftHandle = page.locator('[data-testid="crop-handle-left"]');
+  const handleBox = await leftHandle.boundingBox();
+  expect(handleBox).not.toBeNull();
+
+  const startX = handleBox!.x + handleBox!.width / 2;
+  const startY = handleBox!.y + handleBox!.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 20, startY, { steps: 4 });
+  await page.mouse.up();
+
+  // Crop left should have increased
+  const newLeft = await page.evaluate(() => {
+    type StoreProxy = {
+      getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ crop: { left: number } }> }> } };
+    };
+    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    return store.getSnapshot().timeline.tracks[0]!.clips[0]!.crop.left;
+  });
+  expect(newLeft).not.toBe(originalLeft);
+  expect(newLeft).toBeGreaterThan(originalLeft);
+});
 
 test("preview canvas renders a non-black frame", async ({ page }) => {
   await page.goto("/");

@@ -9,6 +9,9 @@ import { sampleTimeline, webMediaSource } from "./sample-project.js";
 const store = new EditorStore(sampleTimeline());
 restoreLayout(store);
 
+// Expose store for E2E tests
+(window as unknown as Record<string, unknown>).__palmierStore = store;
+
 const root = document.getElementById("root");
 if (!root) throw new Error("No #root element");
 createRoot(root).render(
