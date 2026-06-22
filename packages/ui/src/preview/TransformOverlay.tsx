@@ -3,6 +3,7 @@ import type { EditorStore } from "@palmier/core";
 import { transformAt, findClip, setClipTransformCommand, snapToCanvasEdges } from "@palmier/core";
 import type { Transform } from "@palmier/core";
 import { useStore } from "../store/use-store.js";
+import { theme } from "../theme/theme.js";
 
 export interface CanvasRect {
   left: number;
@@ -17,10 +18,8 @@ interface TransformOverlayProps {
 }
 
 const SNAP_THRESHOLD = 0.02;
+// Numeric constant mirroring --size-overlay-handle (10px); needed for SVG geometry attrs
 const HANDLE_SIZE = 10;
-const BORDER_COLOR = "rgba(255,255,255,0.9)";
-const HANDLE_COLOR = "#fff";
-const HANDLE_STROKE = "#333";
 
 type DragMode = "move" | "tl" | "tr" | "bl" | "br";
 
@@ -100,7 +99,7 @@ export function TransformOverlay({ store, canvasRect }: TransformOverlayProps) {
           newCX = st.centerX + (newW - st.width) / 2;
           newCY = st.centerY + (newH - st.height) / 2;
         }
-        next = { ...st, centerX: newCX, centerY: newCY, width: newW, height: newH };
+        next = snapToCanvasEdges({ ...st, centerX: newCX, centerY: newCY, width: newW, height: newH }, SNAP_THRESHOLD);
       }
 
       store.dispatch(setClipTransformCommand(d.clipId, next, d.coalesceKey));
@@ -109,6 +108,11 @@ export function TransformOverlay({ store, canvasRect }: TransformOverlayProps) {
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent<SVGElement>) => {
+    e.stopPropagation();
+    dragRef.current = null;
+  }, []);
+
+  const onPointerCancel = useCallback((e: React.PointerEvent<SVGElement>) => {
     e.stopPropagation();
     dragRef.current = null;
   }, []);
@@ -162,6 +166,7 @@ export function TransformOverlay({ store, canvasRect }: TransformOverlayProps) {
       viewBox={`0 0 ${canvasRect.width} ${canvasRect.height}`}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
     >
       <g transform={groupTransform}>
         <rect
@@ -170,8 +175,8 @@ export function TransformOverlay({ store, canvasRect }: TransformOverlayProps) {
           width={boxW}
           height={boxH}
           fill="transparent"
-          stroke={BORDER_COLOR}
-          strokeWidth={1.5}
+          stroke={theme.overlay.transformBorder}
+          strokeWidth={theme.borderWidth.medium}
           style={{ cursor: "move", pointerEvents: "all" }}
           data-testid="transform-handle-move"
           onPointerDown={(e) => onPointerDown(e, "move")}
@@ -183,9 +188,9 @@ export function TransformOverlay({ store, canvasRect }: TransformOverlayProps) {
             y={y - HANDLE_SIZE / 2}
             width={HANDLE_SIZE}
             height={HANDLE_SIZE}
-            fill={HANDLE_COLOR}
-            stroke={HANDLE_STROKE}
-            strokeWidth={1}
+            fill={theme.overlay.handleFill}
+            stroke={theme.overlay.handleStroke}
+            strokeWidth={theme.borderWidth.thin}
             style={{ cursor: "nwse-resize", pointerEvents: "all" }}
             data-testid={testid}
             onPointerDown={(e) => onPointerDown(e, mode)}

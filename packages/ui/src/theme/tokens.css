@@ -98,4 +98,12 @@
   --size-topbar: 36px;
   --size-resize-handle: 4px;
   --size-transport-play: 36px;
+
+  /* Overlay tokens */
+  --size-overlay-handle: 10px;
+  --color-overlay-transform-border: rgba(255, 255, 255, 0.9);
+  --color-overlay-handle-fill: #ffffff;
+  --color-overlay-handle-stroke: #333333;
+  --color-overlay-crop-border: rgba(255, 200, 0, 0.9);
+  --color-overlay-crop-handle: #ffcc00;
 }

@@ -4,15 +4,14 @@ import { cropAt, transformAt, findClip, setClipCropCommand } from "@palmier/core
 import type { Crop } from "@palmier/core";
 import { useStore } from "../store/use-store.js";
 import type { CanvasRect } from "./TransformOverlay.js";
+import { theme } from "../theme/theme.js";
 
 interface CropOverlayProps {
   store: EditorStore;
   canvasRect: CanvasRect;
 }
 
-const BORDER_COLOR = "rgba(255,200,0,0.9)";
-const HANDLE_COLOR = "#fc0";
-const HANDLE_STROKE = "#333";
+// Numeric constant mirroring --size-overlay-handle (10px); needed for SVG geometry attrs
 const HANDLE_SIZE = 10;
 
 type EdgeHandle = "left" | "top" | "right" | "bottom";
@@ -91,6 +90,11 @@ export function CropOverlay({ store, canvasRect }: CropOverlayProps) {
     dragRef.current = null;
   }, []);
 
+  const onPointerCancel = useCallback((e: React.PointerEvent<SVGElement>) => {
+    e.stopPropagation();
+    dragRef.current = null;
+  }, []);
+
   // Early returns AFTER all hooks
   const selectedIds = [...selection];
   if (selectedIds.length !== 1) return null;
@@ -147,6 +151,7 @@ export function CropOverlay({ store, canvasRect }: CropOverlayProps) {
       viewBox={`0 0 ${canvasRect.width} ${canvasRect.height}`}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
     >
       <rect
         x={relL}
@@ -154,8 +159,8 @@ export function CropOverlay({ store, canvasRect }: CropOverlayProps) {
         width={cropW}
         height={cropH}
         fill="none"
-        stroke={BORDER_COLOR}
-        strokeWidth={1.5}
+        stroke={theme.overlay.cropBorder}
+        strokeWidth={theme.borderWidth.medium}
         strokeDasharray="4 3"
         style={{ pointerEvents: "none" }}
       />
@@ -166,9 +171,9 @@ export function CropOverlay({ store, canvasRect }: CropOverlayProps) {
           y={y - HANDLE_SIZE / 2}
           width={HANDLE_SIZE}
           height={HANDLE_SIZE}
-          fill={HANDLE_COLOR}
-          stroke={HANDLE_STROKE}
-          strokeWidth={1}
+          fill={theme.overlay.cropHandle}
+          stroke={theme.overlay.handleStroke}
+          strokeWidth={theme.borderWidth.thin}
           style={{ cursor: edge === "left" || edge === "right" ? "ew-resize" : "ns-resize", pointerEvents: "all" }}
           data-testid={testid}
           onPointerDown={(e) => onPointerDown(e, edge)}

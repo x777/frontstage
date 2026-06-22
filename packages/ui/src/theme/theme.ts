@@ -98,6 +98,14 @@ export const theme = {
     topBar: "var(--size-topbar)",
     resizeHandle: "var(--size-resize-handle)",
     transportPlay: "var(--size-transport-play)",
+    overlayHandle: "var(--size-overlay-handle)",
+  },
+  overlay: {
+    transformBorder: "var(--color-overlay-transform-border)",
+    handleFill: "var(--color-overlay-handle-fill)",
+    handleStroke: "var(--color-overlay-handle-stroke)",
+    cropBorder: "var(--color-overlay-crop-border)",
+    cropHandle: "var(--color-overlay-crop-handle)",
   },
 } as const;
 
