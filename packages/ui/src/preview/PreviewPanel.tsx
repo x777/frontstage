@@ -5,6 +5,7 @@ import type { EditorStore, Timeline } from "@palmier/core";
 import { timelineTotalFrames } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { TransportBar } from "./TransportBar.js";
+import { useStore } from "../store/use-store.js";
 
 export interface PreviewPanelProps {
   store: EditorStore;
@@ -22,6 +23,8 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
   const mountedRef = useRef(false);
+  // Shared abort token: init reads this ref; cleanup sets it; second StrictMode mount resets it.
+  const abortRef = useRef(false);
   const prevSigRef = useRef<string>("");
   const prevPlayheadRef = useRef<number>(0);
   const prevTimelineRef = useRef<Timeline | null>(null);
@@ -29,20 +32,26 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
   const [engineReady, setEngineReady] = useState(false);
 
   useEffect(() => {
-    // StrictMode double-mount guard — only run once
-    if (mountedRef.current) return;
+    // StrictMode double-mount guard: mountedRef stays true so the re-invoke doesn't create a
+    // second PlaybackEngine. On the re-invoke we only reset abortRef so the shared init can
+    // continue; the async work stays in the first closure, guarded by abortRef.
+    if (mountedRef.current) {
+      // StrictMode second invoke: cancel the abort signal so the in-flight init proceeds.
+      abortRef.current = false;
+      return;
+    }
     mountedRef.current = true;
+    abortRef.current = false;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     let engine: PlaybackEngine | null = null;
-    let disposed = false;
     let unsub: (() => void) | null = null;
 
     async function init() {
       engine = await PlaybackEngine.create(canvas!);
-      if (disposed) { engine.dispose(); return; }
+      if (abortRef.current) { engine.dispose(); return; }
       engineRef.current = engine;
 
       const snap = store.getSnapshot();
@@ -51,7 +60,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
       prevPlayheadRef.current = snap.playhead;
 
       await engine.load(snap.timeline, media);
-      if (disposed) { engine.dispose(); return; }
+      if (abortRef.current) { engine.dispose(); return; }
 
       // engine state → store playhead
       // the loop guard on the subscribe side prevents echoing back
@@ -60,7 +69,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
       });
 
       unsub = store.subscribe(async () => {
-        if (!engine || disposed) return;
+        if (!engine || abortRef.current) return;
         const snap = store.getSnapshot();
         const prevTl = prevTimelineRef.current;
         const prevPlayhead = prevPlayheadRef.current;
@@ -70,7 +79,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           const oldSig = prevSigRef.current;
           prevSigRef.current = newSig;
           prevTimelineRef.current = snap.timeline;
-          prevPlayheadRef.current = snap.playhead;
+          prevPlayheadRef.current = snap.playhead; // always update — prevents stale seek on next emit
 
           if (newSig !== oldSig) {
             // structural change: tracks/clips added/removed or mediaRef changed
@@ -91,7 +100,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
       });
 
       // Expose readPixel for E2E tests
-      (canvas! as HTMLCanvasElement & { __readPixel?: (x: number, y: number) => Promise<[number, number, number, number]> }).__readPixel = (x, y) => engine.readPixel(x, y);
+      (canvas! as HTMLCanvasElement & { __readPixel?: (x: number, y: number) => Promise<[number, number, number, number]> }).__readPixel = (x, y) => engine!.readPixel(x, y);
       canvas!.dataset["engineReady"] = "1";
       setEngineReady(true);
     }
@@ -99,19 +108,21 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
     void init();
 
     return () => {
-      disposed = true;
+      // Signal abort; StrictMode's second invoke (above) immediately resets this to false,
+      // so in-flight init sees abort=false and continues. A real unmount leaves it true.
+      abortRef.current = true;
       unsub?.();
       if (engineRef.current) {
         engineRef.current.dispose();
         engineRef.current = null;
       }
-      mountedRef.current = false;
       setEngineReady(false);
+      // Do NOT reset mountedRef — the StrictMode re-invoke path above handles the reset.
+      // A real unmount destroys this component instance and its refs.
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const snap = store.getSnapshot();
-  const timeline = snap.timeline;
+  const timeline = useStore(store, (s) => s.timeline);
   const durationFrames = timelineTotalFrames(timeline);
 
   return (

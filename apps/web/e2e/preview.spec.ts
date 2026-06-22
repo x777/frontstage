@@ -45,8 +45,11 @@ test("play advances playhead, step-fwd advances by one frame", async ({ page }) 
   // Click play
   await page.locator('[data-testid="transport-playpause"]').click();
 
-  // Wait ~600ms for playback to advance
-  await page.waitForTimeout(600);
+  // Poll until playhead advances past start
+  await expect.poll(
+    () => page.locator('[data-testid="transport-time"]').textContent(),
+    { timeout: 5_000 },
+  ).not.toBe(initialTime);
 
   // Click pause
   await page.locator('[data-testid="transport-playpause"]').click();
@@ -58,9 +61,12 @@ test("play advances playhead, step-fwd advances by one frame", async ({ page }) 
   // Snapshot before step
   const beforeStep = await page.locator('[data-testid="transport-time"]').textContent();
 
-  // Step forward one frame
+  // Step forward one frame — poll for the update
   await page.locator('[data-testid="transport-step-fwd"]').click();
-  await page.waitForTimeout(300);
+  await expect.poll(
+    () => page.locator('[data-testid="transport-time"]').textContent(),
+    { timeout: 3_000 },
+  ).not.toBe(beforeStep);
 
   const afterStep = await page.locator('[data-testid="transport-time"]').textContent();
   expect(afterStep).not.toBe(beforeStep);

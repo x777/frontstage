@@ -91,7 +91,11 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
+  /* Icon sizes (px) */
+  --icon-size-lg-xl: 28px;
+
   /* UI chrome sizes */
   --size-topbar: 36px;
   --size-resize-handle: 4px;
+  --size-transport-play: 36px;
 }

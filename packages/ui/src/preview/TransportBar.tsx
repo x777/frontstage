@@ -53,7 +53,7 @@ export function TransportBar({ engine, store, fps, durationFrames }: TransportBa
     fontSize: theme.fontSize.sm,
     padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
     lineHeight: 1,
-    minWidth: "28px",
+    minWidth: theme.iconSize.lgXl,
   };
 
   return (
@@ -79,7 +79,7 @@ export function TransportBar({ engine, store, fps, durationFrames }: TransportBa
       <button
         data-testid="transport-playpause"
         onClick={handlePlayPause}
-        style={{ ...btnStyle, minWidth: "36px" }}
+        style={{ ...btnStyle, minWidth: theme.size.transportPlay }}
         title={engineState.isPlaying ? "Pause" : "Play"}
       >
         {engineState.isPlaying ? "⏸" : "▶"}

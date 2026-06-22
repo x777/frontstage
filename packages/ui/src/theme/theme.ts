@@ -91,9 +91,13 @@ export const theme = {
     semibold: "var(--font-weight-semibold)",
     bold: "var(--font-weight-bold)",
   },
+  iconSize: {
+    lgXl: "var(--icon-size-lg-xl)",
+  },
   size: {
     topBar: "var(--size-topbar)",
     resizeHandle: "var(--size-resize-handle)",
+    transportPlay: "var(--size-transport-play)",
   },
 } as const;
 
