@@ -101,6 +101,15 @@ export class EditorStore {
     this.emit();
   }
 
+  restore(partial: { layout?: Partial<PanelLayout>; view?: Partial<EditorView> }): void {
+    const layout = partial.layout
+      ? { ...this.state.layout, ...partial.layout }
+      : this.state.layout;
+    const view = partial.view ? { ...this.state.view, ...partial.view } : this.state.view;
+    this.state = { ...this.state, layout, view };
+    this.emit();
+  }
+
   dispatch(cmd: Command): void {
     const prior = this.state.timeline;
     const next = cmd.apply(prior);
