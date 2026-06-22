@@ -14,12 +14,14 @@ interface VideoEntry {
   type: "video";
   mgr: VideoDecodeManager;
   natSize: Size;
+  mediaRef: string;
 }
 
 interface ImageEntry {
   type: "image";
   src: ImageSource;
   natSize: Size;
+  mediaRef: string;
 }
 
 type SourceEntry = VideoEntry | ImageEntry;
@@ -86,14 +88,14 @@ export class SourceCoordinator {
       const chunks = buildVideoChunks(cached.track, cached.fileBytes);
       const mgr = await VideoDecodeManager.create(cached.track, chunks);
       const natSize: Size = { width: cached.track.codedWidth, height: cached.track.codedHeight };
-      sources.set(clip.id, { type: "video", mgr, natSize });
+      sources.set(clip.id, { type: "video", mgr, natSize, mediaRef: clip.mediaRef });
       sourceSizes.set(clip.mediaRef, natSize);
     } else {
       const blob = await media.open(clip.mediaRef);
       const bytes = await blob.arrayBuffer();
       const src = await ImageSource.create(bytes);
       const natSize = src.size();
-      sources.set(clip.id, { type: "image", src, natSize });
+      sources.set(clip.id, { type: "image", src, natSize, mediaRef: clip.mediaRef });
       sourceSizes.set(clip.mediaRef, natSize);
     }
   }
@@ -121,12 +123,22 @@ export class SourceCoordinator {
       this.clipById.delete(clipId);
     }
 
-    // Add sources for new clips
+    // Add/rebuild sources for new or media-replaced clips
     for (const [clipId, clip] of newClips) {
-      if (!this.sources.has(clipId)) {
-        // Kept by clipId — assumes mediaRef is immutable for a given clipId; a media swap requires a new clipId (or a future lighter updateTimeline).
+      const existing = this.sources.get(clipId);
+      if (!existing) {
         this.clipById.set(clipId, clip);
         await SourceCoordinator._addClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes);
+      } else if (existing.mediaRef !== clip.mediaRef) {
+        // Same clipId but mediaRef changed (media replace) — dispose old and rebuild
+        if (existing.type === "video") existing.mgr.dispose();
+        else existing.src.dispose();
+        this.sources.delete(clipId);
+        this.clipById.set(clipId, clip);
+        await SourceCoordinator._addClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes);
+      } else {
+        // mediaRef unchanged — keep; update clip metadata in case trim/speed changed
+        this.clipById.set(clipId, clip);
       }
     }
 

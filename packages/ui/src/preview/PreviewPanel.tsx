@@ -159,7 +159,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        background: "#000",
+        background: theme.bg.previewLetterbox,
       }}
     >
       <div
@@ -170,7 +170,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           alignItems: "center",
           justifyContent: "center",
           overflow: "hidden",
-          background: "#000",
+          background: theme.bg.previewLetterbox,
           minHeight: 0,
           position: "relative",
         }}

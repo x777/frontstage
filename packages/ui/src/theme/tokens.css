@@ -99,6 +99,9 @@
   --size-resize-handle: 4px;
   --size-transport-play: 36px;
 
+  /* Preview */
+  --color-preview-letterbox: #000000;
+
   /* Overlay tokens */
   --size-overlay-handle: 10px;
   --color-overlay-transform-border: rgba(255, 255, 255, 0.9);

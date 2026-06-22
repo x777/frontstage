@@ -4,6 +4,7 @@ export const theme = {
     surface: "var(--bg-surface)",
     raised: "var(--bg-raised)",
     prominent: "var(--bg-prominent)",
+    previewLetterbox: "var(--color-preview-letterbox)",
   },
   border: {
     primary: "var(--border-primary)",

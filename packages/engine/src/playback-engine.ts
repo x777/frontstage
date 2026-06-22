@@ -61,6 +61,7 @@ export class PlaybackEngine {
 
   async setTimeline(timeline: Timeline): Promise<void> {
     if (!this.coordinator || !this.media) return;
+    ++this.seekSeq; // invalidate any in-flight seek before reconcile disposes sources
     this.timeline = timeline;
     await this.coordinator.reconcile(timeline);
 
