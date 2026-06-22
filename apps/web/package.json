@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@palmier/core": "workspace:*",
+    "@palmier/engine": "workspace:*",
     "@palmier/ui": "workspace:*"
   },
   "devDependencies": {

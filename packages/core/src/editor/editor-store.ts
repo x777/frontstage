@@ -7,6 +7,12 @@ export interface EditorView {
 
 export type FocusedPanel = "media" | "preview" | "timeline" | "inspector";
 
+export const PANEL_IDS: readonly FocusedPanel[] = ["media", "preview", "timeline", "inspector"];
+
+export function isValidPanel(v: unknown): v is FocusedPanel {
+  return PANEL_IDS.includes(v as FocusedPanel);
+}
+
 export interface PanelLayout {
   focused: FocusedPanel;
   maximized: FocusedPanel | null;
@@ -58,36 +64,44 @@ export class EditorStore {
   }
 
   select(ids: Iterable<string>): void {
-    this.state = { ...this.state, selection: new Set(ids) };
+    const next = new Set(ids);
+    const cur = this.state.selection;
+    if (next.size === cur.size && [...next].every((id) => cur.has(id))) return;
+    this.state = { ...this.state, selection: next };
     this.lastCoalesceKey = null;
     this.emit();
   }
 
   setPlayhead(frame: number): void {
+    if (frame === this.state.playhead) return;
     this.state = { ...this.state, playhead: frame };
     this.lastCoalesceKey = null;
     this.emit();
   }
 
   setZoom(z: number): void {
+    if (z === this.state.view.zoom) return;
     this.state = { ...this.state, view: { ...this.state.view, zoom: z } };
     this.lastCoalesceKey = null;
     this.emit();
   }
 
   setScroll(x: number): void {
+    if (x === this.state.view.scrollX) return;
     this.state = { ...this.state, view: { ...this.state.view, scrollX: x } };
     this.lastCoalesceKey = null;
     this.emit();
   }
 
   setFocusedPanel(p: FocusedPanel): void {
+    if (p === this.state.layout.focused) return;
     this.state = { ...this.state, layout: { ...this.state.layout, focused: p } };
     this.lastCoalesceKey = null;
     this.emit();
   }
 
   setMaximized(p: FocusedPanel | null): void {
+    if (p === this.state.layout.maximized) return;
     this.state = { ...this.state, layout: { ...this.state.layout, maximized: p } };
     this.lastCoalesceKey = null;
     this.emit();
@@ -96,6 +110,8 @@ export class EditorStore {
   togglePanelHidden(p: FocusedPanel): void {
     const hidden = this.state.layout.hidden;
     const next = hidden.includes(p) ? hidden.filter((h) => h !== p) : [...hidden, p];
+    // no-op if same set (same size and same elements in same order doesn't matter — set equality)
+    if (next.length === hidden.length && next.every((h, i) => h === hidden[i])) return;
     this.state = { ...this.state, layout: { ...this.state.layout, hidden: next } };
     this.lastCoalesceKey = null;
     this.emit();

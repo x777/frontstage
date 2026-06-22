@@ -145,4 +145,61 @@ describe("editor-store", () => {
     store.redo();
     expect(store.getSnapshot()).toBe(before);
   });
+
+  test("no-op transient setters do not notify subscribers", () => {
+    const store = new EditorStore(defaultTimeline());
+    let n = 0;
+    store.subscribe(() => { n++; });
+
+    store.setPlayhead(0); // same as initial
+    expect(n).toBe(0);
+
+    store.setPlayhead(5);
+    expect(n).toBe(1);
+    store.setPlayhead(5); // same value
+    expect(n).toBe(1);
+
+    store.setZoom(1); // initial value
+    expect(n).toBe(1);
+    store.setZoom(2);
+    expect(n).toBe(2);
+    store.setZoom(2); // same
+    expect(n).toBe(2);
+
+    store.setScroll(0); // initial
+    expect(n).toBe(2);
+    store.setScroll(50);
+    expect(n).toBe(3);
+    store.setScroll(50); // same
+    expect(n).toBe(3);
+
+    store.setFocusedPanel("timeline"); // initial focused
+    expect(n).toBe(3);
+    store.setFocusedPanel("media");
+    expect(n).toBe(4);
+    store.setFocusedPanel("media"); // same
+    expect(n).toBe(4);
+
+    store.setMaximized(null); // initial
+    expect(n).toBe(4);
+    store.setMaximized("preview");
+    expect(n).toBe(5);
+    store.setMaximized("preview"); // same
+    expect(n).toBe(5);
+
+    store.select([]); // initial selection is empty
+    expect(n).toBe(5);
+    store.select(["c1"]);
+    expect(n).toBe(6);
+    store.select(["c1"]); // same set
+    expect(n).toBe(6);
+
+    // togglePanelHidden: toggling twice back to original is a no-op on second toggle
+    store.togglePanelHidden("inspector");
+    expect(n).toBe(7);
+    store.togglePanelHidden("inspector"); // removes it — back to []
+    expect(n).toBe(8);
+    // Now toggle again, then try to toggle a panel that is not hidden — no-op not possible
+    // but re-adding same panel after it's already removed returns to previous state
+  });
 });
