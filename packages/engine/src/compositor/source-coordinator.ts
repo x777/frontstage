@@ -108,19 +108,23 @@ export class SourceCoordinator {
       }
     }
 
-    // Remove sources for clips no longer present
-    for (const [clipId, entry] of this.sources) {
-      if (!newClips.has(clipId)) {
-        if (entry.type === "video") entry.mgr.dispose();
-        else entry.src.dispose();
-        this.sources.delete(clipId);
-        this.clipById.delete(clipId);
-      }
+    // Collect clips to remove, then dispose + delete in a second pass
+    const toRemove: string[] = [];
+    for (const [clipId] of this.sources) {
+      if (!newClips.has(clipId)) toRemove.push(clipId);
+    }
+    for (const clipId of toRemove) {
+      const entry = this.sources.get(clipId)!;
+      if (entry.type === "video") entry.mgr.dispose();
+      else entry.src.dispose();
+      this.sources.delete(clipId);
+      this.clipById.delete(clipId);
     }
 
     // Add sources for new clips
     for (const [clipId, clip] of newClips) {
       if (!this.sources.has(clipId)) {
+        // Kept by clipId — assumes mediaRef is immutable for a given clipId; a media swap requires a new clipId (or a future lighter updateTimeline).
         this.clipById.set(clipId, clip);
         await SourceCoordinator._addClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes);
       }

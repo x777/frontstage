@@ -30,9 +30,11 @@ export class PlaybackEngine {
   private audioMixer?: AudioMixer;
 
   private media?: MediaByteSource;
-  __lastLayerCount = 0;
+  private _lastLayerCount = 0;
 
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
+
+  get __lastLayerCount(): number { return this._lastLayerCount; }
 
   static async create(canvas: HTMLCanvasElement): Promise<PlaybackEngine> {
     return new PlaybackEngine(await FrameRenderer.create(canvas), canvas);
@@ -102,7 +104,7 @@ export class PlaybackEngine {
       try {
         if (seq !== this.seekSeq) return;
         this._currentFrame = clamped;
-        this.__lastLayerCount = layers.length;
+        this._lastLayerCount = layers.length;
         await this.renderer.composite(layers, { width: this.timeline!.width, height: this.timeline!.height });
         this.emit();
       } finally { cleanup(); }
