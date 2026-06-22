@@ -1,9 +1,11 @@
 import type { SnapResult } from "./snap.js";
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value)) || 0;
+  const r = Math.max(min, Math.min(max, value));
+  return r === 0 ? 0 : r;
 }
 
+/** All arguments and returned delta in frame units. */
 export function moveDelta(args: {
   cursorFrame: number;
   grabOffsetFrames: number;
@@ -22,6 +24,7 @@ export function moveDelta(args: {
   return Math.max(-minOriginalFrame, delta);
 }
 
+/** All arguments and returned delta in frame units. */
 export function trimLeftDelta(args: {
   snappedStartFrame: number;
   originalStartFrame: number;
@@ -36,6 +39,7 @@ export function trimLeftDelta(args: {
   return clamp(delta, minDelta, maxDelta);
 }
 
+/** All arguments and returned delta in frame units. */
 export function trimRightDelta(args: {
   snappedEndFrame: number;
   originalStartFrame: number;

@@ -37,10 +37,12 @@ export function makeGeometry(opts: TimelineGeometryOpts): TimelineGeometry {
   return { pixelsPerFrame, scrollX, headerWidth, rulerHeight: RULER_HEIGHT, trackHeights, cumulativeY };
 }
 
+/** frame → screen-pixel x (includes scrollX/headerWidth). */
 export function xForFrame(g: TimelineGeometry, frame: number): number {
   return g.headerWidth + frame * g.pixelsPerFrame - g.scrollX;
 }
 
+/** screen-pixel x → frame. */
 export function frameAtX(g: TimelineGeometry, x: number): number {
   return Math.max(0, Math.round((x - g.headerWidth + g.scrollX) / g.pixelsPerFrame));
 }
@@ -60,6 +62,7 @@ export function trackAtY(g: TimelineGeometry, y: number): number {
   return Math.max(0, g.trackHeights.length - 1);
 }
 
+/** Returns screen-pixel rect. */
 export function clipRect(
   g: TimelineGeometry,
   clip: Clip,

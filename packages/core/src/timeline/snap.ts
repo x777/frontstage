@@ -51,6 +51,7 @@ export function collectTargets(
   return targets;
 }
 
+/** position and probeOffsets in frame units; SnapResult.x is content-pixel units (frame * pixelsPerFrame, before scrollX/headerWidth). */
 export function findSnap(args: {
   position: number;
   probeOffsets?: number[];
