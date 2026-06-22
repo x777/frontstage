@@ -20,3 +20,5 @@ export * from "./mat2d.js";
 export * from "./render-plan.js";
 export * from "./fit-transform.js";
 export * from "./audio-plan.js";
+export * from "./editor/editor-store.js";
+export * from "./editor/commands.js";
