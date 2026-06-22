@@ -41,14 +41,14 @@ interface LayoutProps {
 }
 
 const resizeHandleStyle: React.CSSProperties = {
-  width: "4px",
+  width: theme.size.resizeHandle,
   background: theme.border.divider,
   flexShrink: 0,
   cursor: "col-resize",
 };
 
 const resizeHandleHorizStyle: React.CSSProperties = {
-  height: "4px",
+  height: theme.size.resizeHandle,
   background: theme.border.divider,
   flexShrink: 0,
   cursor: "row-resize",
@@ -64,12 +64,12 @@ const panelSectionStyle: React.CSSProperties = {
 
 const maximizeButtonStyle: React.CSSProperties = {
   background: "none",
-  border: `1px solid ${theme.border.subtle}`,
+  border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
   borderRadius: theme.radius.xs,
   color: theme.text.secondary,
   cursor: "pointer",
   fontSize: theme.fontSize.xs,
-  padding: `2px ${theme.spacing.xs}`,
+  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
   lineHeight: 1,
 };
 
@@ -96,7 +96,7 @@ function PanelHeader({
         flexShrink: 0,
       }}
     >
-      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: 500 }}>
+      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
         {label}
       </span>
       <button
@@ -292,7 +292,7 @@ function TopBar() {
   return (
     <div
       style={{
-        height: "36px",
+        height: theme.size.topBar,
         background: theme.bg.prominent,
         borderBottom: `1px solid ${theme.border.divider}`,
         display: "flex",
@@ -301,7 +301,7 @@ function TopBar() {
         flexShrink: 0,
       }}
     >
-      <span style={{ fontSize: theme.fontSize.sm, color: theme.text.secondary, fontWeight: 500 }}>
+      <span style={{ fontSize: theme.fontSize.sm, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
         Palmier Pro
       </span>
     </div>

@@ -107,6 +107,7 @@ export class EditorStore {
       : this.state.layout;
     const view = partial.view ? { ...this.state.view, ...partial.view } : this.state.view;
     this.state = { ...this.state, layout, view };
+    this.lastCoalesceKey = null;
     this.emit();
   }
 

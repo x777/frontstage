@@ -84,6 +84,17 @@ export const theme = {
     medium: "var(--border-width-medium)",
     thick: "var(--border-width-thick)",
   },
+  fontWeight: {
+    light: "var(--font-weight-light)",
+    regular: "var(--font-weight-regular)",
+    medium: "var(--font-weight-medium)",
+    semibold: "var(--font-weight-semibold)",
+    bold: "var(--font-weight-bold)",
+  },
+  size: {
+    topBar: "var(--size-topbar)",
+    resizeHandle: "var(--size-resize-handle)",
+  },
 } as const;
 
 export type Theme = typeof theme;
