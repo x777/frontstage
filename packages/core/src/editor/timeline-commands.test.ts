@@ -470,3 +470,228 @@ describe("EditorStore undo round-trip", () => {
     expect(store.getSnapshot().timeline).toBe(prior);
   });
 });
+
+// --- clipFromAsset + addClipCommand ---
+
+import { clipFromAsset, addClipCommand } from "./timeline-commands.js";
+import type { MediaManifestEntry } from "../media.js";
+import type { TrackDropTarget } from "../timeline/geometry.js";
+
+function makeEntry(overrides: Partial<MediaManifestEntry> = {}): MediaManifestEntry {
+  return {
+    id: "asset-42",
+    name: "clip.mp4",
+    type: "video",
+    source: { kind: "external", absolutePath: "/tmp/clip.mp4" },
+    duration: 5,
+    ...overrides,
+  };
+}
+
+let _idCounter = 0;
+const mkNewId = () => {
+  _idCounter++;
+  return `generated-${_idCounter}`;
+};
+
+describe("clipFromAsset", () => {
+  it("sets durationFrames = max(1, round(duration * fps))", () => {
+    const entry = makeEntry({ duration: 5 });
+    const clip = clipFromAsset(entry, 30, 0, mkNewId);
+    expect(clip.durationFrames).toBe(150);
+  });
+
+  it("durationFrames minimum is 1 when duration=0", () => {
+    const entry = makeEntry({ duration: 0 });
+    const clip = clipFromAsset(entry, 30, 0, mkNewId);
+    expect(clip.durationFrames).toBe(1);
+  });
+
+  it("rounds fractional duration*fps", () => {
+    const entry = makeEntry({ duration: 1 / 3 });
+    const clip = clipFromAsset(entry, 30, 0, mkNewId);
+    expect(clip.durationFrames).toBe(Math.max(1, Math.round((1 / 3) * 30)));
+  });
+
+  it("mediaType and sourceClipType equal entry.type", () => {
+    const entry = makeEntry({ type: "audio" });
+    const clip = clipFromAsset(entry, 30, 0, mkNewId);
+    expect(clip.mediaType).toBe("audio");
+    expect(clip.sourceClipType).toBe("audio");
+  });
+
+  it("mediaRef equals entry.id", () => {
+    const entry = makeEntry({ id: "my-asset" });
+    const clip = clipFromAsset(entry, 30, 0, mkNewId);
+    expect(clip.mediaRef).toBe("my-asset");
+  });
+
+  it("default trim=0/0, speed=1, volume=1, opacity=1, fades=0 linear", () => {
+    const clip = clipFromAsset(makeEntry(), 30, 0, mkNewId);
+    expect(clip.trimStartFrame).toBe(0);
+    expect(clip.trimEndFrame).toBe(0);
+    expect(clip.speed).toBe(1);
+    expect(clip.volume).toBe(1);
+    expect(clip.opacity).toBe(1);
+    expect(clip.fadeInFrames).toBe(0);
+    expect(clip.fadeOutFrames).toBe(0);
+    expect(clip.fadeInInterpolation).toBe("linear");
+    expect(clip.fadeOutInterpolation).toBe("linear");
+  });
+
+  it("default transform has centered position and unit scale", () => {
+    const clip = clipFromAsset(makeEntry(), 30, 0, mkNewId);
+    expect(clip.transform.centerX).toBe(0.5);
+    expect(clip.transform.centerY).toBe(0.5);
+    expect(clip.transform.width).toBe(1);
+    expect(clip.transform.height).toBe(1);
+    expect(clip.transform.rotation).toBe(0);
+    expect(clip.transform.flipHorizontal).toBe(false);
+    expect(clip.transform.flipVertical).toBe(false);
+  });
+
+  it("default crop is zero", () => {
+    const clip = clipFromAsset(makeEntry(), 30, 0, mkNewId);
+    expect(clip.crop).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
+  });
+
+  it("startFrame is passed through", () => {
+    const clip = clipFromAsset(makeEntry(), 30, 45, mkNewId);
+    expect(clip.startFrame).toBe(45);
+  });
+});
+
+describe("addClipCommand — existing track", () => {
+  it("inserts clip onto existing track", () => {
+    const track = makeTrack({ id: "t1", type: "video", clips: [] });
+    const tl = makeTimeline([track]);
+    const entry = makeEntry({ duration: 1 });
+    const target: TrackDropTarget = { kind: "existing", index: 0 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    expect(result.tracks[0]!.clips).toHaveLength(1);
+    expect(result.tracks[0]!.clips[0]!.durationFrames).toBe(30);
+  });
+
+  it("overwrites an overlapping clip", () => {
+    const existing = makeClip({ id: "old", startFrame: 0, durationFrames: 60 });
+    const track = makeTrack({ id: "t1", type: "video", clips: [existing] });
+    const tl = makeTimeline([track]);
+    const entry = makeEntry({ duration: 1 });
+    const target: TrackDropTarget = { kind: "existing", index: 0 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    const clips = result.tracks[0]!.clips;
+    expect(clips).toHaveLength(2);
+    const inserted = clips.find((c) => c.startFrame === 0)!;
+    const trimmed = clips.find((c) => c.startFrame === 30)!;
+    expect(inserted).toBeDefined();
+    expect(trimmed).toBeDefined();
+    expect(trimmed.durationFrames).toBe(30);
+  });
+
+  it("incompatible track type (video entry on audio track) → no-op same ref", () => {
+    const track = makeTrack({ id: "t1", type: "audio", clips: [] });
+    const tl = makeTimeline([track]);
+    const entry = makeEntry({ type: "video" });
+    const target: TrackDropTarget = { kind: "existing", index: 0 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    expect(result).toBe(tl);
+  });
+
+  it("out-of-range track index → no-op same ref", () => {
+    const tl = makeTimeline([]);
+    const entry = makeEntry();
+    const target: TrackDropTarget = { kind: "existing", index: 5 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    expect(result).toBe(tl);
+  });
+
+  it("clamps negative startFrame to 0", () => {
+    const track = makeTrack({ id: "t1", type: "video", clips: [] });
+    const tl = makeTimeline([track]);
+    const entry = makeEntry({ duration: 1 });
+    const target: TrackDropTarget = { kind: "existing", index: 0 };
+    const result = addClipCommand(entry, target, -10, 30, undefined, mkNewId).apply(tl);
+    expect(result.tracks[0]!.clips[0]!.startFrame).toBe(0);
+  });
+});
+
+describe("addClipCommand — new track", () => {
+  it("inserts a new track at the specified index", () => {
+    const track = makeTrack({ id: "t1", type: "video", clips: [] });
+    const tl = makeTimeline([track]);
+    const entry = makeEntry();
+    const target: TrackDropTarget = { kind: "new", index: 0 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    expect(result.tracks).toHaveLength(2);
+    expect(result.tracks[0]!.clips).toHaveLength(1);
+    expect(result.tracks[1]!.id).toBe("t1");
+  });
+
+  it("appends a new track at end when index >= trackCount", () => {
+    const track = makeTrack({ id: "t1", type: "video", clips: [] });
+    const tl = makeTimeline([track]);
+    const entry = makeEntry();
+    const target: TrackDropTarget = { kind: "new", index: 1 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    expect(result.tracks).toHaveLength(2);
+    expect(result.tracks[0]!.id).toBe("t1");
+    expect(result.tracks[1]!.clips).toHaveLength(1);
+  });
+
+  it("new track has correct mediaType, muted=false, hidden=false, syncLocked=false", () => {
+    const tl = makeTimeline([]);
+    const entry = makeEntry({ type: "audio" });
+    const target: TrackDropTarget = { kind: "new", index: 0 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    const newTrack = result.tracks[0]!;
+    expect(newTrack.type).toBe("audio");
+    expect(newTrack.muted).toBe(false);
+    expect(newTrack.hidden).toBe(false);
+    expect(newTrack.syncLocked).toBe(false);
+  });
+
+  it("new track clamps out-of-range index", () => {
+    const tl = makeTimeline([]);
+    const entry = makeEntry();
+    const target: TrackDropTarget = { kind: "new", index: 999 };
+    const result = addClipCommand(entry, target, 0, 30, undefined, mkNewId).apply(tl);
+    expect(result.tracks).toHaveLength(1);
+  });
+});
+
+describe("addClipCommand — undo round-trip", () => {
+  it("existing track add round-trips via undo", () => {
+    const track = makeTrack({ id: "t1", type: "video", clips: [] });
+    const tl = makeTimeline([track]);
+    const store = new EditorStore(tl);
+    const prior = store.getSnapshot().timeline;
+    const entry = makeEntry({ duration: 1 });
+    const target: TrackDropTarget = { kind: "existing", index: 0 };
+    store.dispatch(addClipCommand(entry, target, 0, 30, undefined, mkNewId));
+    expect(store.getSnapshot().timeline).not.toBe(prior);
+    store.undo();
+    expect(store.getSnapshot().timeline).toBe(prior);
+  });
+
+  it("new track add round-trips via undo", () => {
+    const tl = makeTimeline([]);
+    const store = new EditorStore(tl);
+    const prior = store.getSnapshot().timeline;
+    const entry = makeEntry();
+    const target: TrackDropTarget = { kind: "new", index: 0 };
+    store.dispatch(addClipCommand(entry, target, 0, 30, undefined, mkNewId));
+    expect(store.getSnapshot().timeline.tracks).toHaveLength(1);
+    store.undo();
+    expect(store.getSnapshot().timeline).toBe(prior);
+  });
+
+  it("no-op command (incompatible type) does not push to undo stack", () => {
+    const track = makeTrack({ id: "t1", type: "audio", clips: [] });
+    const tl = makeTimeline([track]);
+    const store = new EditorStore(tl);
+    const entry = makeEntry({ type: "video" });
+    const target: TrackDropTarget = { kind: "existing", index: 0 };
+    store.dispatch(addClipCommand(entry, target, 0, 30, undefined, mkNewId));
+    expect(store.canUndo()).toBe(false);
+  });
+});

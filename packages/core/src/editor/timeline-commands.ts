@@ -4,9 +4,12 @@ import { clampFadesToDuration, setDuration } from "../clip-mutations.js";
 import { clipTypesCompatible } from "../clip-type.js";
 import { sampleTrack, lerpNumber } from "../keyframe.js";
 import type { KeyframeTrack, Keyframe } from "../keyframe.js";
-import type { Timeline } from "../timeline.js";
+import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { Command } from "./editor-store.js";
+import type { MediaManifestEntry } from "../media.js";
+import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
+import type { TrackDropTarget } from "../timeline/geometry.js";
 
 // --- Immutable helpers ---
 
@@ -213,6 +216,87 @@ export function splitClipCommand(
       ]);
 
       return replaceTrackClips(timeline, loc.trackIndex, newClips);
+    },
+  };
+}
+
+// --- clipFromAsset ---
+
+export function clipFromAsset(
+  entry: MediaManifestEntry,
+  fps: number,
+  startFrame: number,
+  newId: () => string = () => crypto.randomUUID(),
+): Clip {
+  const durationFrames = Math.max(1, Math.round(entry.duration * fps));
+  return {
+    id: newId(),
+    mediaRef: entry.id,
+    mediaType: entry.type,
+    sourceClipType: entry.type,
+    startFrame,
+    durationFrames,
+    trimStartFrame: 0,
+    trimEndFrame: 0,
+    speed: 1,
+    volume: 1,
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+    fadeInInterpolation: "linear",
+    fadeOutInterpolation: "linear",
+    opacity: 1,
+    transform: { centerX: 0.5, centerY: 0.5, width: 1, height: 1, rotation: 0, flipHorizontal: false, flipVertical: false },
+    crop: { top: 0, bottom: 0, left: 0, right: 0 },
+  };
+}
+
+// --- addClipCommand ---
+
+export function addClipCommand(
+  entry: MediaManifestEntry,
+  target: TrackDropTarget,
+  startFrame: number,
+  fps: number,
+  coalesceKey?: string,
+  newId: () => string = () => crypto.randomUUID(),
+): Command {
+  return {
+    label: "Add Clip",
+    coalesceKey,
+    apply(timeline: Timeline): Timeline {
+      const clampedStart = Math.max(0, startFrame);
+      const clip = clipFromAsset(entry, fps, clampedStart, newId);
+
+      if (target.kind === "existing") {
+        const index = target.index;
+        if (index < 0 || index >= timeline.tracks.length) return timeline;
+        const track = timeline.tracks[index]!;
+        if (!clipTypesCompatible(track.type, clip.mediaType)) return timeline;
+
+        const regionEnd = clampedStart + clip.durationFrames;
+        const actions = computeOverwrite(track.clips, clampedStart, regionEnd);
+        const cleared = applyOverwriteToClips(track.clips, actions);
+        const newClips = sortedByStart([...cleared, clip]);
+        return replaceTrackClips(timeline, index, newClips);
+      } else {
+        // new track
+        const trackCount = timeline.tracks.length;
+        const clampedIndex = Math.max(0, Math.min(target.index, trackCount));
+        const newTrack: Track = {
+          id: newId(),
+          type: clip.mediaType,
+          muted: false,
+          hidden: false,
+          syncLocked: false,
+          clips: [clip],
+        };
+        const newTracks = [
+          ...timeline.tracks.slice(0, clampedIndex),
+          newTrack,
+          ...timeline.tracks.slice(clampedIndex),
+        ];
+        return { ...timeline, tracks: newTracks };
+      }
     },
   };
 }

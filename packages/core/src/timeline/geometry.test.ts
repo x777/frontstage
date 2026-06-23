@@ -162,3 +162,158 @@ describe("clipRect", () => {
     expect(r.height).toBe(60 - 4);
   });
 });
+
+// --- New symbols: INSERT_THRESHOLD, TrackDropTarget, dropTargetAt, insertionLineY, ghostY ---
+
+import {
+  INSERT_THRESHOLD,
+  dropTargetAt,
+  insertionLineY,
+  ghostY,
+} from "./geometry.js";
+
+describe("INSERT_THRESHOLD", () => {
+  it("is 10", () => expect(INSERT_THRESHOLD).toBe(10));
+});
+
+describe("makeGeometry with dropZoneHeight", () => {
+  it("dropZoneHeight=0 by default keeps first track top = rulerHeight", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50] });
+    expect(g.dropZoneHeight).toBe(0);
+    expect(g.cumulativeY[0]).toBe(24); // RULER_HEIGHT + 0
+  });
+
+  it("dropZoneHeight shifts first track top", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 60], dropZoneHeight: 30 });
+    expect(g.dropZoneHeight).toBe(30);
+    expect(g.cumulativeY[0]).toBe(24 + 30); // RULER_HEIGHT + dropZoneHeight
+    expect(g.cumulativeY[1]).toBe(24 + 30 + 50);
+  });
+});
+
+describe("dropTargetAt — no tracks", () => {
+  it("returns new@0 when there are no tracks", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [] });
+    expect(dropTargetAt(g, 100)).toEqual({ kind: "new", index: 0 });
+  });
+});
+
+describe("dropTargetAt — top zone", () => {
+  it("y above first track → new@0", () => {
+    // rulerHeight=24, first track top=24; y=10 < 24
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    expect(dropTargetAt(g, 10)).toEqual({ kind: "new", index: 0 });
+  });
+
+  it("y exactly at first track top is NOT in top zone", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // cumulativeY[0]=24; y=24 => NOT < 24 => falls through to other logic
+    // track 0: [24, 74), so y=24 hits within it
+    const result = dropTargetAt(g, 24);
+    // Should be existing track 0 or near-boundary — at exactly y=24 it's within track 0
+    expect(result).toEqual({ kind: "existing", index: 0 });
+  });
+});
+
+describe("dropTargetAt — between tracks (threshold)", () => {
+  // Two tracks: track0=[24,74), track1=[74,124). No gap between them.
+  // bottomOfTrack0=74, topOfNext=74
+  // boundary region: [74-10, 74+10] = [64, 84]
+  it("y near bottom of track 0 within threshold → new@1", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // bottomOfTrack0 = 24 + 50 = 74; y >= 74-10=64
+    expect(dropTargetAt(g, 65)).toEqual({ kind: "new", index: 1 });
+  });
+
+  it("y near top of track 1 within threshold → new@1", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // topOfNext = 74; y <= 74+10=84
+    expect(dropTargetAt(g, 83)).toEqual({ kind: "new", index: 1 });
+  });
+
+  it("y in middle of track 0 (not near boundary) → existing@0", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // Track 0: [24,74). Middle ~50. bottomOfTrack0-threshold=64 → y=40 not in boundary
+    expect(dropTargetAt(g, 40)).toEqual({ kind: "existing", index: 0 });
+  });
+
+  it("y in middle of track 1 → existing@1", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // Track 1: [74,124). Middle ~99. Not near any boundary with threshold 10
+    expect(dropTargetAt(g, 99)).toEqual({ kind: "existing", index: 1 });
+  });
+});
+
+describe("dropTargetAt — below last track", () => {
+  it("y past last track bottom → new@trackCount", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // lastTrackBottom = 74 + 50 = 124; y >= 124 → new@2
+    expect(dropTargetAt(g, 124)).toEqual({ kind: "new", index: 2 });
+    expect(dropTargetAt(g, 200)).toEqual({ kind: "new", index: 2 });
+  });
+
+  it("single track: y past bottom → new@1", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50] });
+    // track0=[24,74); lastBottom=74
+    expect(dropTargetAt(g, 74)).toEqual({ kind: "new", index: 1 });
+  });
+});
+
+describe("insertionLineY", () => {
+  it("returns null for existing target", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    expect(insertionLineY(g, { kind: "existing", index: 0 })).toBeNull();
+  });
+
+  it("new@0 with tracks → top of first track", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    expect(insertionLineY(g, { kind: "new", index: 0 })).toBe(24); // cumulativeY[0]
+  });
+
+  it("new@1 (between tracks) → top of track 1", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    expect(insertionLineY(g, { kind: "new", index: 1 })).toBe(74); // cumulativeY[1]
+  });
+
+  it("new@trackCount → bottom of last track", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // cumulativeY[1] + trackHeights[1] = 74 + 50 = 124
+    expect(insertionLineY(g, { kind: "new", index: 2 })).toBe(124);
+  });
+
+  it("no tracks: returns rulerHeight + dropZoneHeight", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [], dropZoneHeight: 20 });
+    expect(insertionLineY(g, { kind: "new", index: 0 })).toBe(24 + 20);
+  });
+
+  it("dropZoneHeight shifts new@0 insertion line", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50], dropZoneHeight: 10 });
+    // cumulativeY[0] = 24 + 10 = 34
+    expect(insertionLineY(g, { kind: "new", index: 0 })).toBe(34);
+  });
+});
+
+describe("ghostY", () => {
+  it("returns null for existing target", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50] });
+    expect(ghostY(g, { kind: "existing", index: 0 })).toBeNull();
+  });
+
+  it("new@0 (before first track) → lineY - height (ghost above)", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // lineY = cumulativeY[0] = 24; index 0 < trackCount 2 → lineY - height = 24 - 50 = -26
+    expect(ghostY(g, { kind: "new", index: 0 }, 50)).toBe(24 - 50);
+  });
+
+  it("new@trackCount (after last track) → lineY (ghost below)", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // lineY=124; index 2 >= trackCount 2 → lineY = 124
+    expect(ghostY(g, { kind: "new", index: 2 }, 50)).toBe(124);
+  });
+
+  it("new@1 (between tracks) → lineY - height", () => {
+    const g = makeGeometry({ pixelsPerFrame: 5, trackHeights: [50, 50] });
+    // lineY = cumulativeY[1] = 74; index 1 < trackCount 2 → 74 - 50 = 24
+    expect(ghostY(g, { kind: "new", index: 1 }, 50)).toBe(74 - 50);
+  });
+});
