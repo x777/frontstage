@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
 import {
@@ -40,6 +40,8 @@ interface DiscardDialogState {
   resolve: (v: boolean) => void;
 }
 
+export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
+
 export function Editor({ store, media, library, session }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
@@ -65,6 +67,29 @@ export function Editor({ store, media, library, session }: EditorProps) {
     setSessionState(session.getState());
     return session.subscribe(() => setSessionState(session.getState()));
   }, [session]);
+
+  // Error notice for failed project commands
+  const [error, setError] = useState<string | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showError(msg: string) {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    setError(msg);
+    errorTimerRef.current = setTimeout(() => setError(null), 5000);
+  }
+
+  function dismissError() {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    setError(null);
+  }
+
+  // Central runner: swallows throws and surfaces them as a non-fatal notice.
+  const runProjectCommand: RunProjectCommand = useCallback((fn) => {
+    fn().catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(msg);
+    });
+  }, []);
 
   // Discard-guard dialog shared by both keyboard shortcuts and FileMenu
   const [dialog, setDialog] = useState<DiscardDialogState | null>(null);
@@ -105,21 +130,21 @@ export function Editor({ store, media, library, session }: EditorProps) {
       if (e.key === "s" || e.key === "S") {
         e.preventDefault();
         if (e.shiftKey) {
-          session!.saveAs();
+          runProjectCommand(() => session!.saveAs());
         } else {
-          session!.save();
+          runProjectCommand(() => session!.save());
         }
       } else if (e.key === "o" || e.key === "O") {
         e.preventDefault();
-        session!.open(confirmDiscard);
+        runProjectCommand(() => session!.open(confirmDiscard));
       } else if (e.key === "n" || e.key === "N") {
         e.preventDefault();
-        session!.newProject(confirmDiscard);
+        runProjectCommand(() => session!.newProject(confirmDiscard));
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [session, confirmDiscard]);
+  }, [session, confirmDiscard, runProjectCommand]);
 
   useEffect(() => {
     return store.subscribe(() => persistLayout(store));
@@ -236,6 +261,7 @@ export function Editor({ store, media, library, session }: EditorProps) {
             <FileMenu
               session={session}
               confirmDiscard={confirmDiscard}
+              runProjectCommand={runProjectCommand}
             />
           ) : undefined
         }
@@ -310,6 +336,47 @@ export function Editor({ store, media, library, session }: EditorProps) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {error && (
+        <div
+          data-testid="project-error"
+          style={{
+            position: "fixed",
+            bottom: theme.spacing.xl,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: theme.bg.raised,
+            border: `${theme.borderWidth.thin} solid ${theme.status.error}`,
+            borderRadius: theme.radius.sm,
+            padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+            color: theme.status.error,
+            fontSize: theme.fontSize.sm,
+            zIndex: theme.z.toast,
+            display: "flex",
+            alignItems: "center",
+            gap: theme.spacing.sm,
+            boxShadow: theme.shadow.lg,
+            maxWidth: "480px",
+          }}
+        >
+          <span style={{ flex: 1 }}>{error}</span>
+          <button
+            onClick={dismissError}
+            style={{
+              background: "none",
+              border: "none",
+              color: theme.status.error,
+              cursor: "pointer",
+              fontSize: theme.fontSize.md,
+              padding: 0,
+              lineHeight: 1,
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
         </div>
       )}
     </>

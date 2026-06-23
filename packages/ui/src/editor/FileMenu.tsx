@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import type { ProjectSession, ConfirmDiscard, ProjectRef } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import type { RunProjectCommand } from "./Editor.js";
 
 export interface FileMenuProps {
   session: ProjectSession;
   confirmDiscard: ConfirmDiscard;
+  runProjectCommand: RunProjectCommand;
 }
 
-export function FileMenu({ session, confirmDiscard }: FileMenuProps) {
+export function FileMenu({ session, confirmDiscard, runProjectCommand }: FileMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentRefs, setRecentRefs] = useState<ProjectRef[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -32,29 +34,29 @@ export function FileMenu({ session, confirmDiscard }: FileMenuProps) {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [menuOpen]);
 
-  async function handleNew() {
+  function handleNew() {
     setMenuOpen(false);
-    await session.newProject(confirmDiscard);
+    runProjectCommand(() => session.newProject(confirmDiscard));
   }
 
-  async function handleOpen() {
+  function handleOpen() {
     setMenuOpen(false);
-    await session.open(confirmDiscard);
+    runProjectCommand(() => session.open(confirmDiscard));
   }
 
-  async function handleOpenRecent(ref: ProjectRef) {
+  function handleOpenRecent(ref: ProjectRef) {
     setMenuOpen(false);
-    await session.open(confirmDiscard, ref);
+    runProjectCommand(() => session.open(confirmDiscard, ref));
   }
 
-  async function handleSave() {
+  function handleSave() {
     setMenuOpen(false);
-    await session.save();
+    runProjectCommand(() => session.save());
   }
 
-  async function handleSaveAs() {
+  function handleSaveAs() {
     setMenuOpen(false);
-    await session.saveAs();
+    runProjectCommand(() => session.saveAs());
   }
 
   const topBtnStyle: React.CSSProperties = {

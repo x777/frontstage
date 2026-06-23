@@ -297,6 +297,29 @@ test("Ctrl+S saves when ref exists", async ({ page }) => {
   expect(dirty).toBe(false);
 });
 
+test("error-surfacing: unsupported picker throws → project-error notice appears", async ({ page }) => {
+  // Inject a failing picker BEFORE the app boots (addInitScript runs before page load).
+  // This simulates "File System Access is not supported in this browser".
+  await page.addInitScript(() => {
+    (window as any).__pickDirectory = async () => {
+      throw new Error("File System Access is not supported in this browser");
+    };
+  });
+  await page.goto("/");
+  await waitForReady(page);
+
+  // Clicking file-open triggers session.open() → pickDirectory throws → runProjectCommand catches it.
+  await page.locator('[data-testid="file-menu"]').click();
+  await page.locator('[data-testid="file-open"]').click();
+
+  // The project-error notice must appear with a non-empty message.
+  const notice = page.locator('[data-testid="project-error"]');
+  await expect(notice).toBeVisible({ timeout: 5_000 });
+  const text = await notice.textContent();
+  expect(text).toBeTruthy();
+  expect(text).toContain("File System Access is not supported");
+});
+
 test("reopen-read: saved media readable via bound gateway after save-as → new → reopen", async ({ page }) => {
   await injectOpfsPicker(page);
   await page.goto("/");

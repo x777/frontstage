@@ -121,6 +121,7 @@
   --z-menu: 9000;
   --z-dialog: 10000;
   --z-drag-ghost: 9999;
+  --z-toast: 10500;
 
   /* Preview */
   --color-preview-letterbox: #000000;

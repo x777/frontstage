@@ -4,7 +4,7 @@
     "rootDir": ".",
     "lib": ["ES2022", "DOM"],
     "jsx": "react-jsx",
-    "types": ["@webgpu/types"]
+    "types": ["@webgpu/types", "vite/client"]
   },
   "include": ["src", "e2e", "*.ts"]
 }

@@ -124,6 +124,7 @@ export const theme = {
     menu: "var(--z-menu)",
     dialog: "var(--z-dialog)",
     dragGhost: "var(--z-drag-ghost)",
+    toast: "var(--z-toast)",
   },
   overlay: {
     transformBorder: "var(--color-overlay-transform-border)",
