@@ -173,6 +173,43 @@ test("click clip selects it; click empty deselects", async ({ page }) => {
   }, clipId);
   expect(selectionHasClip).toBe(true);
 
+  // Wait one rAF for the canvas to redraw with the selection outline
+  await page.waitForTimeout(50);
+
+  // Assert the selection OUTLINE renders: sample a pixel at the clip's top border
+  // Clip rect: x=0, y=26, w=90, h=46. Selection outline is drawn at y=25 (rect.y - 1).
+  // accentPrimary default: rgb(245,239,228). Sample at CSS x=45, y=25 (top outline border).
+  const OUTLINE_X = 45; // middle of clip, horizontally
+  const OUTLINE_Y = 25; // top edge of selection outline (clipRect.y - 1 = 26 - 1)
+  const ACCENT_DEFAULT_R = 245;
+  const ACCENT_DEFAULT_G = 239;
+  const ACCENT_DEFAULT_B = 228;
+
+  const outlineSelected = await page.evaluate(
+    ({ ox, oy }) => {
+      const cv = document.querySelector('[data-testid="timeline-canvas"]') as HTMLCanvasElement | null;
+      if (!cv) return null;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return null;
+      const cssW = cv.getBoundingClientRect().width;
+      const dpr = cssW > 0 ? cv.width / cssW : 1;
+      const px = Math.round(ox * dpr);
+      const py = Math.round(oy * dpr);
+      const p = ctx.getImageData(px, py, 1, 1).data;
+      // Also resolve accentPrimary from CSS var in case it differs from default
+      const accentRaw = getComputedStyle(document.documentElement).getPropertyValue("--accent-primary").trim();
+      return { pixel: [p[0], p[1], p[2], p[3]], accentRaw, dpr };
+    },
+    { ox: OUTLINE_X, oy: OUTLINE_Y }
+  );
+
+  expect(outlineSelected).not.toBeNull();
+  const [osr, osg, osb] = outlineSelected!.pixel as number[];
+  // Allow tolerance of 30 for anti-aliasing; accent color ≈ rgb(245,239,228)
+  expect(Math.abs(osr! - ACCENT_DEFAULT_R)).toBeLessThan(TOLERANCE);
+  expect(Math.abs(osg! - ACCENT_DEFAULT_G)).toBeLessThan(TOLERANCE);
+  expect(Math.abs(osb! - ACCENT_DEFAULT_B)).toBeLessThan(TOLERANCE);
+
   // Click empty area (below track area, or far right of the clip)
   // canvas width >> 90px, so click at x=200 which is past the clip
   await page.mouse.click(box!.x + 200, box!.y + CLIP_Y);
@@ -183,6 +220,31 @@ test("click clip selects it; click empty deselects", async ({ page }) => {
     return store.getSnapshot().selection.size === 0;
   });
   expect(selectionEmpty).toBe(true);
+
+  // Wait one rAF and assert the outline is gone: the same pixel should no longer be accent color
+  await page.waitForTimeout(50);
+
+  const outlineDeselected = await page.evaluate(
+    ({ ox, oy }) => {
+      const cv = document.querySelector('[data-testid="timeline-canvas"]') as HTMLCanvasElement | null;
+      if (!cv) return null;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return null;
+      const cssW = cv.getBoundingClientRect().width;
+      const dpr = cssW > 0 ? cv.width / cssW : 1;
+      const px = Math.round(ox * dpr);
+      const py = Math.round(oy * dpr);
+      const p = ctx.getImageData(px, py, 1, 1).data;
+      return { pixel: [p[0], p[1], p[2], p[3]] };
+    },
+    { ox: OUTLINE_X, oy: OUTLINE_Y }
+  );
+
+  expect(outlineDeselected).not.toBeNull();
+  const [odr, odg, odb] = outlineDeselected!.pixel as number[];
+  // After deselect, this pixel should NO LONGER match the accent color
+  const accentDiff = Math.abs(odr! - ACCENT_DEFAULT_R) + Math.abs(odg! - ACCENT_DEFAULT_G) + Math.abs(odb! - ACCENT_DEFAULT_B);
+  expect(accentDiff).toBeGreaterThan(20);
 });
 
 test("ruler drag scrubs playhead", async ({ page }) => {

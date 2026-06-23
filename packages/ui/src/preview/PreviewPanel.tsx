@@ -104,7 +104,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           // events don't each enqueue a decode before engine.currentFrame updates async.
           if (!engine.isPlaying && snap.playhead !== intendedFrameRef.current) {
             intendedFrameRef.current = snap.playhead;
-            void engine.seek(snap.playhead, "scrub");
+            engine.seek(snap.playhead, "scrub").catch(() => {});
           }
         }
       });
