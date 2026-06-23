@@ -71,32 +71,26 @@ export class MediaLibrary {
         let thumbUrl: string | undefined;
 
         if (type === "video" || type === "audio") {
-          const objectUrl = URL.createObjectURL(blob);
-          try {
-            const result = await probeMedia(objectUrl, type);
-            duration = result.duration;
-            sourceWidth = result.width;
-            sourceHeight = result.height;
-            hasAudio = result.hasAudio;
-
-            if (type === "video" && result.el) {
-              thumbUrl = await captureVideoThumbnail(result.el, duration);
+          const result = await withVideoElement(blob, type, async (el) => {
+            const probed = await probeMediaElement(el, type);
+            let thumb: string | undefined;
+            if (type === "video") {
+              thumb = await captureVideoThumbnail(el, probed.duration);
             }
-          } finally {
-            URL.revokeObjectURL(objectUrl);
-          }
+            return { ...probed, thumb };
+          });
+          duration = result.duration;
+          sourceWidth = result.width;
+          sourceHeight = result.height;
+          hasAudio = result.hasAudio;
+          thumbUrl = result.thumb;
         } else if (type === "image") {
           duration = 5;
-          const objectUrl = URL.createObjectURL(blob);
-          try {
-            const bmp = await createImageBitmap(blob);
-            sourceWidth = bmp.width;
-            sourceHeight = bmp.height;
-            thumbUrl = bitmapToThumbnail(bmp);
-            bmp.close();
-          } finally {
-            URL.revokeObjectURL(objectUrl);
-          }
+          const bmp = await createImageBitmap(blob);
+          sourceWidth = bmp.width;
+          sourceHeight = bmp.height;
+          thumbUrl = bitmapToThumbnail(bmp);
+          bmp.close();
         }
 
         const id = crypto.randomUUID();
@@ -130,27 +124,36 @@ interface ProbeResult {
   width?: number;
   height?: number;
   hasAudio?: boolean;
-  el?: HTMLVideoElement;
+  thumb?: string;
 }
 
-function probeMedia(objectUrl: string, type: "video" | "audio"): Promise<ProbeResult> {
+async function withVideoElement<T>(
+  blob: Blob,
+  type: "video" | "audio",
+  fn: (el: HTMLVideoElement | HTMLAudioElement) => Promise<T>,
+): Promise<T> {
+  const url = URL.createObjectURL(blob);
+  const el = document.createElement(type === "video" ? "video" : "audio") as HTMLVideoElement | HTMLAudioElement;
+  el.preload = "metadata";
+  el.muted = true;
+  el.src = url;
+  try {
+    return await fn(el);
+  } finally {
+    el.removeAttribute("src");
+    el.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
+function probeMediaElement(el: HTMLVideoElement | HTMLAudioElement, type: "video" | "audio"): Promise<ProbeResult> {
   return new Promise((resolve) => {
-    const el = document.createElement(type === "video" ? "video" : "audio") as HTMLVideoElement | HTMLAudioElement;
-    el.preload = "metadata";
-    el.muted = true;
-
-    const cleanup = () => {
-      el.src = "";
-      el.load();
-    };
-
     const finish = (result: ProbeResult) => {
       clearTimeout(timer);
       resolve(result);
     };
 
     const timer = setTimeout(() => {
-      cleanup();
       resolve({ duration: 5 });
     }, 8000);
 
@@ -164,48 +167,40 @@ function probeMedia(objectUrl: string, type: "video" | "audio"): Promise<ProbeRe
           width: vid.videoWidth || undefined,
           height: vid.videoHeight || undefined,
           hasAudio: true,
-          el: vid,
         });
       } else {
-        cleanup();
         finish({ duration: dur, hasAudio: true });
       }
     });
 
     el.addEventListener("error", () => {
-      cleanup();
       finish({ duration: 5 });
     });
 
-    el.src = objectUrl;
     el.load();
   });
 }
 
-function captureVideoThumbnail(el: HTMLVideoElement, duration: number): Promise<string | undefined> {
+function captureVideoThumbnail(el: HTMLVideoElement | HTMLAudioElement, duration: number): Promise<string | undefined> {
   return new Promise((resolve) => {
+    const vid = el as HTMLVideoElement;
     const seekTime = Math.min(0.1, duration / 2);
 
     const timer = setTimeout(() => {
-      el.src = "";
-      el.load();
       resolve(undefined);
     }, 5000);
 
-    el.addEventListener("seeked", () => {
+    vid.addEventListener("seeked", () => {
       clearTimeout(timer);
       try {
-        const thumb = drawThumbnail(el, el.videoWidth, el.videoHeight);
+        const thumb = drawThumbnail(vid, vid.videoWidth, vid.videoHeight);
         resolve(thumb);
       } catch {
         resolve(undefined);
-      } finally {
-        el.src = "";
-        el.load();
       }
     }, { once: true });
 
-    el.currentTime = seekTime;
+    vid.currentTime = seekTime;
   });
 }
 

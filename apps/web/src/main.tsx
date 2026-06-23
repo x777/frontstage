@@ -28,4 +28,23 @@ async function bootstrap() {
 
 bootstrap().catch((err) => {
   console.error("Bootstrap failed:", err);
+  const root = document.getElementById("root");
+  if (root) {
+    const wrapper = document.createElement("div");
+    Object.assign(wrapper.style, { padding: "2rem", fontFamily: "monospace", color: "#c00" });
+
+    const heading = document.createElement("strong");
+    heading.textContent = "Failed to start PalmierPro";
+
+    const detail = document.createElement("pre");
+    Object.assign(detail.style, { marginTop: "1rem", whiteSpace: "pre-wrap" });
+    detail.textContent = String(err);
+
+    const hint = document.createElement("p");
+    Object.assign(hint.style, { marginTop: "1rem", color: "#666" });
+    hint.textContent = "Check the console for details. Reload to retry.";
+
+    wrapper.append(heading, detail, hint);
+    root.append(wrapper);
+  }
 });
