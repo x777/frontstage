@@ -31,6 +31,8 @@ function resolvePalette(el: Element): TimelinePalette {
     trackImage: get("--track-image") || "#B72DD2",
     trackText: get("--track-text") || "#B72DD2",
     trackLottie: get("--track-lottie") || "#E0A800",
+    trimHandle: get("--color-timeline-trim-handle") || "rgba(0,0,0,0.25)",
+    clipLabel: get("--color-timeline-clip-label") || "rgba(255,255,255,0.85)",
   };
 }
 
@@ -64,6 +66,7 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
 
       const snap = store.getSnapshot();
       const { view, timeline } = snap;
+      // EditorView.zoom is defined as pixels-per-frame, matching makeGeometry's pixelsPerFrame
       const geom = makeGeometry({
         pixelsPerFrame: view.zoom,
         scrollX: view.scrollX,

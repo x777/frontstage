@@ -23,6 +23,8 @@ export interface TimelinePalette {
   trackImage: string;
   trackText: string;
   trackLottie: string;
+  trimHandle: string;
+  clipLabel: string;
 }
 
 function trackColor(palette: TimelinePalette, mediaType: string): string {
@@ -35,14 +37,25 @@ function trackColor(palette: TimelinePalette, mediaType: string): string {
   }
 }
 
-/** Brighten a hex/rgb color slightly for clip border. */
+/** Brighten a hex/rgb/rgba color slightly for clip border. */
 function brightenColor(color: string): string {
-  const m = color.match(/^#([0-9a-f]{6})$/i);
-  if (!m) return color;
-  const r = Math.min(255, parseInt(m[1]!.slice(0, 2), 16) + 40);
-  const g = Math.min(255, parseInt(m[1]!.slice(2, 4), 16) + 40);
-  const b = Math.min(255, parseInt(m[1]!.slice(4, 6), 16) + 40);
-  return `rgb(${r},${g},${b})`;
+  const hex = color.match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    const r = Math.min(255, parseInt(hex[1]!.slice(0, 2), 16) + 40);
+    const g = Math.min(255, parseInt(hex[1]!.slice(2, 4), 16) + 40);
+    const b = Math.min(255, parseInt(hex[1]!.slice(4, 6), 16) + 40);
+    return `rgb(${r},${g},${b})`;
+  }
+  // getComputedStyle resolves CSS vars to rgb()/rgba() — handle both
+  const rgb = color.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+  if (rgb) {
+    const r = Math.min(255, parseInt(rgb[1]!) + 40);
+    const g = Math.min(255, parseInt(rgb[2]!) + 40);
+    const b = Math.min(255, parseInt(rgb[3]!) + 40);
+    const a = rgb[4] !== undefined ? rgb[4] : "1";
+    return `rgba(${r},${g},${b},${a})`;
+  }
+  return color;
 }
 
 function basename(path: string): string {
@@ -207,13 +220,13 @@ export function drawTimeline(
       if (rect.width > handleW * 3) {
         // Left handle
         ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
+        ctx.fillStyle = palette.trimHandle;
         ctx.fillRect(rect.x, rect.y + handleInset, handleW, rect.height - handleInset * 2);
         ctx.restore();
 
         // Right handle
         ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
+        ctx.fillStyle = palette.trimHandle;
         ctx.fillRect(rect.x + rect.width - handleW, rect.y + handleInset, handleW, rect.height - handleInset * 2);
         ctx.restore();
       }
@@ -224,7 +237,7 @@ export function drawTimeline(
         ctx.beginPath();
         ctx.rect(rect.x + 2, rect.y, rect.width - 4, rect.height);
         ctx.clip();
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.fillStyle = palette.clipLabel;
         ctx.font = `10px -apple-system,BlinkMacSystemFont,sans-serif`;
         ctx.textBaseline = "middle";
         const label = basename(clip.mediaRef);

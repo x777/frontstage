@@ -102,6 +102,10 @@
   /* Preview */
   --color-preview-letterbox: #000000;
 
+  /* Timeline */
+  --color-timeline-trim-handle: rgba(0, 0, 0, 0.25);
+  --color-timeline-clip-label: rgba(255, 255, 255, 0.85);
+
   /* Overlay tokens */
   --size-overlay-handle: 10px;
   --color-overlay-transform-border: rgba(255, 255, 255, 0.9);

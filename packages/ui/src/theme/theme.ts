@@ -108,6 +108,10 @@ export const theme = {
     cropBorder: "var(--color-overlay-crop-border)",
     cropHandle: "var(--color-overlay-crop-handle)",
   },
+  timeline: {
+    trimHandle: "var(--color-timeline-trim-handle)",
+    clipLabel: "var(--color-timeline-clip-label)",
+  },
 } as const;
 
 export type Theme = typeof theme;
