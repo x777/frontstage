@@ -126,6 +126,52 @@ test("importFiles adds an image entry with thumbnail", async ({ page }) => {
   expect(result.hasThumbnail).toBe(true);
 });
 
+test("importFiles: project-relative source, manifest, and pending bytes", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  const result = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 2;
+    canvas.height = 2;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "blue";
+    ctx.fillRect(0, 0, 2, 2);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+    });
+    const file = new File([blob], "persist-test.png", { type: "image/png" });
+
+    type MediaSource = { kind: string; relativePath?: string };
+    type Entry = { id: string; type: string; source: MediaSource };
+    type Manifest = { version: number; entries: Entry[]; folders: unknown[] };
+    type Lib = {
+      importFiles(files: File[]): Promise<Entry[]>;
+      getManifest(): Manifest;
+      pendingMedia(): Map<string, Uint8Array>;
+    };
+    const lib = (window as unknown as { __mediaLibrary: Lib }).__mediaLibrary;
+    const added = await lib.importFiles([file]);
+    const entry = added[0];
+    const manifest = lib.getManifest();
+    const pending = lib.pendingMedia();
+
+    const sourceKind = entry?.source?.kind ?? null;
+    const sourceRelativePath = entry?.source?.relativePath ?? null;
+    const manifestHasEntry = manifest.entries.some((e) => e.id === entry?.id);
+    const pendingHasRelativePath =
+      sourceRelativePath !== null && pending.has(sourceRelativePath);
+
+    return { sourceKind, sourceRelativePath, manifestHasEntry, pendingHasRelativePath };
+  });
+
+  expect(result.sourceKind).toBe("project");
+  expect(result.sourceRelativePath).toMatch(/^media\//);
+  expect(result.manifestHasEntry).toBe(true);
+  expect(result.pendingHasRelativePath).toBe(true);
+});
+
 test("drag media item onto existing track creates a clip with one undo", async ({ page }) => {
   await page.goto("/");
   await waitForEngineReady(page);

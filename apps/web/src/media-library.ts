@@ -1,5 +1,6 @@
 import { clipTypeFromFileExtension } from "@palmier/core";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifest, MediaManifestEntry } from "@palmier/core";
+import type { MediaGateway } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
 
 interface LibrarySnapshot {
@@ -7,11 +8,15 @@ interface LibrarySnapshot {
 }
 
 export class MediaLibrary {
-  private blobs = new Map<string, Blob>();
+  // in-memory bytes keyed by relativePath
+  private _bytes = new Map<string, Uint8Array>();
+  // relativePaths whose bytes are persisted (no longer pending)
+  private _persisted = new Set<string>();
   private thumbnails = new Map<string, string>();
   private _entries: MediaManifestEntry[] = [];
   private _snapshot: LibrarySnapshot = { entries: [] };
   private listeners = new Set<() => void>();
+  private _gateway: MediaGateway | null = null;
 
   getSnapshot(): LibrarySnapshot {
     return this._snapshot;
@@ -35,21 +40,61 @@ export class MediaLibrary {
     return this._entries.find((e) => e.id === id);
   }
 
+  getManifest(): MediaManifest {
+    return { version: 2, entries: [...this._entries], folders: [] };
+  }
+
+  loadManifest(manifest: MediaManifest, gateway: MediaGateway | null): void {
+    this._entries = manifest.entries;
+    this._bytes.clear();
+    this._persisted.clear();
+    this._gateway = gateway;
+    this.emit();
+  }
+
+  pendingMedia(): Map<string, Uint8Array> {
+    const pending = new Map<string, Uint8Array>();
+    for (const [relativePath, bytes] of this._bytes) {
+      if (!this._persisted.has(relativePath)) {
+        pending.set(relativePath, bytes);
+      }
+    }
+    return pending;
+  }
+
+  markMediaPersisted(relativePaths: string[]): void {
+    for (const p of relativePaths) {
+      this._persisted.add(p);
+    }
+  }
+
+  setGateway(gateway: MediaGateway | null): void {
+    this._gateway = gateway;
+  }
+
   get byteSource(): MediaByteSource {
     return {
-      open: (ref: string) => {
-        const blob = this.blobs.get(ref);
-        if (!blob) throw new Error("media not found: " + ref);
-        return Promise.resolve(blob);
+      open: async (ref: string) => {
+        // ref is a clip's mediaRef = entry id; resolve id → entry → relativePath → bytes
+        const e = this._entries.find((entry) => entry.id === ref);
+        if (!e) throw new Error("media not found: " + ref);
+        if (e.source.kind !== "project") throw new Error("non-project source for: " + ref);
+        const relativePath = e.source.relativePath;
+        const bytes = this._bytes.get(relativePath);
+        if (bytes) return new Blob([bytes.buffer as ArrayBuffer]);
+        if (!this._gateway) throw new Error("no gateway and no in-memory bytes for: " + relativePath);
+        const gatewayBytes = await this._gateway.readMedia(relativePath);
+        return new Blob([gatewayBytes.buffer as ArrayBuffer]);
       },
     };
   }
 
-  async seed(ref: string, url: string, entry: MediaManifestEntry): Promise<void> {
+  async seed(id: string, url: string, entry: MediaManifestEntry): Promise<void> {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`fetch ${url}: ${r.status}`);
-    const blob = await r.blob();
-    this.blobs.set(ref, blob);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (entry.source.kind !== "project") throw new Error("seed expects project source");
+    this._bytes.set(entry.source.relativePath, bytes);
     this._entries.push(entry);
     this.emit();
   }
@@ -97,18 +142,21 @@ export class MediaLibrary {
         }
 
         const id = crypto.randomUUID();
+        const fileExt = ext || defaultExtForType(type);
+        const relativePath = `media/${id}.${fileExt}`;
         const entry: MediaManifestEntry = {
           id,
           name: file.name,
           type,
-          source: { kind: "external", absolutePath: file.name },
+          source: { kind: "project", relativePath },
           duration,
           ...(sourceWidth !== undefined ? { sourceWidth } : {}),
           ...(sourceHeight !== undefined ? { sourceHeight } : {}),
           ...(hasAudio !== undefined ? { hasAudio } : {}),
         };
 
-        this.blobs.set(id, blob);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        this._bytes.set(relativePath, bytes);
         if (thumbUrl) this.thumbnails.set(id, thumbUrl);
         this._entries.push(entry);
         added.push(entry);
@@ -120,6 +168,13 @@ export class MediaLibrary {
     if (added.length > 0) this.emit();
     return added;
   }
+}
+
+function defaultExtForType(type: string): string {
+  if (type === "video") return "mp4";
+  if (type === "audio") return "mp3";
+  if (type === "lottie") return "json";
+  return "png";
 }
 
 interface ProbeResult {

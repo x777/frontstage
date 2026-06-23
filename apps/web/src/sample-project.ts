@@ -60,7 +60,7 @@ export async function buildSampleLibrary(): Promise<MediaLibrary> {
     id: "clip.mp4",
     name: "clip.mp4",
     type: "video",
-    source: { kind: "external", absolutePath: "clip.mp4" },
+    source: { kind: "project", relativePath: "media/clip.mp4" },
     duration: 3,
   });
   return lib;
