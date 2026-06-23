@@ -235,7 +235,6 @@ export function Editor({ store, media, library, session }: EditorProps) {
           session ? (
             <FileMenu
               session={session}
-              isDirty={isDirty}
               confirmDiscard={confirmDiscard}
             />
           ) : undefined
@@ -259,17 +258,17 @@ export function Editor({ store, media, library, session }: EditorProps) {
         <div
           style={{
             position: "fixed",
-            left: dragSnap.x + 12,
-            top: dragSnap.y + 12,
+            left: `calc(${dragSnap.x}px + ${theme.spacing.mdLg})`,
+            top: `calc(${dragSnap.y}px + ${theme.spacing.mdLg})`,
             pointerEvents: "none",
-            zIndex: 9999,
+            zIndex: theme.z.dragGhost,
             background: theme.bg.raised,
-            border: `1px solid ${theme.border.primary}`,
+            border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
             borderRadius: theme.radius.xs,
             padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
             fontSize: theme.fontSize.xs,
             color: theme.text.primary,
-            maxWidth: 160,
+            maxWidth: theme.size.menuMin,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",

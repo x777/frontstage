@@ -16,6 +16,7 @@ export class MediaLibrary {
   private _entries: MediaManifestEntry[] = [];
   private _snapshot: LibrarySnapshot = { entries: [] };
   private _manifest: MediaManifest = { version: 2, entries: [], folders: [] };
+  private _manifestVersion = 2;
   private listeners = new Set<() => void>();
   private _gateway: MediaGateway | null = null;
 
@@ -31,7 +32,7 @@ export class MediaLibrary {
   private emit(): void {
     const entries = [...this._entries];
     this._snapshot = { entries };
-    this._manifest = { version: 2, entries, folders: [] };
+    this._manifest = { version: this._manifestVersion, entries, folders: [] };
     for (const l of this.listeners) l();
   }
 
@@ -49,6 +50,7 @@ export class MediaLibrary {
 
   loadManifest(manifest: MediaManifest, gateway: MediaGateway | null): void {
     this._entries = manifest.entries;
+    this._manifestVersion = manifest.version;
     this._bytes.clear();
     this._persisted.clear();
     this._gateway = gateway;

@@ -39,15 +39,17 @@ export class InMemoryProjectGateway implements ProjectGateway {
       });
   }
 
+  enqueueOpen(ref: ProjectRef): void {
+    this.openQueue.push(ref);
+  }
+
   async pickOpen(): Promise<ProjectRef | null> {
     return this.openQueue.shift() ?? null;
   }
 
   async pickSaveAs(suggestedName: string): Promise<ProjectRef | null> {
-    const ref = this.saveAsFactory(suggestedName);
-    if (ref === null) return null;
-    this.projects.set(ref.id, { store: new MemoryProjectStore(), media: new InMemoryMediaGateway(), name: ref.name });
-    return ref;
+    // Factory creates the project store; no second set needed.
+    return this.saveAsFactory(suggestedName);
   }
 
   async bind(ref: ProjectRef): Promise<BoundProject> {

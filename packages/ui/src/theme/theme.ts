@@ -123,6 +123,7 @@ export const theme = {
   z: {
     menu: "var(--z-menu)",
     dialog: "var(--z-dialog)",
+    dragGhost: "var(--z-drag-ghost)",
   },
   overlay: {
     transformBorder: "var(--color-overlay-transform-border)",

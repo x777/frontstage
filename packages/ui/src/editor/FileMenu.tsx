@@ -4,11 +4,10 @@ import { theme } from "../theme/theme.js";
 
 export interface FileMenuProps {
   session: ProjectSession;
-  isDirty: boolean;
   confirmDiscard: ConfirmDiscard;
 }
 
-export function FileMenu({ session, isDirty: _isDirty, confirmDiscard }: FileMenuProps) {
+export function FileMenu({ session, confirmDiscard }: FileMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentRefs, setRecentRefs] = useState<ProjectRef[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);

@@ -120,6 +120,7 @@
   /* Z-index layers */
   --z-menu: 9000;
   --z-dialog: 10000;
+  --z-drag-ghost: 9999;
 
   /* Preview */
   --color-preview-letterbox: #000000;

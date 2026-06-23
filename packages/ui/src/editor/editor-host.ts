@@ -28,6 +28,8 @@ export function createEditorHost(
   gateway: ProjectGateway,
 ): EditorHostResult {
   let _lastMedia: MediaGateway | null = null;
+  // True after bind(); consumed (reset false) on loadDoc so a new-doc loadDoc (no preceding bind) passes null.
+  let _bindPending = false;
 
   const wrappedGateway: WrappedGateway = {
     get _lastMedia() {
@@ -41,8 +43,9 @@ export function createEditorHost(
     },
     async bind(ref): Promise<BoundProject> {
       const bound = await gateway.bind(ref);
+      // Record only; setGateway is called in loadDoc so saveAs never repoints the live library.
       _lastMedia = bound.media;
-      mediaHost.setGateway(bound.media);
+      _bindPending = true;
       return bound;
     },
     async listRecent() {
@@ -67,8 +70,12 @@ export function createEditorHost(
       return emptyGenerationLog();
     },
     loadDoc(doc) {
+      // No preceding bind means new-doc path: clear stale gateway so empty manifest has no stale store.
+      if (!_bindPending) _lastMedia = null;
+      _bindPending = false;
       store.load(doc.timeline);
       mediaHost.loadManifest(doc.manifest, _lastMedia);
+      mediaHost.setGateway(_lastMedia);
     },
     pendingMedia() {
       return mediaHost.pendingMedia();

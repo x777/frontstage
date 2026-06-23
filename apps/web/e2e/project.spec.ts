@@ -10,7 +10,7 @@ type Session = {
 };
 
 type Gateway = {
-  openQueue: Array<{ id: string; name: string }>;
+  enqueueOpen(ref: { id: string; name: string }): void;
   listRecent(): Promise<Array<{ id: string; name: string }>>;
 };
 
@@ -105,9 +105,9 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
   });
   expect(afterNew.ref).toBeNull();
 
-  // Open the saved project via File → Open (gateway openQueue seeded with the saved ref)
+  // Open the saved project via File → Open (gateway enqueueOpen seeded with the saved ref)
   await page.evaluate((ref) => {
-    (window as unknown as { __projectGateway: Gateway }).__projectGateway.openQueue.push(ref);
+    (window as unknown as { __projectGateway: Gateway }).__projectGateway.enqueueOpen(ref);
   }, savedRef);
 
   await page.locator('[data-testid="file-menu"]').click();
@@ -258,4 +258,50 @@ test("Ctrl+S saves when ref exists", async ({ page }) => {
     return (window as unknown as { __projectSession: Session }).__projectSession.isDirty();
   });
   expect(dirty).toBe(false);
+});
+
+test("reopen-read: saved media readable via bound gateway after save-as → new → reopen", async ({ page }) => {
+  await page.goto("/");
+  await waitForReady(page);
+
+  // Save-as to persist sample project (including clip.mp4 bytes) into the in-memory gateway
+  await page.locator('[data-testid="file-menu"]').click();
+  await page.locator('[data-testid="file-save-as"]').click();
+
+  const savedRef = await page.waitForFunction(() => {
+    const s = (window as unknown as { __projectSession: Session }).__projectSession;
+    const ref = s.getState().ref;
+    return ref ?? undefined;
+  }, { timeout: 5_000 });
+  const ref = await savedRef.jsonValue() as { id: string; name: string };
+
+  // New project — clears the live library and resets the gateway binding
+  await page.locator('[data-testid="file-menu"]').click();
+  await page.locator('[data-testid="file-new"]').click();
+
+  await page.waitForFunction(() => {
+    return (window as unknown as { __projectSession: Session }).__projectSession.getState().ref === null;
+  }, { timeout: 3_000 });
+
+  // Reopen the saved project via enqueueOpen
+  await page.evaluate((r) => {
+    (window as unknown as { __projectGateway: Gateway }).__projectGateway.enqueueOpen(r);
+  }, ref);
+
+  await page.locator('[data-testid="file-menu"]').click();
+  await page.locator('[data-testid="file-open"]').click();
+
+  await page.waitForFunction((expectedId: string) => {
+    const s = (window as unknown as { __projectSession: Session }).__projectSession;
+    return s.getState().ref?.id === expectedId;
+  }, ref.id, { timeout: 5_000 });
+
+  // Prove the gateway thread: byteSource.open resolves to a non-empty Blob through the bound gateway
+  const blobSize = await page.evaluate(async () => {
+    type Library = { byteSource: { open(ref: string): Promise<Blob> } };
+    const lib = (window as unknown as { __mediaLibrary: Library }).__mediaLibrary;
+    const blob = await lib.byteSource.open("clip.mp4");
+    return blob.size;
+  });
+  expect(blobSize).toBeGreaterThan(0);
 });
