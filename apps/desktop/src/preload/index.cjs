@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld("desktopSpike", {
   encodeFrame: (rgba, w, h) => ipcRenderer.invoke("spike:encode-frame", rgba, w, h),
 });
 
-if (process.env.PALMIER_E2E) {
+if (process.env.PALMIER_E2E === "1") {
   contextBridge.exposeInMainWorld("__e2eMenuTrigger", { fire: (cmd) => _menuCommandCb?.(cmd) });
 }
 

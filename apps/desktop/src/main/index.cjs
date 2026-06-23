@@ -33,9 +33,15 @@ function recentJsonPath() {
   return path.join(app.getPath("userData"), "recent.json");
 }
 
+function isValidRecentEntry(e) {
+  return e && typeof e.id === "string" && typeof e.name === "string" && typeof e.path === "string";
+}
+
 function loadRecent() {
   try {
-    return JSON.parse(fs.readFileSync(recentJsonPath(), "utf8"));
+    const parsed = JSON.parse(fs.readFileSync(recentJsonPath(), "utf8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidRecentEntry);
   } catch {
     return [];
   }
@@ -131,6 +137,7 @@ ipcMain.handle("project:listRecent", () => {
 });
 
 ipcMain.handle("project:addRecent", (_e, rec) => {
+  if (!isValidRecentEntry(rec)) throw new Error("invalid recent entry shape");
   assertAuthorized(rec.path); // only user-picked paths may enter recent.json
   let entries = loadRecent();
   entries = [rec, ...entries.filter((e) => e.id !== rec.id && e.path !== rec.path)].slice(0, 10);
@@ -225,7 +232,7 @@ app.whenReady().then(() => {
   // recent.json only ever holds user-picked (authorized) paths — see addRecent's assertAuthorized — so authorizing them on startup is safe.
   const recent = loadRecent();
   for (const entry of recent) {
-    if (entry && entry.path) authorize(entry.path);
+    if (entry && typeof entry.path === "string") authorize(entry.path);
   }
   Menu.setApplicationMenu(buildMenu());
   createWindow();
