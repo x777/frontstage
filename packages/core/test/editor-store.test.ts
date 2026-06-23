@@ -202,4 +202,21 @@ describe("editor-store", () => {
     // Now toggle again, then try to toggle a panel that is not hidden — no-op not possible
     // but re-adding same panel after it's already removed returns to previous state
   });
+
+  test("load() replaces the timeline, clears undo/redo, resets transient, keeps layout", () => {
+    const s = new EditorStore(defaultTimeline());
+    s.dispatch({ label: "x", apply: (t) => ({ ...t, fps: 60 }) });
+    expect(s.canUndo()).toBe(true);
+    s.select(["a"]); s.setPlayhead(10); s.setMaximized("timeline");
+    const next = { ...defaultTimeline(), width: 111 };
+    s.load(next);
+    const snap = s.getSnapshot();
+    expect(snap.timeline.width).toBe(111);
+    expect(s.canUndo()).toBe(false);   // undo cleared — can't cross into the previous project
+    expect(s.canRedo()).toBe(false);
+    expect(snap.selection.size).toBe(0);
+    expect(snap.playhead).toBe(0);
+    expect(snap.view).toEqual({ zoom: 1, scrollX: 0 });
+    expect(snap.layout.maximized).toBe("timeline"); // layout preserved
+  });
 });

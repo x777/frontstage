@@ -165,4 +165,18 @@ export class EditorStore {
   canRedo(): boolean {
     return this.redoStack.length > 0;
   }
+
+  load(timeline: Timeline): void {
+    this.state = {
+      timeline,
+      selection: new Set(),
+      playhead: 0,
+      view: { zoom: 1, scrollX: 0 },
+      layout: this.state.layout,
+    };
+    this.undoStack = [];
+    this.redoStack = [];
+    this.lastCoalesceKey = null;
+    this.emit();
+  }
 }
