@@ -14,6 +14,9 @@ test("Electron renderer runs WebGPU compositor and ffmpeg encodes a frame", asyn
 
   const page = await app.firstWindow();
 
+  // Navigate to the spike page (default window now loads editor.html)
+  await page.goto("http://localhost:5190/index.html");
+
   // Wait for spike to complete (ok or error)
   await page.waitForFunction(
     () => typeof (window as any).__spikeStatus === "string" && (window as any).__spikeStatus !== "",

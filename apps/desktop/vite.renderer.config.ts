@@ -32,6 +32,14 @@ export default defineConfig({
   build: {
     outDir: "../../dist/renderer",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: resolve(__dirname, "src/renderer/index.html"),
+        editor: resolve(__dirname, "src/renderer/editor.html"),
+        export: resolve(__dirname, "src/renderer/export.html"),
+        "gateway-test": resolve(__dirname, "src/renderer/gateway-test.html"),
+      },
+    },
   },
   resolve: {
     conditions: ["import", "module", "browser", "default"],

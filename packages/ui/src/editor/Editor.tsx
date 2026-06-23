@@ -34,6 +34,7 @@ export interface EditorProps {
   media: MediaByteSource;
   library: EditorLibrary;
   session?: ProjectSession;
+  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void }) => void;
 }
 
 interface DiscardDialogState {
@@ -42,7 +43,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session }: EditorProps) {
+export function Editor({ store, media, library, session, onReady }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const dragSnap = useSyncExternalStore(
@@ -120,6 +121,21 @@ export function Editor({ store, media, library, session }: EditorProps) {
   useEffect(() => {
     document.title = title;
   }, [title]);
+
+  // Expose guarded commands to the native menu layer (desktop only)
+  const onReadyRef = useRef(onReady);
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+  useEffect(() => {
+    if (!session || !onReadyRef.current) return;
+    onReadyRef.current({
+      newProject: () => runProjectCommand(() => session.newProject(confirmDiscard)),
+      open: () => runProjectCommand(() => session.open(confirmDiscard)),
+      save: () => runProjectCommand(() => session.save()),
+      saveAs: () => runProjectCommand(() => session.saveAs()),
+    });
+  // Run once when session + handlers are stable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   // Keyboard shortcuts — use shared confirmDiscard so Ctrl+N / Ctrl+O honor the discard guard
   useEffect(() => {

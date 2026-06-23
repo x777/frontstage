@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -157,7 +157,68 @@ function createWindow() {
   });
 
   const rendererPort = process.env.RENDERER_PORT || "5190";
-  win.loadURL(`http://localhost:${rendererPort}`);
+  win.loadURL(`http://localhost:${rendererPort}/editor.html`);
+}
+
+function buildMenu() {
+  return Menu.buildFromTemplate([
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "New",
+          accelerator: "CmdOrCtrl+N",
+          click: (_i, win) => win?.webContents.send("menu:command", "new"),
+        },
+        {
+          label: "Open…",
+          accelerator: "CmdOrCtrl+O",
+          click: (_i, win) => win?.webContents.send("menu:command", "open"),
+        },
+        {
+          label: "Save",
+          accelerator: "CmdOrCtrl+S",
+          click: (_i, win) => win?.webContents.send("menu:command", "save"),
+        },
+        {
+          label: "Save As…",
+          accelerator: "CmdOrCtrl+Shift+S",
+          click: (_i, win) => win?.webContents.send("menu:command", "save-as"),
+        },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [
+        { role: "minimize" },
+        { role: "zoom" },
+      ],
+    },
+  ]);
 }
 
 app.whenReady().then(() => {
@@ -166,6 +227,7 @@ app.whenReady().then(() => {
   for (const entry of recent) {
     if (entry && entry.path) authorize(entry.path);
   }
+  Menu.setApplicationMenu(buildMenu());
   createWindow();
 });
 
