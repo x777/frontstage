@@ -19,7 +19,22 @@ async function waitForReady(page: Page) {
   await page.waitForSelector('[data-testid="preview-canvas"][data-engine-ready="1"]', { timeout: 15_000 });
 }
 
+// Inject __pickDirectory before the app bootstraps so WebGateway uses OPFS dirs.
+// Each call mints a fresh OPFS subdir and records the handle in window.__opfsHandles.
+async function injectOpfsPicker(page: Page) {
+  await page.addInitScript(() => {
+    (window as any).__opfsHandles = [] as FileSystemDirectoryHandle[];
+    (window as any).__pickDirectory = async (_opts?: { mode?: string }) => {
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle("test-proj-" + Date.now() + "-" + Math.random(), { create: true });
+      (window as any).__opfsHandles.push(dir);
+      return dir;
+    };
+  });
+}
+
 test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({ page }) => {
+  await injectOpfsPicker(page);
   await page.goto("/");
   await waitForReady(page);
 
@@ -60,6 +75,24 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
   expect(afterSave.dirty).toBe(false);
 
   const savedRef = afterSave.ref!;
+
+  // Assert real on-disk write: project.json must exist in the OPFS folder
+  const projectJsonContent = await page.evaluate(async () => {
+    const handles = (window as any).__opfsHandles as FileSystemDirectoryHandle[];
+    const dir: FileSystemDirectoryHandle | undefined = handles?.[0];
+    if (!dir) return null;
+    try {
+      const fh = await dir.getFileHandle("project.json");
+      const file = await fh.getFile();
+      return await file.text();
+    } catch {
+      return null;
+    }
+  });
+  expect(projectJsonContent).not.toBeNull();
+  // project.json is the timeline object directly (fps, tracks, etc.)
+  const parsed = JSON.parse(projectJsonContent!);
+  expect(parsed).toHaveProperty("fps");
 
   // Make another edit to dirty it again
   await page.evaluate(() => {
@@ -105,7 +138,8 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
   });
   expect(afterNew.ref).toBeNull();
 
-  // Open the saved project via File → Open (gateway enqueueOpen seeded with the saved ref)
+  // Open the saved project via File → Open (gateway enqueueOpen seeded with the saved ref).
+  // WebGateway.enqueueOpen reconstructs the full WebProjectRef from its internal _handleMap using the id.
   await page.evaluate((ref) => {
     (window as unknown as { __projectGateway: Gateway }).__projectGateway.enqueueOpen(ref);
   }, savedRef);
@@ -128,6 +162,7 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
 });
 
 test("guard cancel: dirty + file-new → discard-cancel → nothing changes", async ({ page }) => {
+  await injectOpfsPicker(page);
   await page.goto("/");
   await waitForReady(page);
 
@@ -173,6 +208,7 @@ test("guard cancel: dirty + file-new → discard-cancel → nothing changes", as
 });
 
 test("Ctrl+N on dirty project shows discard-dialog; cancel leaves timeline unchanged", async ({ page }) => {
+  await injectOpfsPicker(page);
   await page.goto("/");
   await waitForReady(page);
 
@@ -219,6 +255,7 @@ test("Ctrl+N on dirty project shows discard-dialog; cancel leaves timeline uncha
 });
 
 test("Ctrl+S saves when ref exists", async ({ page }) => {
+  await injectOpfsPicker(page);
   await page.goto("/");
   await waitForReady(page);
 
@@ -261,10 +298,11 @@ test("Ctrl+S saves when ref exists", async ({ page }) => {
 });
 
 test("reopen-read: saved media readable via bound gateway after save-as → new → reopen", async ({ page }) => {
+  await injectOpfsPicker(page);
   await page.goto("/");
   await waitForReady(page);
 
-  // Save-as to persist sample project (including clip.mp4 bytes) into the in-memory gateway
+  // Save-as to persist sample project (including clip.mp4 bytes) into the real WebGateway
   await page.locator('[data-testid="file-menu"]').click();
   await page.locator('[data-testid="file-save-as"]').click();
 
@@ -275,6 +313,20 @@ test("reopen-read: saved media readable via bound gateway after save-as → new 
   }, { timeout: 5_000 });
   const ref = await savedRef.jsonValue() as { id: string; name: string };
 
+  // Assert project.json exists in the OPFS folder after save
+  const hasProjectJson = await page.evaluate(async () => {
+    const handles = (window as any).__opfsHandles as FileSystemDirectoryHandle[];
+    const dir: FileSystemDirectoryHandle | undefined = handles?.[0];
+    if (!dir) return false;
+    try {
+      await dir.getFileHandle("project.json");
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  expect(hasProjectJson).toBe(true);
+
   // New project — clears the live library and resets the gateway binding
   await page.locator('[data-testid="file-menu"]').click();
   await page.locator('[data-testid="file-new"]').click();
@@ -283,7 +335,8 @@ test("reopen-read: saved media readable via bound gateway after save-as → new 
     return (window as unknown as { __projectSession: Session }).__projectSession.getState().ref === null;
   }, { timeout: 3_000 });
 
-  // Reopen the saved project via enqueueOpen
+  // Reopen the saved project via enqueueOpen.
+  // WebGateway._handleMap stores id→handle from pickSaveAs, so enqueueOpen({id,name}) reconstructs the full ref.
   await page.evaluate((r) => {
     (window as unknown as { __projectGateway: Gateway }).__projectGateway.enqueueOpen(r);
   }, ref);
@@ -295,6 +348,14 @@ test("reopen-read: saved media readable via bound gateway after save-as → new 
     const s = (window as unknown as { __projectSession: Session }).__projectSession;
     return s.getState().ref?.id === expectedId;
   }, ref.id, { timeout: 5_000 });
+
+  // Assert timeline restored after open
+  const afterOpenState = await page.evaluate(() => {
+    const s = (window as unknown as { __projectSession: Session }).__projectSession;
+    return { ref: s.getState().ref, dirty: s.isDirty() };
+  });
+  expect(afterOpenState.ref?.id).toBe(ref.id);
+  expect(afterOpenState.dirty).toBe(false);
 
   // Prove the gateway thread: byteSource.open resolves to a non-empty Blob through the bound gateway
   const blobSize = await page.evaluate(async () => {

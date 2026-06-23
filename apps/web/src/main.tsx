@@ -1,10 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorStore, InMemoryProjectGateway, ProjectSession } from "@palmier/core";
+import { EditorStore, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost } from "@palmier/ui";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
+import { WebGateway } from "./web-gateway.js";
 import "./web-fs-test-entry.js";
 
 async function bootstrap() {
@@ -13,7 +14,11 @@ async function bootstrap() {
 
   const library = await buildSampleLibrary();
 
-  const gateway = new InMemoryProjectGateway();
+  // If __pickDirectory is injected (e2e seam), use it; otherwise real showDirectoryPicker.
+  const pickDirectory = (window as any).__pickDirectory as
+    | ((opts?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle | null>)
+    | undefined;
+  const gateway = new WebGateway(pickDirectory ? { pickDirectory } : undefined);
   const { host, wrappedGateway } = createEditorHost(store, library, gateway);
   const session = new ProjectSession(host, wrappedGateway);
 

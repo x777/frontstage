@@ -73,13 +73,25 @@ interface RecentEntry {
 export class WebGateway implements ProjectGateway {
   private readonly pick: (opts?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle | null>;
   private readonly dbName: string;
+  // id → handle; populated by refFor so enqueueOpen can reconstruct a full WebProjectRef from a bare {id,name}.
+  private readonly _handleMap = new Map<string, FileSystemDirectoryHandle>();
+  private readonly _openQueue: WebProjectRef[] = [];
 
   constructor(opts?: WebGatewayOptions) {
     this.pick = opts?.pickDirectory ?? defaultPicker;
     this.dbName = opts?.dbName ?? "palmier-recent";
   }
 
+  // Test seam: queue a ref (possibly bare {id,name} or with a handle serialized as {}) to be returned
+  // by the next pickOpen() call. Always falls back to _handleMap to reconstruct the real handle.
+  enqueueOpen(ref: ProjectRef): void {
+    const handle = this._handleMap.get(ref.id);
+    if (!handle) throw new Error("enqueueOpen: no handle in _handleMap for ref id=" + ref.id);
+    this._openQueue.push({ id: ref.id, name: ref.name, handle });
+  }
+
   async pickOpen(): Promise<ProjectRef | null> {
+    if (this._openQueue.length > 0) return this._openQueue.shift()!;
     const h = await this.pick({ mode: "readwrite" });
     return h ? this.refFor(h) : null;
   }
@@ -90,17 +102,26 @@ export class WebGateway implements ProjectGateway {
   }
 
   private refFor(handle: FileSystemDirectoryHandle): WebProjectRef {
-    return { id: crypto.randomUUID(), name: handle.name, handle };
+    const id = crypto.randomUUID();
+    this._handleMap.set(id, handle);
+    return { id, name: handle.name, handle };
   }
 
   async bind(ref: ProjectRef): Promise<BoundProject> {
     const wr = ref as WebProjectRef;
-    const opt = { mode: "readwrite" as const };
-    let p = await (wr.handle as any).queryPermission(opt);
-    if (p !== "granted") p = await (wr.handle as any).requestPermission(opt);
-    if (p !== "granted") {
-      await this.removeRecent(ref);
-      throw new Error("permission denied: " + ref.name);
+    if (!wr.handle || typeof (wr.handle as any).getFileHandle !== "function") {
+      throw new Error("WebGateway.bind: ref has no valid FileSystemDirectoryHandle for " + ref.name);
+    }
+    // OPFS handles (from navigator.storage) don't expose queryPermission/requestPermission.
+    // Guard so we only call them on user-picked handles that support the permission API.
+    if (typeof (wr.handle as any).queryPermission === "function") {
+      const opt = { mode: "readwrite" as const };
+      let p = await (wr.handle as any).queryPermission(opt);
+      if (p !== "granted") p = await (wr.handle as any).requestPermission(opt);
+      if (p !== "granted") {
+        await this.removeRecent(ref);
+        throw new Error("permission denied: " + ref.name);
+      }
     }
     return {
       ref,
