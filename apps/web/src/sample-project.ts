@@ -1,5 +1,5 @@
 import type { Timeline } from "@palmier/core";
-import { MediaLibrary } from "./media-library.js";
+import { MediaLibrary } from "@palmier/ui";
 
 export function sampleTimeline(): Timeline {
   const fps = 30;

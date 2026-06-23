@@ -18,6 +18,7 @@ export { MediaPanel } from "./media/MediaPanel.js";
 export type { MediaPanelProps } from "./media/MediaPanel.js";
 export { MediaDragController } from "./media/media-drag.js";
 export type { MediaDragSnapshot } from "./media/media-drag.js";
+export { MediaLibrary } from "./media/media-library.js";
 export { InspectorPanel } from "./inspector/InspectorPanel.js";
 export type { InspectorPanelProps } from "./inspector/InspectorPanel.js";
 export { KeyframeLanes } from "./inspector/KeyframeLanes.js";
