@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { theme, Layout, persistLayout, PreviewPanel } from "@palmier/ui";
+import { theme, Layout, persistLayout, PreviewPanel, TimelinePanel } from "@palmier/ui";
 import type { EditorStore } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
 
@@ -35,7 +35,7 @@ export function App({ store, media }: AppProps) {
       store={store}
       media={<Placeholder label="Media" />}
       preview={<PreviewPanel store={store} media={media} />}
-      timeline={<Placeholder label="Timeline" />}
+      timeline={<TimelinePanel store={store} />}
       inspector={<Placeholder label="Inspector" />}
     />
   );
