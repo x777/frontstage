@@ -14,3 +14,5 @@ export { TimelinePanel } from "./timeline/TimelinePanel.js";
 export type { TimelinePanelProps } from "./timeline/TimelinePanel.js";
 export { drawTimeline } from "./timeline/draw-timeline.js";
 export type { TimelinePalette } from "./timeline/draw-timeline.js";
+export { MediaPanel } from "./media/MediaPanel.js";
+export type { MediaPanelProps } from "./media/MediaPanel.js";

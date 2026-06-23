@@ -1,3 +1,6 @@
+import * as path from "path";
+import * as fs from "fs";
+import * as os from "os";
 import { expect, test, type Page } from "@playwright/test";
 
 async function waitForEngineReady(page: Page) {
@@ -24,6 +27,53 @@ test("preview still renders non-black frame via library byte source (regression)
   expect(pixel).not.toBeNull();
   const [r, g, b] = pixel as [number, number, number, number];
   expect(r > 10 || g > 10 || b > 10).toBe(true);
+});
+
+test("media panel: grid shows seeded clip.mp4", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  const items = page.locator('[data-testid="media-item"]');
+  await expect(items).toHaveCount(1, { timeout: 5_000 });
+  await expect(items.first()).toContainText("clip.mp4");
+});
+
+test("media panel: search field is present and disabled", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  const search = page.locator('[data-testid="media-search"]');
+  await expect(search).toBeVisible({ timeout: 5_000 });
+  await expect(search).toBeDisabled();
+});
+
+test("media panel: import via file input adds new item", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  // Minimal valid 1x1 red PNG (generated via canvas in-page to guarantee validity)
+  const pngBuffer = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "red";
+    ctx.fillRect(0, 0, 1, 1);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/png"),
+    );
+    return Array.from(new Uint8Array(await blob.arrayBuffer()));
+  });
+
+  const fileInput = page.locator('input[type="file"][accept]');
+  await fileInput.setInputFiles({
+    name: "panel-import-test.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(pngBuffer),
+  });
+
+  const newItem = page.locator('[data-testid="media-item"]', { hasText: "panel-import-test.png" });
+  await expect(newItem).toBeVisible({ timeout: 8_000 });
 });
 
 test("importFiles adds an image entry with thumbnail", async ({ page }) => {
