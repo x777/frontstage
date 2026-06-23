@@ -3,11 +3,17 @@ import {
   DEFAULT_TRACK_HEIGHT,
   RULER_HEIGHT,
   makeGeometry,
+  frameAtX,
+  timelineTotalFrames,
 } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { drawTimeline } from "./draw-timeline.js";
 import type { TimelinePalette } from "./draw-timeline.js";
+import { hitTest } from "./pointer.js";
+
+const MIN_ZOOM = 0.05;
+const MAX_ZOOM = 40;
 
 export interface TimelinePanelProps {
   store: EditorStore;
@@ -116,7 +122,88 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
     // Store subscription — rAF-coalesced redraw
     const unsub = store.subscribe(scheduleDraw);
 
-    // pointer: Task 4 (pointer down/move/up handlers go here, sharing geom + canvas rect for screen→frame)
+    // pointer: Task 4 — select, scrub, zoom, scroll
+    let scrubbing = false;
+
+    function getGeomAndCoords(e: PointerEvent | WheelEvent): { geom: ReturnType<typeof makeGeometry>; x: number; y: number } | null {
+      const cv = canvasRef.current;
+      if (!cv) return null;
+      const rect = cv.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const snap = store.getSnapshot();
+      const geom = makeGeometry({
+        pixelsPerFrame: snap.view.zoom,
+        scrollX: snap.view.scrollX,
+        headerWidth: 0,
+        trackHeights: snap.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
+      });
+      return { geom, x, y };
+    }
+
+    function onPointerDown(e: PointerEvent) {
+      const cv = canvasRef.current;
+      if (!cv) return;
+      const coords = getGeomAndCoords(e);
+      if (!coords) return;
+      const { geom, x, y } = coords;
+      const snap = store.getSnapshot();
+      const hit = hitTest(snap, geom, x, y);
+
+      if (hit.kind === "ruler") {
+        scrubbing = true;
+        cv.setPointerCapture(e.pointerId);
+        store.setPlayhead(frameAtX(geom, x));
+      } else if (hit.kind === "clip") {
+        store.select([hit.clipId]);
+      } else {
+        store.select([]);
+      }
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      if (!scrubbing) return;
+      const coords = getGeomAndCoords(e);
+      if (!coords) return;
+      const { geom, x } = coords;
+      store.setPlayhead(frameAtX(geom, x));
+    }
+
+    function onPointerUpOrCancel(e: PointerEvent) {
+      if (!scrubbing) return;
+      scrubbing = false;
+      const cv = canvasRef.current;
+      if (cv) cv.releasePointerCapture(e.pointerId);
+    }
+
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const coords = getGeomAndCoords(e);
+      if (!coords) return;
+      const { geom, x } = coords;
+      const snap = store.getSnapshot();
+
+      if (e.ctrlKey || e.metaKey) {
+        // zoom, anchor at cursor frame
+        const frameUnderCursor = frameAtX(geom, x);
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, snap.view.zoom * Math.exp(-e.deltaY * 0.001)));
+        const newScrollX = Math.max(0, frameUnderCursor * newZoom - (x - 0 /* headerWidth */));
+        store.setZoom(newZoom);
+        store.setScroll(newScrollX);
+      } else {
+        // horizontal scroll
+        const totalFrames = timelineTotalFrames(snap.timeline);
+        const contentWidth = totalFrames * snap.view.zoom;
+        const maxScrollX = Math.max(0, contentWidth - currentWidth);
+        store.setScroll(Math.min(maxScrollX, Math.max(0, snap.view.scrollX + e.deltaY)));
+      }
+    }
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUpOrCancel);
+    canvas.addEventListener("pointercancel", onPointerUpOrCancel);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
       aborted = true;
@@ -126,6 +213,11 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUpOrCancel);
+      canvas.removeEventListener("pointercancel", onPointerUpOrCancel);
+      canvas.removeEventListener("wheel", onWheel);
     };
   }, [store]); // eslint-disable-line react-hooks/exhaustive-deps
 

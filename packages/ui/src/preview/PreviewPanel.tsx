@@ -31,6 +31,9 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
   const prevSigRef = useRef<string>("");
   const prevPlayheadRef = useRef<number>(0);
   const prevTimelineRef = useRef<Timeline | null>(null);
+  // Tracks the last frame we called engine.seek() for synchronously, so rapid scrub
+  // events don't each enqueue a full decode before engine.currentFrame updates.
+  const intendedFrameRef = useRef<number>(0);
   // used to force a re-render when the engine becomes ready
   const [engineReady, setEngineReady] = useState(false);
   const [canvasRect, setCanvasRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
@@ -69,6 +72,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
       // engine state → store playhead
       // the loop guard on the subscribe side prevents echoing back
       engine.onStateChange(({ currentFrame }) => {
+        intendedFrameRef.current = currentFrame;
         store.setPlayhead(currentFrame);
       });
 
@@ -96,9 +100,11 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           }
         } else if (snap.playhead !== prevPlayhead) {
           prevPlayheadRef.current = snap.playhead;
-          // loop guard: don't echo the engine's own onStateChange updates back into seek
-          if (!engine.isPlaying && snap.playhead !== engine.currentFrame) {
-            await engine.seek(snap.playhead, "exact");
+          // loop guard: guard against intendedFrameRef (set synchronously) so rapid scrub
+          // events don't each enqueue a decode before engine.currentFrame updates async.
+          if (!engine.isPlaying && snap.playhead !== intendedFrameRef.current) {
+            intendedFrameRef.current = snap.playhead;
+            void engine.seek(snap.playhead, "scrub");
           }
         }
       });
