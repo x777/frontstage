@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -9,6 +9,138 @@ const { spawn } = require("node:child_process");
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 app.commandLine.appendSwitch("enable-features", "Vulkan,UseSkiaRenderer");
+
+// ── Project IPC (Task 2) ────────────────────────────────────────────────────
+
+const authorizedDirs = new Set();
+
+function authorize(p) {
+  authorizedDirs.add(path.resolve(p));
+}
+
+function assertAuthorized(dir) {
+  if (!authorizedDirs.has(path.resolve(dir))) throw new Error("unauthorized project dir");
+}
+
+function assertInside(dir, rel) {
+  const base = path.resolve(dir);
+  const full = path.resolve(base, rel);
+  if (full !== base && !full.startsWith(base + path.sep)) throw new Error("path escapes project dir: " + rel);
+  return full;
+}
+
+function recentJsonPath() {
+  return path.join(app.getPath("userData"), "recent.json");
+}
+
+function loadRecent() {
+  try {
+    return JSON.parse(fs.readFileSync(recentJsonPath(), "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveRecent(entries) {
+  const p = recentJsonPath();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(entries));
+}
+
+// Load recent project paths into authorizedDirs on startup (called from app.whenReady below)
+
+let nextPick = null;
+
+ipcMain.handle("project:__setNextPick", (_e, p) => {
+  if (process.env.PALMIER_E2E !== "1") throw new Error("test-only");
+  nextPick = p;
+});
+
+ipcMain.handle("project:pickOpen", async () => {
+  if (nextPick) {
+    const p = nextPick;
+    nextPick = null;
+    authorize(p);
+    return p;
+  }
+  const r = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  authorize(r.filePaths[0]);
+  return r.filePaths[0];
+});
+
+ipcMain.handle("project:pickSaveAs", async (_e, _name) => {
+  if (nextPick) {
+    const p = nextPick;
+    nextPick = null;
+    fs.mkdirSync(p, { recursive: true });
+    authorize(p);
+    return p;
+  }
+  const r = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const p = r.filePaths[0];
+  fs.mkdirSync(p, { recursive: true });
+  authorize(p);
+  return p;
+});
+
+ipcMain.handle("project:readText", (_e, dir, name) => {
+  assertAuthorized(dir);
+  const f = assertInside(dir, name);
+  try {
+    return fs.readFileSync(f, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+});
+
+ipcMain.handle("project:writeText", (_e, dir, name, data) => {
+  assertAuthorized(dir);
+  const f = assertInside(dir, name);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, data);
+});
+
+ipcMain.handle("project:writeMedia", (_e, dir, rel, bytes) => {
+  assertAuthorized(dir);
+  const f = assertInside(dir, rel);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, Buffer.from(bytes));
+});
+
+ipcMain.handle("project:readMedia", (_e, dir, rel) => {
+  assertAuthorized(dir);
+  const f = assertInside(dir, rel);
+  try {
+    return new Uint8Array(fs.readFileSync(f));
+  } catch (e) {
+    if (e.code === "ENOENT") throw new Error("media not found: " + rel);
+    throw e;
+  }
+});
+
+ipcMain.handle("project:hasMedia", (_e, dir, rel) => {
+  assertAuthorized(dir);
+  return fs.existsSync(assertInside(dir, rel));
+});
+
+ipcMain.handle("project:listRecent", () => {
+  return loadRecent().slice(0, 10);
+});
+
+ipcMain.handle("project:addRecent", (_e, rec) => {
+  let entries = loadRecent();
+  entries = [rec, ...entries.filter((e) => e.id !== rec.id && e.path !== rec.path)].slice(0, 10);
+  saveRecent(entries);
+  authorize(rec.path);
+});
+
+ipcMain.handle("project:removeRecent", (_e, id) => {
+  const entries = loadRecent().filter((e) => e.id !== id);
+  saveRecent(entries);
+});
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -29,6 +161,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Authorize recent project paths from persistent storage
+  const recent = loadRecent();
+  for (const entry of recent) {
+    if (entry && entry.path) authorize(entry.path);
+  }
   createWindow();
 });
 
