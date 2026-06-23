@@ -172,6 +172,52 @@ test("guard cancel: dirty + file-new → discard-cancel → nothing changes", as
   expect(afterCancel.dirty).toBe(true);
 });
 
+test("Ctrl+N on dirty project shows discard-dialog; cancel leaves timeline unchanged", async ({ page }) => {
+  await page.goto("/");
+  await waitForReady(page);
+
+  // Dirty the project + save to get a ref
+  await page.evaluate(() => {
+    type Store = { dispatch(c: unknown): void };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    store.dispatch({ label: "edit", apply: (t: unknown) => ({ ...(t as object) }) });
+  });
+
+  await page.locator('[data-testid="file-menu"]').click();
+  await page.locator('[data-testid="file-save-as"]').click();
+  await page.waitForFunction(() => {
+    return (window as unknown as { __projectSession: Session }).__projectSession.getState().ref !== null;
+  }, { timeout: 5_000 });
+
+  // Dirty again
+  await page.evaluate(() => {
+    type Store = { dispatch(c: unknown): void };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    store.dispatch({ label: "edit2", apply: (t: unknown) => ({ ...(t as object) }) });
+  });
+
+  const beforeRef = await page.evaluate(() => {
+    return (window as unknown as { __projectSession: Session }).__projectSession.getState().ref;
+  });
+  expect(beforeRef).not.toBeNull();
+
+  // Press Ctrl+N — must pop discard dialog (not silently reset)
+  await page.keyboard.press("Control+n");
+
+  await expect(page.locator('[data-testid="discard-dialog"]')).toBeVisible({ timeout: 3_000 });
+
+  // Cancel — project state must be unchanged
+  await page.locator('[data-testid="discard-cancel"]').click();
+  await expect(page.locator('[data-testid="discard-dialog"]')).not.toBeVisible({ timeout: 3_000 });
+
+  const afterCancel = await page.evaluate(() => {
+    const s = (window as unknown as { __projectSession: Session }).__projectSession;
+    return { ref: s.getState().ref, dirty: s.isDirty() };
+  });
+  expect(afterCancel.ref?.id).toBe(beforeRef?.id);
+  expect(afterCancel.dirty).toBe(true);
+});
+
 test("Ctrl+S saves when ref exists", async ({ page }) => {
   await page.goto("/");
   await waitForReady(page);

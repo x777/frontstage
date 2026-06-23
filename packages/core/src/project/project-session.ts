@@ -149,6 +149,14 @@ export class ProjectSession {
     this.host.markMediaPersisted([...pending.keys()]);
   }
 
+  listRecent(): Promise<ProjectRef[]> {
+    return this.gateway.listRecent();
+  }
+
+  removeRecent(ref: ProjectRef): Promise<void> {
+    return this.gateway.removeRecent(ref);
+  }
+
   private advanceSaved(): void {
     this.savedTimeline = this.host.getTimeline();
     this.savedManifest = this.host.getManifest();

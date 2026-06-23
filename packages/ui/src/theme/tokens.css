@@ -107,6 +107,20 @@
   --size-inspector-label: 60px;
   --size-inspector-value: 36px;
 
+  /* Scrim / dialog overlay */
+  --color-scrim: rgba(0, 0, 0, 0.5);
+
+  /* Text on accent backgrounds */
+  --color-text-on-accent: #ffffff;
+
+  /* Component min-widths */
+  --size-menu-min: 160px;
+  --size-dialog-min: 280px;
+
+  /* Z-index layers */
+  --z-menu: 9000;
+  --z-dialog: 10000;
+
   /* Preview */
   --color-preview-letterbox: #000000;
 

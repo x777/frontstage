@@ -5,6 +5,7 @@ export const theme = {
     raised: "var(--bg-raised)",
     prominent: "var(--bg-prominent)",
     previewLetterbox: "var(--color-preview-letterbox)",
+    scrim: "var(--color-scrim)",
   },
   border: {
     primary: "var(--border-primary)",
@@ -16,6 +17,7 @@ export const theme = {
     secondary: "var(--text-secondary)",
     tertiary: "var(--text-tertiary)",
     muted: "var(--text-muted)",
+    onAccent: "var(--color-text-on-accent)",
   },
   accent: {
     timecode: "var(--accent-timecode)",
@@ -115,6 +117,12 @@ export const theme = {
     kfDiamond: "var(--size-kf-diamond)",
     kfToggle: "var(--size-kf-toggle)",
     kfLabel: "var(--size-kf-label)",
+    menuMin: "var(--size-menu-min)",
+    dialogMin: "var(--size-dialog-min)",
+  },
+  z: {
+    menu: "var(--z-menu)",
+    dialog: "var(--z-dialog)",
   },
   overlay: {
     transformBorder: "var(--color-overlay-transform-border)",

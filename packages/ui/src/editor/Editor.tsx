@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
 import {
@@ -36,6 +36,10 @@ export interface EditorProps {
   session?: ProjectSession;
 }
 
+interface DiscardDialogState {
+  resolve: (v: boolean) => void;
+}
+
 export function Editor({ store, media, library, session }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
@@ -62,8 +66,29 @@ export function Editor({ store, media, library, session }: EditorProps) {
     return session.subscribe(() => setSessionState(session.getState()));
   }, [session]);
 
-  // Compute dirty title
+  // Discard-guard dialog shared by both keyboard shortcuts and FileMenu
+  const [dialog, setDialog] = useState<DiscardDialogState | null>(null);
+
   const isDirty = session?.isDirty() ?? false;
+
+  const confirmDiscard = useCallback((): Promise<boolean> => {
+    if (!isDirty) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      setDialog({ resolve });
+    });
+  }, [isDirty]);
+
+  function closeDialog(result: boolean) {
+    dialog?.resolve(result);
+    setDialog(null);
+  }
+
+  async function handleDiscardSave() {
+    await session?.save();
+    closeDialog(true);
+  }
+
+  // Compute dirty title
   const projectName = sessionState?.name ?? "Palmier Pro";
   const title = session ? `${projectName}${isDirty ? " •" : ""}` : "Palmier Pro";
 
@@ -71,7 +96,7 @@ export function Editor({ store, media, library, session }: EditorProps) {
     document.title = title;
   }, [title]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — use shared confirmDiscard so Ctrl+N / Ctrl+O honor the discard guard
   useEffect(() => {
     if (!session) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -86,15 +111,15 @@ export function Editor({ store, media, library, session }: EditorProps) {
         }
       } else if (e.key === "o" || e.key === "O") {
         e.preventDefault();
-        session!.open(() => Promise.resolve(true));
+        session!.open(confirmDiscard);
       } else if (e.key === "n" || e.key === "N") {
         e.preventDefault();
-        session!.newProject(() => Promise.resolve(true));
+        session!.newProject(confirmDiscard);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [session]);
+  }, [session, confirmDiscard]);
 
   useEffect(() => {
     return store.subscribe(() => persistLayout(store));
@@ -164,11 +189,57 @@ export function Editor({ store, media, library, session }: EditorProps) {
     };
   }, [dragController, store]);
 
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    background: theme.bg.scrim,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: theme.z.dialog,
+  };
+
+  const dialogStyle: React.CSSProperties = {
+    background: theme.bg.raised,
+    border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.lg,
+    minWidth: theme.size.dialogMin,
+    boxShadow: theme.shadow.lg,
+    display: "flex",
+    flexDirection: "column",
+    gap: theme.spacing.md,
+  };
+
+  const btnRowStyle: React.CSSProperties = {
+    display: "flex",
+    gap: theme.spacing.xs,
+    justifyContent: "flex-end",
+  };
+
+  const dialogBtnStyle: React.CSSProperties = {
+    background: "none",
+    border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
+    borderRadius: theme.radius.xs,
+    color: theme.text.primary,
+    cursor: "pointer",
+    fontSize: theme.fontSize.sm,
+    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+  };
+
   return (
     <>
       <Layout
         store={store}
-        topBarSlot={session ? <FileMenu session={session} isDirty={isDirty} /> : undefined}
+        topBarSlot={
+          session ? (
+            <FileMenu
+              session={session}
+              isDirty={isDirty}
+              confirmDiscard={confirmDiscard}
+            />
+          ) : undefined
+        }
         title={title}
         media={
           <MediaPanel
@@ -207,6 +278,39 @@ export function Editor({ store, media, library, session }: EditorProps) {
           }}
         >
           {dragSnap.entry.name}
+        </div>
+      )}
+
+      {dialog && (
+        <div data-testid="discard-dialog" style={overlayStyle}>
+          <div style={dialogStyle}>
+            <span style={{ fontSize: theme.fontSize.sm, color: theme.text.primary }}>
+              You have unsaved changes. Discard them?
+            </span>
+            <div style={btnRowStyle}>
+              <button
+                data-testid="discard-cancel"
+                style={dialogBtnStyle}
+                onClick={() => closeDialog(false)}
+              >
+                Cancel
+              </button>
+              <button
+                data-testid="discard-dont-save"
+                style={dialogBtnStyle}
+                onClick={() => closeDialog(true)}
+              >
+                Don&apos;t Save
+              </button>
+              <button
+                data-testid="discard-save"
+                style={{ ...dialogBtnStyle, background: theme.accent.primary, border: "none", color: theme.text.onAccent }}
+                onClick={handleDiscardSave}
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>
