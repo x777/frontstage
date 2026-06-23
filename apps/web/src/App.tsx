@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { theme, Layout, persistLayout, PreviewPanel, TimelinePanel, MediaPanel, MediaDragController } from "@palmier/ui";
+import { theme, Layout, persistLayout, PreviewPanel, TimelinePanel, MediaPanel, MediaDragController, InspectorPanel } from "@palmier/ui";
 import {
   addClipCommand,
   dropTargetAt,
@@ -18,22 +18,6 @@ interface AppProps {
   library: MediaLibrary;
 }
 
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        color: theme.text.muted,
-        fontSize: theme.fontSize.sm,
-      }}
-    >
-      {label}
-    </div>
-  );
-}
 
 export function App({ store, media, library }: AppProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
@@ -131,7 +115,7 @@ export function App({ store, media, library }: AppProps) {
         }
         preview={<PreviewPanel store={store} media={media} />}
         timeline={<TimelinePanel store={store} dragController={dragController} />}
-        inspector={<Placeholder label="Inspector" />}
+        inspector={<InspectorPanel store={store} library={library} />}
       />
 
       {/* Floating ghost tile during drag */}

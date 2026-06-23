@@ -18,3 +18,7 @@ export { MediaPanel } from "./media/MediaPanel.js";
 export type { MediaPanelProps } from "./media/MediaPanel.js";
 export { MediaDragController } from "./media/media-drag.js";
 export type { MediaDragSnapshot } from "./media/media-drag.js";
+export { InspectorPanel } from "./inspector/InspectorPanel.js";
+export type { InspectorPanelProps } from "./inspector/InspectorPanel.js";
+export { NumberField, SliderField, ToggleField, TextField, Section } from "./inspector/fields.js";
+export type { NumberFieldProps, SliderFieldProps, ToggleFieldProps, TextFieldProps, SectionProps } from "./inspector/fields.js";

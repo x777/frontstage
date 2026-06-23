@@ -1,0 +1,402 @@
+import type { EditorStore, MediaManifestEntry } from "@palmier/core";
+import {
+  findClip,
+  transformAt,
+  cropAt,
+  opacityAt,
+  setClipTransformCommand,
+  setClipCropCommand,
+  setClipPropertyCommand,
+  setClipTextStyleCommand,
+  defaultTextStyle,
+  rgbaFromHex,
+} from "@palmier/core";
+import type { Clip, Transform, Crop, TextStyle } from "@palmier/core";
+import { useStore } from "../store/use-store.js";
+import { theme } from "../theme/theme.js";
+import { NumberField, SliderField, ToggleField, TextField, Section } from "./fields.js";
+
+interface MediaLibraryLike {
+  entry(id: string): MediaManifestEntry | undefined;
+}
+
+export interface InspectorPanelProps {
+  store: EditorStore;
+  library?: MediaLibraryLike;
+}
+
+const VISUAL_TYPES = new Set(["video", "image", "text", "lottie"]);
+const AUDIO_TYPES = new Set(["audio", "video"]);
+
+function rgbaToHex(r: number, g: number, b: number): string {
+  const h = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+export function InspectorPanel({ store, library }: InspectorPanelProps) {
+  const selection = useStore(store, (s) => s.selection);
+  const playhead = useStore(store, (s) => s.playhead);
+  const timeline = useStore(store, (s) => s.timeline);
+
+  if (selection.size !== 1) {
+    return (
+      <div
+        data-testid="inspector-empty"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          color: theme.text.muted,
+          fontSize: theme.fontSize.sm,
+        }}
+      >
+        No clip selected
+      </div>
+    );
+  }
+
+  const clipId = [...selection][0]!;
+  const loc = findClip(timeline, clipId);
+  if (!loc) {
+    return (
+      <div
+        data-testid="inspector-empty"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          color: theme.text.muted,
+          fontSize: theme.fontSize.sm,
+        }}
+      >
+        No clip selected
+      </div>
+    );
+  }
+
+  const clip = timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+  const entry = library?.entry(clip.mediaRef);
+  const isVisual = VISUAL_TYPES.has(clip.mediaType);
+  const hasAudio = AUDIO_TYPES.has(clip.mediaType);
+  const isText = clip.mediaType === "text";
+
+  const t = isVisual ? transformAt(clip, playhead) : clip.transform;
+  const c = isVisual ? cropAt(clip, playhead) : clip.crop;
+  const opacity = isVisual ? opacityAt(clip, playhead) : clip.opacity;
+
+  const dispatchTransform = (next: Transform) =>
+    store.dispatch(setClipTransformCommand(clip.id, next, `transform-${clip.id}`));
+
+  const dispatchCrop = (next: Crop) =>
+    store.dispatch(setClipCropCommand(clip.id, next, `crop-${clip.id}`));
+
+  const style = clip.textStyle ?? defaultTextStyle();
+  const hexColor = rgbaToHex(style.color.r, style.color.g, style.color.b);
+
+  return (
+    <div
+      data-testid="inspector-panel"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflowY: "auto",
+        background: theme.bg.surface,
+      }}
+    >
+      {/* Info */}
+      <Section title="Info">
+        <InfoRow label="Name" value={entry?.name ?? clip.mediaRef} />
+        <InfoRow label="Type" value={clip.mediaType} />
+        {entry?.sourceWidth && entry?.sourceHeight && (
+          <InfoRow label="Source" value={`${entry.sourceWidth}×${entry.sourceHeight}`} />
+        )}
+        {entry?.sourceFPS && (
+          <InfoRow label="FPS" value={String(entry.sourceFPS)} />
+        )}
+      </Section>
+
+      {/* Transform */}
+      {isVisual && (
+        <Section title="Transform">
+          <NumberField
+            label="X"
+            value={t.centerX}
+            step={0.001}
+            onChange={(v) => dispatchTransform({ ...t, centerX: v })}
+          />
+          <NumberField
+            label="Y"
+            value={t.centerY}
+            step={0.001}
+            onChange={(v) => dispatchTransform({ ...t, centerY: v })}
+          />
+          <NumberField
+            label="Width"
+            value={t.width}
+            step={0.001}
+            min={0.001}
+            onChange={(v) => dispatchTransform({ ...t, width: v })}
+          />
+          <NumberField
+            label="Height"
+            value={t.height}
+            step={0.001}
+            min={0.001}
+            onChange={(v) => dispatchTransform({ ...t, height: v })}
+          />
+          <NumberField
+            label="Rotation"
+            value={t.rotation}
+            step={1}
+            onChange={(v) => dispatchTransform({ ...t, rotation: v })}
+          />
+          <ToggleField
+            label="Flip H"
+            value={t.flipHorizontal}
+            onChange={(v) => dispatchTransform({ ...t, flipHorizontal: v })}
+          />
+          <ToggleField
+            label="Flip V"
+            value={t.flipVertical}
+            onChange={(v) => dispatchTransform({ ...t, flipVertical: v })}
+          />
+        </Section>
+      )}
+
+      {/* Crop */}
+      {isVisual && (
+        <Section title="Crop">
+          <NumberField
+            label="Left"
+            value={c.left}
+            step={0.001}
+            min={0}
+            max={1}
+            onChange={(v) => dispatchCrop({ ...c, left: v })}
+          />
+          <NumberField
+            label="Top"
+            value={c.top}
+            step={0.001}
+            min={0}
+            max={1}
+            onChange={(v) => dispatchCrop({ ...c, top: v })}
+          />
+          <NumberField
+            label="Right"
+            value={c.right}
+            step={0.001}
+            min={0}
+            max={1}
+            onChange={(v) => dispatchCrop({ ...c, right: v })}
+          />
+          <NumberField
+            label="Bottom"
+            value={c.bottom}
+            step={0.001}
+            min={0}
+            max={1}
+            onChange={(v) => dispatchCrop({ ...c, bottom: v })}
+          />
+        </Section>
+      )}
+
+      {/* Opacity */}
+      {isVisual && (
+        <Section title="Opacity">
+          <SliderField
+            label="Opacity"
+            value={opacity}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(v) =>
+              store.dispatch(setClipPropertyCommand(clip.id, "opacity", v, `opacity-${clip.id}`))
+            }
+          />
+        </Section>
+      )}
+
+      {/* Volume */}
+      {hasAudio && (
+        <Section title="Volume">
+          <SliderField
+            label="Volume"
+            value={clip.volume}
+            min={0}
+            max={2}
+            step={0.01}
+            onChange={(v) =>
+              store.dispatch(setClipPropertyCommand(clip.id, "volume", v, `volume-${clip.id}`))
+            }
+          />
+          <NumberField
+            label="Fade In"
+            value={clip.fadeInFrames}
+            step={1}
+            min={0}
+            onChange={(v) =>
+              store.dispatch(setClipPropertyCommand(clip.id, "fadeInFrames", Math.round(v), `fadein-${clip.id}`))
+            }
+          />
+          <NumberField
+            label="Fade Out"
+            value={clip.fadeOutFrames}
+            step={1}
+            min={0}
+            onChange={(v) =>
+              store.dispatch(setClipPropertyCommand(clip.id, "fadeOutFrames", Math.round(v), `fadeout-${clip.id}`))
+            }
+          />
+        </Section>
+      )}
+
+      {/* Speed */}
+      <Section title="Speed">
+        <NumberField
+          label="Speed"
+          value={clip.speed}
+          step={0.1}
+          min={0.1}
+          onChange={(v) =>
+            store.dispatch(setClipPropertyCommand(clip.id, "speed", v, `speed-${clip.id}`))
+          }
+        />
+      </Section>
+
+      {/* Text */}
+      {isText && (
+        <Section title="Text">
+          <TextField
+            label="Content"
+            value={clip.textContent ?? ""}
+            onChange={(v) =>
+              store.dispatch(setClipPropertyCommand(clip.id, "textContent", v, `text-${clip.id}`))
+            }
+          />
+          <TextField
+            label="Font"
+            value={style.fontName}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, fontName: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+          <NumberField
+            label="Font Size"
+            value={style.fontSize}
+            step={1}
+            min={1}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, fontSize: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+          <TextField
+            label="Color"
+            value={hexColor}
+            onChange={(v) => {
+              const rgba = rgbaFromHex(v);
+              if (!rgba) return;
+              const next: TextStyle = { ...style, color: rgba };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+          <AlignmentField
+            value={style.alignment}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, alignment: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: theme.spacing.xs,
+        padding: `${theme.spacing.xxs} 0`,
+      }}
+    >
+      <span
+        style={{
+          fontSize: theme.fontSize.xs,
+          color: theme.text.secondary,
+          minWidth: "60px",
+          flexShrink: 0,
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: theme.fontSize.xs,
+          color: theme.text.primary,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+type TextAlignment = "left" | "center" | "right";
+
+function AlignmentField({ value, onChange }: { value: TextAlignment; onChange: (v: TextAlignment) => void }) {
+  const options: TextAlignment[] = ["left", "center", "right"];
+  return (
+    <div
+      data-testid="inspector-alignment"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: theme.spacing.xs,
+        padding: `${theme.spacing.xxs} 0`,
+      }}
+    >
+      <span
+        style={{
+          fontSize: theme.fontSize.xs,
+          color: theme.text.secondary,
+          minWidth: "60px",
+          flexShrink: 0,
+        }}
+      >
+        Align
+      </span>
+      <div style={{ display: "flex", gap: theme.spacing.xxs }}>
+        {options.map((opt) => (
+          <button
+            key={opt}
+            data-testid={`inspector-align-${opt}`}
+            onClick={() => onChange(opt)}
+            style={{
+              background: value === opt ? theme.accent.primary : theme.bg.raised,
+              color: value === opt ? theme.bg.base : theme.text.primary,
+              border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+              borderRadius: theme.radius.xs,
+              padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+              fontSize: theme.fontSize.xs,
+              cursor: "pointer",
+            }}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
