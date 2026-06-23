@@ -125,3 +125,159 @@ test("importFiles adds an image entry with thumbnail", async ({ page }) => {
   expect(result.entryType).toBe("image");
   expect(result.hasThumbnail).toBe(true);
 });
+
+test("drag media item onto existing track creates a clip with one undo", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  // Wait for the seeded media item
+  const item = page.locator('[data-testid="media-item"]').first();
+  await expect(item).toBeVisible({ timeout: 8_000 });
+
+  const itemBox = await item.boundingBox();
+  expect(itemBox).not.toBeNull();
+
+  const canvas = page.locator('[data-testid="timeline-canvas"]');
+  await expect(canvas).toBeVisible({ timeout: 5_000 });
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+
+  // Record clip count before drag
+  const beforeCount = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
+  });
+
+  // Simulate the drag: pointerdown on media item, move over timeline, pointerup
+  const startX = itemBox!.x + itemBox!.width / 2;
+  const startY = itemBox!.y + itemBox!.height / 2;
+  // Drop on first track, ~10% into timeline width
+  const dropX = canvasBox!.x + canvasBox!.width * 0.1;
+  const dropY = canvasBox!.y + 40; // inside first track (ruler ~24px, first track follows)
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  // Move in steps to trigger pointermove events
+  await page.mouse.move(startX + 10, startY + 5, { steps: 3 });
+  await page.mouse.move(dropX, dropY, { steps: 10 });
+  await page.mouse.up();
+
+  // A clip should have been added
+  const afterCount = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
+  });
+  expect(afterCount).toBe(beforeCount + 1);
+
+  // The new clip should reference "clip.mp4"
+  const clipRef = await page.evaluate(() => {
+    type Clip = { mediaRef: string; startFrame: number };
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    for (const track of store.getSnapshot().timeline.tracks) {
+      for (const clip of track.clips) {
+        if (clip.mediaRef !== "clip.mp4" && !clip.mediaRef.startsWith("clip.mp4")) continue;
+        return clip.mediaRef;
+      }
+    }
+    // Return the last added clip's mediaRef
+    const tracks = store.getSnapshot().timeline.tracks;
+    const allClips = tracks.flatMap(t => t.clips);
+    return allClips[allClips.length - 1]?.mediaRef ?? null;
+  });
+  expect(clipRef).toBeTruthy();
+
+  // canUndo should be true
+  const canUndo = await page.evaluate(() => {
+    type Store = { canUndo(): boolean };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.canUndo();
+  });
+  expect(canUndo).toBe(true);
+
+  // ONE undo removes the clip
+  await page.evaluate(() => {
+    type Store = { undo(): void };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    store.undo();
+  });
+
+  const afterUndoCount = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
+  });
+  expect(afterUndoCount).toBe(beforeCount);
+
+  // Preview canvas still renders (no crash)
+  await expect(page.locator('[data-testid="preview-canvas"]')).toBeVisible();
+});
+
+test("drag media item below last track creates a new track", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  const item = page.locator('[data-testid="media-item"]').first();
+  await expect(item).toBeVisible({ timeout: 8_000 });
+
+  const itemBox = await item.boundingBox();
+  expect(itemBox).not.toBeNull();
+
+  const canvas = page.locator('[data-testid="timeline-canvas"]');
+  await expect(canvas).toBeVisible({ timeout: 5_000 });
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+
+  // Record track count before
+  const beforeTracks = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.length;
+  });
+
+  const startX = itemBox!.x + itemBox!.width / 2;
+  const startY = itemBox!.y + itemBox!.height / 2;
+  // Drop well below the bottom of the timeline tracks (near the bottom of canvas)
+  const dropX = canvasBox!.x + canvasBox!.width * 0.15;
+  const dropY = canvasBox!.y + canvasBox!.height - 8; // near bottom edge → below all tracks
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 10, startY + 5, { steps: 3 });
+  await page.mouse.move(dropX, dropY, { steps: 10 });
+  await page.mouse.up();
+
+  // A new track should have been created
+  const afterTracks = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.length;
+  });
+  expect(afterTracks).toBe(beforeTracks + 1);
+
+  // canUndo true; one undo removes the new track
+  const canUndo = await page.evaluate(() => {
+    type Store = { canUndo(): boolean };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.canUndo();
+  });
+  expect(canUndo).toBe(true);
+
+  await page.evaluate(() => {
+    type Store = { undo(): void };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    store.undo();
+  });
+
+  const afterUndoTracks = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.length;
+  });
+  expect(afterUndoTracks).toBe(beforeTracks);
+
+  // Preview still live
+  await expect(page.locator('[data-testid="preview-canvas"]')).toBeVisible();
+});

@@ -16,3 +16,5 @@ export { drawTimeline } from "./timeline/draw-timeline.js";
 export type { TimelinePalette } from "./timeline/draw-timeline.js";
 export { MediaPanel } from "./media/MediaPanel.js";
 export type { MediaPanelProps } from "./media/MediaPanel.js";
+export { MediaDragController } from "./media/media-drag.js";
+export type { MediaDragSnapshot } from "./media/media-drag.js";

@@ -17,12 +17,18 @@ import {
   moveClipCommand,
   trimClipCommand,
   splitClipCommand,
+  addClipCommand,
+  clipFromAsset,
+  dropTargetAt,
+  insertionLineY,
+  clipRect,
 } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { drawTimeline } from "./draw-timeline.js";
-import type { TimelinePalette } from "./draw-timeline.js";
+import type { TimelinePalette, DropIndicator } from "./draw-timeline.js";
 import { hitTest } from "./pointer.js";
+import type { MediaDragController } from "../media/media-drag.js";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 40;
@@ -30,6 +36,7 @@ const DRAG_THRESHOLD = 3;
 
 export interface TimelinePanelProps {
   store: EditorStore;
+  dragController?: MediaDragController;
 }
 
 /** Read concrete color strings from CSS vars once. */
@@ -55,10 +62,11 @@ function resolvePalette(el: Element): TimelinePalette {
   };
 }
 
-export function TimelinePanel({ store }: TimelinePanelProps) {
+export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const snapLineXRef = useRef<number | null>(null);
+  const dropIndicatorRef = useRef<DropIndicator | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -93,7 +101,7 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
         trackHeights: timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current);
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current);
     }
 
     function scheduleDraw() {
@@ -442,9 +450,53 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
     canvas.setAttribute("tabindex", "0");
     canvas.addEventListener("keydown", onKeyDown);
 
+    // Media drag drop indicator + drop handler
+    let unsubDrag: (() => void) | null = null;
+    if (dragController) {
+      const onDragChange = () => {
+        const dragSnap = dragController.getSnapshot();
+        const cv = canvasRef.current;
+        if (!cv || !dragSnap) {
+          dropIndicatorRef.current = null;
+          scheduleDraw();
+          return;
+        }
+        const rect = cv.getBoundingClientRect();
+        const lx = dragSnap.x - rect.left;
+        const ly = dragSnap.y - rect.top;
+        if (lx < 0 || lx > rect.width || ly < 0 || ly > rect.height) {
+          dropIndicatorRef.current = null;
+        } else {
+          const snap2 = store.getSnapshot();
+          const geomDrop = makeGeometry({
+            pixelsPerFrame: snap2.view.zoom,
+            scrollX: snap2.view.scrollX,
+            headerWidth: 0,
+            trackHeights: snap2.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
+            dropZoneHeight: 8,
+          });
+          const target = dropTargetAt(geomDrop, ly);
+          const dropFrame = frameAtX(geomDrop, lx);
+          if (target.kind === "new") {
+            const lineY = insertionLineY(geomDrop, target);
+            dropIndicatorRef.current = lineY !== null
+              ? { kind: "insertion-line", y: lineY }
+              : null;
+          } else {
+            const ghostClip = clipFromAsset(dragSnap.entry, snap2.timeline.fps, dropFrame);
+            const r = clipRect(geomDrop, ghostClip, target.index);
+            dropIndicatorRef.current = { kind: "ghost-clip", x: r.x, y: r.y, width: r.width, height: r.height };
+          }
+        }
+        scheduleDraw();
+      };
+      unsubDrag = dragController.subscribe(onDragChange);
+    }
+
     return () => {
       aborted = true;
       unsub();
+      if (unsubDrag) unsubDrag();
       ro.disconnect();
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
@@ -457,7 +509,7 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("keydown", onKeyDown);
     };
-  }, [store]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store, dragController]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

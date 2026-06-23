@@ -89,10 +89,15 @@ function formatTimecode(frame: number, fps: number): string {
   return `${m}:${String(s).padStart(2, "0")}.${String(f).padStart(2, "0")}`;
 }
 
+export type DropIndicator =
+  | { kind: "insertion-line"; y: number }
+  | { kind: "ghost-clip"; x: number; y: number; width: number; height: number };
+
 /**
  * Pure canvas draw — no store, DOM, or var() access.
  * All colors come from `palette` (pre-resolved from getComputedStyle).
  * snapLineX: optional screen-px x for a snap indicator vertical line.
+ * dropIndicator: optional media-drag drop indicator.
  */
 export function drawTimeline(
   ctx: CanvasRenderingContext2D,
@@ -100,7 +105,8 @@ export function drawTimeline(
   geom: TimelineGeometry,
   size: { width: number; height: number; dpr: number },
   palette: TimelinePalette,
-  snapLineX: number | null = null
+  snapLineX: number | null = null,
+  dropIndicator: DropIndicator | null = null
 ): void {
   const { width, height, dpr } = size;
 
@@ -266,5 +272,34 @@ export function drawTimeline(
       ctx.fillRect(sx, RULER_HEIGHT, 1, height - RULER_HEIGHT);
       ctx.restore();
     }
+  }
+
+  // ── Drop indicator ────────────────────────────────────────────────────────────
+  if (dropIndicator !== null) {
+    ctx.save();
+    if (dropIndicator.kind === "insertion-line") {
+      const ly = Math.round(dropIndicator.y);
+      ctx.globalAlpha = 0.9;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = palette.accentPrimary;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, ly);
+      ctx.lineTo(width, ly);
+      ctx.stroke();
+    } else {
+      // ghost-clip rect
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = palette.accentPrimary;
+      roundRect(ctx, dropIndicator.x, dropIndicator.y, dropIndicator.width, dropIndicator.height, 3);
+      ctx.fill();
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = palette.accentPrimary;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      roundRect(ctx, dropIndicator.x, dropIndicator.y, dropIndicator.width, dropIndicator.height, 3);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 }
