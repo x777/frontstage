@@ -130,19 +130,33 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     expect(projectJson.schemaVersion).toBeDefined();
     expect(projectJson.fps).toBe(30);
 
-    // ── 6. Menu IPC routing assertion ──────────────────────────────────────
-    // The onReady callback registers window.desktopProject.onMenuCommand.
-    // Verify the handler is wired by confirming the session's save path
-    // triggers correctly via the file-save button (same guarded handler).
-    // We verify structural wiring: onMenuCommand was registered at startup.
-    const menuWired = await page.evaluate(() => {
-      // desktopProject.onMenuCommand is called synchronously in onReady.
-      // We can't introspect the listener directly, but we can confirm
-      // the session state is valid (meaning onReady ran and session is live).
-      const session = (window as any).__projectSession;
-      return session != null;
+    // ── 6. Native-menu dirty-guard: IPC path must open discard dialog ─────
+    // Make the store dirty via a real dispatch
+    await page.evaluate(() => {
+      const store = (window as any).__palmierStore;
+      const snap = store.getSnapshot();
+      store.load({ ...snap.timeline, fps: 29 });
     });
-    expect(menuWired, "menu command handler must be registered via onReady").toBe(true);
+
+    // Drive the native-menu path by firing the registered onMenuCommand callback
+    // through the e2e test hook exposed by the preload (PALMIER_E2E=1).
+    // This exercises the exact same code path as Electron main sending menu:command.
+    await page.evaluate(() => {
+      (window as any).__e2eMenuTrigger.fire("new");
+    });
+
+    // The discard dialog must appear because the store is dirty
+    await page.waitForSelector('[data-testid="discard-dialog"]', { timeout: 5_000 });
+
+    // Cancel — timeline must be unchanged
+    await page.click('[data-testid="discard-cancel"]');
+    await expect(page.locator('[data-testid="discard-dialog"]')).not.toBeVisible();
+
+    // fps is still 29 (edit was not lost)
+    const fpsAfterCancel = await page.evaluate(() =>
+      (window as any).__palmierStore.getSnapshot().timeline.fps,
+    );
+    expect(fpsAfterCancel).toBe(29);
   } finally {
     await app.close();
     try { rmSync(tempA, { recursive: true, force: true }); } catch { /* ignore */ }

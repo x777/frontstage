@@ -125,11 +125,13 @@ export function Editor({ store, media, library, session, onReady }: EditorProps)
   // Expose guarded commands to the native menu layer (desktop only)
   const onReadyRef = useRef(onReady);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+  const confirmDiscardRef = useRef(confirmDiscard);
+  useEffect(() => { confirmDiscardRef.current = confirmDiscard; }, [confirmDiscard]);
   useEffect(() => {
     if (!session || !onReadyRef.current) return;
     onReadyRef.current({
-      newProject: () => runProjectCommand(() => session.newProject(confirmDiscard)),
-      open: () => runProjectCommand(() => session.open(confirmDiscard)),
+      newProject: () => runProjectCommand(() => session.newProject(() => confirmDiscardRef.current())),
+      open: () => runProjectCommand(() => session.open(() => confirmDiscardRef.current())),
       save: () => runProjectCommand(() => session.save()),
       saveAs: () => runProjectCommand(() => session.saveAs()),
     });

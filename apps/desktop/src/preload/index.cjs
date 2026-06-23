@@ -2,9 +2,16 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
+// E2E test hook: holds the latest onMenuCommand callback so tests can invoke it directly.
+let _menuCommandCb = null;
+
 contextBridge.exposeInMainWorld("desktopSpike", {
   encodeFrame: (rgba, w, h) => ipcRenderer.invoke("spike:encode-frame", rgba, w, h),
 });
+
+if (process.env.PALMIER_E2E) {
+  contextBridge.exposeInMainWorld("__e2eMenuTrigger", { fire: (cmd) => _menuCommandCb?.(cmd) });
+}
 
 contextBridge.exposeInMainWorld("desktopExport", {
   start: (opts) => ipcRenderer.invoke("export:start", opts),
@@ -25,5 +32,5 @@ contextBridge.exposeInMainWorld("desktopProject", {
   addRecent: (rec) => ipcRenderer.invoke("project:addRecent", rec),
   removeRecent: (id) => ipcRenderer.invoke("project:removeRecent", id),
   __setNextPick: (p) => ipcRenderer.invoke("project:__setNextPick", p),
-  onMenuCommand: (cb) => ipcRenderer.on("menu:command", (_e, c) => cb(c)),
+  onMenuCommand: (cb) => { ipcRenderer.removeAllListeners("menu:command"); ipcRenderer.on("menu:command", (_e, c) => cb(c)); _menuCommandCb = cb; },
 });
