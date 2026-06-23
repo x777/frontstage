@@ -20,5 +20,7 @@ export { MediaDragController } from "./media/media-drag.js";
 export type { MediaDragSnapshot } from "./media/media-drag.js";
 export { InspectorPanel } from "./inspector/InspectorPanel.js";
 export type { InspectorPanelProps } from "./inspector/InspectorPanel.js";
+export { KeyframeLanes } from "./inspector/KeyframeLanes.js";
+export type { KeyframeLanesProps } from "./inspector/KeyframeLanes.js";
 export { NumberField, SliderField, ToggleField, TextField, Section } from "./inspector/fields.js";
 export type { NumberFieldProps, SliderFieldProps, ToggleFieldProps, TextFieldProps, SectionProps } from "./inspector/fields.js";

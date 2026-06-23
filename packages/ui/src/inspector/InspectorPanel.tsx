@@ -15,6 +15,7 @@ import type { Clip, Transform, Crop, TextStyle } from "@palmier/core";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
 import { NumberField, SliderField, ToggleField, TextField, Section } from "./fields.js";
+import { KeyframeLanes } from "./KeyframeLanes.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
@@ -266,6 +267,9 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
           }
         />
       </Section>
+
+      {/* Keyframe Lanes */}
+      <KeyframeLanes clip={clip} playhead={playhead} store={store} />
 
       {/* Text */}
       {isText && (
