@@ -2,7 +2,9 @@ import type { Clip } from "../clip.js";
 import type { Timeline } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { Transform, Crop } from "../transform.js";
+import type { TextStyle } from "../text-style.js";
 import type { Command } from "./editor-store.js";
+import { replaceClip } from "./timeline-commands.js";
 
 export function removeClipCommand(clipId: string): Command {
   return {
@@ -57,6 +59,20 @@ export function setClipTransformCommand(
       const newTrack = { ...track, clips: newClips };
       const newTracks = timeline.tracks.map((t, i) => (i === loc.trackIndex ? newTrack : t));
       return { ...timeline, tracks: newTracks };
+    },
+  };
+}
+
+export function setClipTextStyleCommand(
+  clipId: string,
+  textStyle: TextStyle,
+  coalesceKey?: string,
+): Command {
+  return {
+    label: "Set Text Style",
+    coalesceKey,
+    apply(timeline: Timeline): Timeline {
+      return replaceClip(timeline, clipId, (clip) => ({ ...clip, textStyle }));
     },
   };
 }

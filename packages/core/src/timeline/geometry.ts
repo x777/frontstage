@@ -100,6 +100,11 @@ export function frameAtX(g: TimelineGeometry, x: number): number {
   return Math.max(0, Math.round((x - g.headerWidth + g.scrollX) / g.pixelsPerFrame));
 }
 
+/** screen-pixel x → fractional frame (no rounding, no clamping). */
+export function frameAtXContinuous(g: TimelineGeometry, x: number): number {
+  return (x - g.headerWidth + g.scrollX) / g.pixelsPerFrame;
+}
+
 export function trackTopY(g: TimelineGeometry, i: number): number {
   return g.cumulativeY[i] ?? g.rulerHeight;
 }
