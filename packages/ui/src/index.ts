@@ -24,3 +24,5 @@ export { KeyframeLanes } from "./inspector/KeyframeLanes.js";
 export type { KeyframeLanesProps } from "./inspector/KeyframeLanes.js";
 export { NumberField, SliderField, ToggleField, TextField, Section } from "./inspector/fields.js";
 export type { NumberFieldProps, SliderFieldProps, ToggleFieldProps, TextFieldProps, SectionProps } from "./inspector/fields.js";
+export { Editor } from "./editor/Editor.js";
+export type { EditorProps, EditorLibrary } from "./editor/Editor.js";
