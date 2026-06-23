@@ -26,9 +26,9 @@ export class InMemoryProjectGateway implements ProjectGateway {
   private recentIds: string[] = [];
   private counter = 0;
   private openQueue: ProjectRef[];
-  private saveAsFactory: (name: string) => ProjectRef;
+  private saveAsFactory: (name: string) => ProjectRef | null;
 
-  constructor(opts?: { openQueue?: ProjectRef[]; saveAsFactory?: (name: string) => ProjectRef }) {
+  constructor(opts?: { openQueue?: ProjectRef[]; saveAsFactory?: (name: string) => ProjectRef | null }) {
     this.openQueue = opts?.openQueue ? [...opts.openQueue] : [];
     this.saveAsFactory =
       opts?.saveAsFactory ??
@@ -44,7 +44,10 @@ export class InMemoryProjectGateway implements ProjectGateway {
   }
 
   async pickSaveAs(suggestedName: string): Promise<ProjectRef | null> {
-    return this.saveAsFactory(suggestedName);
+    const ref = this.saveAsFactory(suggestedName);
+    if (ref === null) return null;
+    this.projects.set(ref.id, { store: new MemoryProjectStore(), media: new InMemoryMediaGateway(), name: ref.name });
+    return ref;
   }
 
   async bind(ref: ProjectRef): Promise<BoundProject> {
@@ -61,9 +64,11 @@ export class InMemoryProjectGateway implements ProjectGateway {
   }
 
   async listRecent(): Promise<ProjectRef[]> {
-    return this.recentIds.map((id) => {
-      const entry = this.projects.get(id);
-      return entry ? { id, name: entry.name } : { id, name: "" };
-    });
+    return this.recentIds
+      .map((id) => {
+        const entry = this.projects.get(id);
+        return entry ? { id, name: entry.name } : null;
+      })
+      .filter((ref) => ref !== null) as ProjectRef[];
   }
 }

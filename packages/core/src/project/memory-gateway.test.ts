@@ -50,4 +50,24 @@ describe("InMemoryProjectGateway", () => {
     const recent = await gw.listRecent();
     expect(recent.map((r) => r.id)).toEqual([a!.id, b!.id]);
   });
+  it("recent list capped at 10, most-recent-first", async () => {
+    const gw = new InMemoryProjectGateway();
+    const refs = [];
+    for (let i = 0; i < 12; i++) {
+      refs.push(await gw.pickSaveAs(`Project ${i}`));
+    }
+    for (const ref of refs) {
+      await gw.addRecent(ref!);
+    }
+    const recent = await gw.listRecent();
+    expect(recent).toHaveLength(10);
+    expect(recent.map((r) => r.id)).toEqual(refs.slice(2).reverse().map((r) => r!.id));
+  });
+  it("pickSaveAs with cancelling factory returns null and does not register entry", async () => {
+    const gw = new InMemoryProjectGateway({ saveAsFactory: () => null });
+    const ref = await gw.pickSaveAs("Cancelled");
+    expect(ref).toBeNull();
+    const recent = await gw.listRecent();
+    expect(recent).toHaveLength(0);
+  });
 });
