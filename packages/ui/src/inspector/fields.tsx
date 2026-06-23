@@ -26,7 +26,7 @@ const rowStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   fontSize: theme.fontSize.xs,
   color: theme.text.secondary,
-  minWidth: "60px",
+  minWidth: theme.size.inspectorLabel,
   flexShrink: 0,
 };
 
@@ -130,7 +130,7 @@ export function SliderField({ label, value, onChange, onCommit, min = 0, max = 1
         style={{ flex: 1 }}
         data-testid={testId + "-input"}
       />
-      <span style={{ ...labelStyle, minWidth: "36px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <span style={{ ...labelStyle, minWidth: theme.size.inspectorValue, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
         {value.toFixed(2)}
       </span>
     </div>

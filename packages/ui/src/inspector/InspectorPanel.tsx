@@ -295,6 +295,16 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
               store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
             }}
           />
+          <NumberField
+            label="Scale"
+            value={style.fontScale}
+            step={0.1}
+            min={0.1}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, fontScale: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
           <TextField
             label="Color"
             value={hexColor}
@@ -332,7 +342,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
         style={{
           fontSize: theme.fontSize.xs,
           color: theme.text.secondary,
-          minWidth: "60px",
+          minWidth: theme.size.inspectorLabel,
           flexShrink: 0,
         }}
       >
@@ -371,7 +381,7 @@ function AlignmentField({ value, onChange }: { value: TextAlignment; onChange: (
         style={{
           fontSize: theme.fontSize.xs,
           color: theme.text.secondary,
-          minWidth: "60px",
+          minWidth: theme.size.inspectorLabel,
           flexShrink: 0,
         }}
       >

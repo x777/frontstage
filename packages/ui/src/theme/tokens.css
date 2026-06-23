@@ -103,6 +103,8 @@
   --size-resize-handle: 4px;
   --size-transport-play: 36px;
   --size-media-item-min: 80px;
+  --size-inspector-label: 60px;
+  --size-inspector-value: 36px;
 
   /* Preview */
   --color-preview-letterbox: #000000;
