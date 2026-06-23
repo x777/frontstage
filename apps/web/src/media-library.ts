@@ -81,10 +81,10 @@ export class MediaLibrary {
         if (e.source.kind !== "project") throw new Error("non-project source for: " + ref);
         const relativePath = e.source.relativePath;
         const bytes = this._bytes.get(relativePath);
-        if (bytes) return new Blob([bytes.buffer as ArrayBuffer]);
+        if (bytes) return new Blob([bytes as BlobPart]);
         if (!this._gateway) throw new Error("no gateway and no in-memory bytes for: " + relativePath);
         const gatewayBytes = await this._gateway.readMedia(relativePath);
-        return new Blob([gatewayBytes.buffer as ArrayBuffer]);
+        return new Blob([gatewayBytes as BlobPart]);
       },
     };
   }
