@@ -498,8 +498,14 @@ test("move: drag clip body changes startFrame; one undo restores", async ({ page
 test("move: drag near playhead snaps exactly to playhead frame", async ({ page }) => {
   const { box } = await setupZoom10(page);
 
-  const ZOOM = 10;
+  const ZOOM = 10; // pixelsPerFrame = 10
   const PLAYHEAD_FRAME = 20;
+  // Snap threshold for playhead: SNAP_BASE_PX(8) * SNAP_PLAYHEAD_MULT(1.5) / pixelsPerFrame = 1.2 frames.
+  // Dropping cursor 1 frame past target is WITHIN threshold (1 < 1.2) → snap fires.
+  // Dropping cursor 3 frames past target is BEYOND threshold (3 > 1.2) → no snap.
+  const GRAB_FRAME = 45; // middle of 90-frame clip
+  const NEAR_OFFSET_FRAMES = 1;  // cursor lands grabOffset + playhead + 1 → unsnapped startFrame = playhead+1, snapped = playhead
+  const FAR_OFFSET_FRAMES = 3;   // cursor lands grabOffset + playhead + 3 → unsnapped startFrame = playhead+3, no snap
 
   // Set playhead to frame 20
   await page.evaluate((ph: number) => {
@@ -529,22 +535,72 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     };
   });
 
-  // Grab clip at frame 45 (x=450), drag so clip start would land at ~frame 19 (close to playhead 20)
-  // grabOffsetFrames=45 → want startFrame=20 → cursorFrame=65 (but snap pulls it to 20)
-  // Actually: drag so clip start is near frame 20 — close enough for snap threshold (8px = 0.8 frames at zoom=10)
-  // Set grab at clip center (frame 45) and drag to x = (20 + 45) * 10 = 650 → startFrame should snap to 20
-  const grabX = box.x + 45 * ZOOM;
+  const grabX = box.x + GRAB_FRAME * ZOOM;
   const grabY = box.y + CLIP_Y;
-  const dropX = box.x + (PLAYHEAD_FRAME + 45) * ZOOM;
+
+  // ── NEAR DROP: cursor 1 frame past target (within snap threshold → pulled to playhead) ──
+  // Without snap: cursorFrame = PLAYHEAD_FRAME + GRAB_FRAME + NEAR_OFFSET_FRAMES = 66
+  //   → startFrame = 66 - 45 = 21
+  // With snap: dist(21, 20) = 1 ≤ 1.2 threshold → startFrame snaps to 20
+  const nearDropX = box.x + (PLAYHEAD_FRAME + GRAB_FRAME + NEAR_OFFSET_FRAMES) * ZOOM;
 
   await page.mouse.move(grabX, grabY);
   await page.mouse.down();
-  await page.mouse.move(grabX + 5, grabY);
-  await page.mouse.move(dropX, grabY);
+  await page.mouse.move(grabX + 5, grabY); // cross DRAG_THRESHOLD
+  await page.mouse.move(nearDropX, grabY);
   await page.mouse.up();
   await page.waitForTimeout(150);
 
-  const afterSnap = await page.evaluate((clipId: string) => {
+  const afterNearDrop = await page.evaluate((clipId: string) => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    for (const track of snap.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { startFrame: clip.startFrame, canUndo: store.canUndo() };
+    }
+    return null;
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number }> }> };
+      };
+      canUndo(): boolean;
+    };
+  }, origState.clipId);
+
+  expect(afterNearDrop).not.toBeNull();
+  // Snap pulled the clip to exact playhead frame despite the 1-frame offset
+  expect(afterNearDrop!.startFrame).toBe(PLAYHEAD_FRAME);
+  expect(afterNearDrop!.canUndo).toBe(true);
+
+  // ONE undo restores original startFrame before the far-control drag
+  await page.evaluate(() => {
+    const store = getFullStore(window);
+    store.undo();
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = { undo(): void };
+  });
+  await page.waitForTimeout(100);
+
+  // ── FAR CONTROL: cursor 3 frames past target (beyond snap threshold → no snap) ──
+  // Without snap: cursorFrame = PLAYHEAD_FRAME + GRAB_FRAME + FAR_OFFSET_FRAMES = 68
+  //   → startFrame = 68 - 45 = 23
+  // dist(23, 20) = 3 > 1.2 threshold → snap does NOT fire → startFrame stays 23
+  const farDropX = box.x + (PLAYHEAD_FRAME + GRAB_FRAME + FAR_OFFSET_FRAMES) * ZOOM;
+  const expectedFarFrame = PLAYHEAD_FRAME + FAR_OFFSET_FRAMES; // 23
+
+  await page.mouse.move(grabX, grabY);
+  await page.mouse.down();
+  await page.mouse.move(grabX + 5, grabY); // cross DRAG_THRESHOLD
+  await page.mouse.move(farDropX, grabY);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const afterFarDrop = await page.evaluate((clipId: string) => {
     const store = getFullStore(window);
     const snap = store.getSnapshot();
     for (const track of snap.timeline.tracks) {
@@ -562,9 +618,10 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     };
   }, origState.clipId);
 
-  expect(afterSnap).not.toBeNull();
-  // Snapped to playhead frame 20
-  expect(afterSnap!.startFrame).toBe(PLAYHEAD_FRAME);
+  expect(afterFarDrop).not.toBeNull();
+  // Snap did NOT fire — clip landed at the un-snapped frame, not the playhead
+  expect(afterFarDrop!.startFrame).toBe(expectedFarFrame);
+  expect(afterFarDrop!.startFrame).not.toBe(PLAYHEAD_FRAME);
 });
 
 test("trim: drag right edge inward; one undo restores", async ({ page }) => {
