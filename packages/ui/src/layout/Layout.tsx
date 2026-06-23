@@ -62,6 +62,8 @@ interface LayoutProps {
   preview: ReactNode;
   timeline: ReactNode;
   inspector: ReactNode;
+  topBarSlot?: ReactNode;
+  title?: string;
 }
 
 const resizeHandleStyle: React.CSSProperties = {
@@ -135,7 +137,7 @@ function PanelHeader({
   );
 }
 
-export function Layout({ store, media, preview, timeline, inspector }: LayoutProps) {
+export function Layout({ store, media, preview, timeline, inspector, topBarSlot, title }: LayoutProps) {
   const layout = useStore(store, (s) => s.layout);
 
   function handleFocus(p: FocusedPanel) {
@@ -175,7 +177,7 @@ export function Layout({ store, media, preview, timeline, inspector }: LayoutPro
         fontSize: theme.fontSize.md,
       }}
     >
-      <TopBar />
+      <TopBar slot={topBarSlot} title={title} />
       {isMaximized ? (
         // Maximized mode: the active panel fills the content area; all others are display:none but stay mounted.
         <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
@@ -286,7 +288,7 @@ export function Layout({ store, media, preview, timeline, inspector }: LayoutPro
   );
 }
 
-function TopBar() {
+function TopBar({ slot, title }: { slot?: ReactNode; title?: string }) {
   return (
     <div
       style={{
@@ -297,10 +299,15 @@ function TopBar() {
         alignItems: "center",
         padding: `0 ${theme.spacing.md}`,
         flexShrink: 0,
+        gap: theme.spacing.sm,
       }}
     >
-      <span style={{ fontSize: theme.fontSize.sm, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
-        Palmier Pro
+      {slot}
+      <span
+        data-testid="top-bar-title"
+        style={{ fontSize: theme.fontSize.sm, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}
+      >
+        {title ?? "Palmier Pro"}
       </span>
     </div>
   );

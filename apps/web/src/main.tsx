@@ -1,11 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorStore } from "@palmier/core";
+import { EditorStore, InMemoryProjectGateway, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { restoreLayout } from "@palmier/ui";
+import { restoreLayout, createEditorHost } from "@palmier/ui";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
-import type { MediaLibrary } from "./media-library.js";
 
 async function bootstrap() {
   const store = new EditorStore(sampleTimeline());
@@ -13,15 +12,21 @@ async function bootstrap() {
 
   const library = await buildSampleLibrary();
 
+  const gateway = new InMemoryProjectGateway();
+  const { host, wrappedGateway } = createEditorHost(store, library, gateway);
+  const session = new ProjectSession(host, wrappedGateway);
+
   // Expose for E2E tests
   (window as unknown as Record<string, unknown>).__palmierStore = store;
   (window as unknown as Record<string, unknown>).__mediaLibrary = library;
+  (window as unknown as Record<string, unknown>).__projectSession = session;
+  (window as unknown as Record<string, unknown>).__projectGateway = gateway;
 
   const root = document.getElementById("root");
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <App store={store} media={library.byteSource} library={library} />
+      <App store={store} media={library.byteSource} library={library} session={session} />
     </StrictMode>,
   );
 }

@@ -15,6 +15,7 @@ export class MediaLibrary {
   private thumbnails = new Map<string, string>();
   private _entries: MediaManifestEntry[] = [];
   private _snapshot: LibrarySnapshot = { entries: [] };
+  private _manifest: MediaManifest = { version: 2, entries: [], folders: [] };
   private listeners = new Set<() => void>();
   private _gateway: MediaGateway | null = null;
 
@@ -28,7 +29,9 @@ export class MediaLibrary {
   }
 
   private emit(): void {
-    this._snapshot = { entries: [...this._entries] };
+    const entries = [...this._entries];
+    this._snapshot = { entries };
+    this._manifest = { version: 2, entries, folders: [] };
     for (const l of this.listeners) l();
   }
 
@@ -41,7 +44,7 @@ export class MediaLibrary {
   }
 
   getManifest(): MediaManifest {
-    return { version: 2, entries: [...this._entries], folders: [] };
+    return this._manifest;
   }
 
   loadManifest(manifest: MediaManifest, gateway: MediaGateway | null): void {

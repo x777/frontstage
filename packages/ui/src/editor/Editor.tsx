@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry } from "@palmier/core";
+import type { ProjectSession } from "@palmier/core";
 import {
   addClipCommand,
   dropTargetAt,
@@ -16,6 +17,8 @@ import { TimelinePanel } from "../timeline/TimelinePanel.js";
 import { MediaPanel } from "../media/MediaPanel.js";
 import { MediaDragController } from "../media/media-drag.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
+import { FileMenu } from "./FileMenu.js";
+import { useStore } from "../store/use-store.js";
 
 // Duck-typed library interface covering what MediaPanel, InspectorPanel, and drag-drop each need.
 export interface EditorLibrary {
@@ -30,15 +33,68 @@ export interface EditorProps {
   store: EditorStore;
   media: MediaByteSource;
   library: EditorLibrary;
+  session?: ProjectSession;
 }
 
-export function Editor({ store, media, library }: EditorProps) {
+export function Editor({ store, media, library, session }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const dragSnap = useSyncExternalStore(
     dragController.subscribe.bind(dragController),
     dragController.getSnapshot.bind(dragController),
   );
+
+  // Subscribe to store for dirty tracking
+  useStore(store, (s) => s.timeline);
+
+  // Subscribe to library for dirty tracking
+  const [, setLibraryTick] = useState(0);
+  useEffect(() => {
+    if (!session) return;
+    return library.subscribe(() => setLibraryTick((n) => n + 1));
+  }, [session, library]);
+
+  // Subscribe to session lifecycle changes (new/open/save/saveAs)
+  const [sessionState, setSessionState] = useState(() => session?.getState());
+  useEffect(() => {
+    if (!session) return;
+    setSessionState(session.getState());
+    return session.subscribe(() => setSessionState(session.getState()));
+  }, [session]);
+
+  // Compute dirty title
+  const isDirty = session?.isDirty() ?? false;
+  const projectName = sessionState?.name ?? "Palmier Pro";
+  const title = session ? `${projectName}${isDirty ? " •" : ""}` : "Palmier Pro";
+
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!session) return;
+    function onKeyDown(e: KeyboardEvent) {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          session!.saveAs();
+        } else {
+          session!.save();
+        }
+      } else if (e.key === "o" || e.key === "O") {
+        e.preventDefault();
+        session!.open(() => Promise.resolve(true));
+      } else if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        session!.newProject(() => Promise.resolve(true));
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [session]);
 
   useEffect(() => {
     return store.subscribe(() => persistLayout(store));
@@ -112,6 +168,8 @@ export function Editor({ store, media, library }: EditorProps) {
     <>
       <Layout
         store={store}
+        topBarSlot={session ? <FileMenu session={session} isDirty={isDirty} /> : undefined}
+        title={title}
         media={
           <MediaPanel
             library={library}

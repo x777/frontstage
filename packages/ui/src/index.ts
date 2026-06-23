@@ -26,3 +26,7 @@ export { NumberField, SliderField, ToggleField, TextField, Section } from "./ins
 export type { NumberFieldProps, SliderFieldProps, ToggleFieldProps, TextFieldProps, SectionProps } from "./inspector/fields.js";
 export { Editor } from "./editor/Editor.js";
 export type { EditorProps, EditorLibrary } from "./editor/Editor.js";
+export { FileMenu } from "./editor/FileMenu.js";
+export type { FileMenuProps } from "./editor/FileMenu.js";
+export { createEditorHost } from "./editor/editor-host.js";
+export type { EditorMediaHost, EditorHostResult } from "./editor/editor-host.js";
