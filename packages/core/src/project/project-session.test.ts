@@ -104,19 +104,9 @@ describe("ProjectSession", () => {
     };
     const pending = new Map([[mediaPath, bytes]]);
     const host1 = new FakeHost({ manifest, pending });
-    const gw = new InMemoryProjectGateway();
-    const session1 = new ProjectSession(host1, gw);
 
-    // saveAs to create a project ref
-    let capturedRef: ProjectRef | null = null;
-    const saveAsGw = new InMemoryProjectGateway({
-      saveAsFactory: (name) => {
-        const ref: ProjectRef = { id: "proj-1", name };
-        capturedRef = ref;
-        return ref;
-      },
-    });
     // Use one gateway for everything
+    let capturedRef: ProjectRef | null = null;
     const gw2 = new InMemoryProjectGateway({
       saveAsFactory: (name) => {
         const ref: ProjectRef = { id: "saved-proj", name };
@@ -208,6 +198,44 @@ describe("ProjectSession", () => {
     const ok = await session.saveAs();
     expect(ok).toBe(false);
     expect(session.getState().ref).toBeNull();
+  });
+
+  it("save with no ref delegates to saveAs and adopts ref (via newProject)", async () => {
+    const gw = new InMemoryProjectGateway();
+    const host = new FakeHost();
+    const session = new ProjectSession(host, gw);
+
+    const reset = await session.newProject(alwaysProceed);
+    expect(reset).toBe(true);
+    expect(session.getState().ref).toBeNull();
+
+    const ok = await session.save();
+    expect(ok).toBe(true);
+    expect(session.getState().ref).not.toBeNull();
+    expect(session.isDirty()).toBe(false);
+  });
+
+  it("saveAs rejects with clear error when media path not pending and no bound project", async () => {
+    const mediaPath = "media/orphan.mp4";
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [
+        {
+          id: "c1",
+          name: "orphan.mp4",
+          type: "video",
+          source: { kind: "project", relativePath: mediaPath },
+          duration: 2,
+        },
+      ],
+      folders: [],
+    };
+    // Fresh session — no bound, no pending
+    const host = new FakeHost({ manifest });
+    const gw = new InMemoryProjectGateway();
+    const session = new ProjectSession(host, gw);
+
+    await expect(session.saveAs()).rejects.toThrow(`saveAs: cannot source media "${mediaPath}"`);
   });
 
   it("saveAs copies already-persisted media from old bound", async () => {

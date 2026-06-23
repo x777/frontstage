@@ -25,9 +25,9 @@ export interface ProjectSessionState {
 }
 
 function manifestRelativePaths(manifest: MediaManifest): string[] {
-  return manifest.entries
-    .filter((e) => e.source.kind === "project")
-    .map((e) => (e.source as { kind: "project"; relativePath: string }).relativePath);
+  return manifest.entries.flatMap((e) =>
+    e.source.kind === "project" ? [e.source.relativePath] : []
+  );
 }
 
 export class ProjectSession {
@@ -119,6 +119,8 @@ export class ProjectSession {
         await newBound.media.writeMedia(path, pending.get(path)!);
       } else if (this.bound) {
         await newBound.media.writeMedia(path, await this.bound.media.readMedia(path));
+      } else {
+        throw new Error(`saveAs: cannot source media "${path}" (not pending and no bound project)`);
       }
     }
 
