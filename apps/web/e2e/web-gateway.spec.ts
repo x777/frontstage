@@ -109,3 +109,134 @@ test("WebMediaGateway: path guard rejects .. paths", async ({ page }) => {
   expect(result.evilError).toBeTruthy();
   expect(result.noMediaPrefixError).toBeTruthy();
 });
+
+// ── WebGateway tests ──────────────────────────────────────────────────────────
+
+test("WebGateway: pickSaveAs + bind + write/read project + media round-trip", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => !!(window as unknown as Record<string, unknown>).__webgateway,
+    { timeout: 15_000 },
+  );
+
+  const result = await page.evaluate(async () => {
+    type WG = typeof import("../src/web-gateway.js");
+    type IO = { writeProject: Function; readProject: Function };
+    const { WebGateway } = (window as unknown as { __webgateway: WG & IO }).__webgateway;
+    const { writeProject, readProject } = (window as unknown as { __webgateway: WG & IO }).__webgateway;
+
+    const root = await navigator.storage.getDirectory();
+    const opfsDir = await root.getDirectoryHandle("test-gw-" + Date.now(), { create: true });
+
+    const gw = new WebGateway({ pickDirectory: async () => opfsDir, dbName: "test-gw-" + Date.now() });
+
+    // pickSaveAs returns a ref
+    const ref = await gw.pickSaveAs("MyProject");
+    if (!ref) return { error: "pickSaveAs returned null" };
+
+    const hasHandle = "handle" in ref;
+    const hasId = typeof ref.id === "string" && ref.id.length > 0;
+    const hasName = ref.name === opfsDir.name;
+
+    // bind and write project
+    const doc = {
+      timeline: {
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        settingsConfigured: true,
+        tracks: [],
+      },
+      manifest: { items: {} },
+      generationLog: { entries: [] },
+    };
+
+    const bound1 = await gw.bind(ref);
+    await writeProject(bound1.store, doc);
+    await bound1.media.writeMedia("media/a.bin", new Uint8Array([10, 20, 30]));
+
+    // second bind + read back
+    const bound2 = await gw.bind(ref);
+    const readDoc = await readProject(bound2.store);
+    const readBytes = await bound2.media.readMedia("media/a.bin");
+
+    return {
+      hasHandle,
+      hasId,
+      hasName,
+      timelineFps: readDoc.timeline.fps,
+      timelineWidth: readDoc.timeline.width,
+      bytesArray: Array.from(readBytes),
+    };
+  });
+
+  if ("error" in result) throw new Error(result.error as string);
+  expect(result.hasHandle).toBe(true);
+  expect(result.hasId).toBe(true);
+  expect(result.hasName).toBe(true);
+  expect(result.timelineFps).toBe(30);
+  expect(result.timelineWidth).toBe(1920);
+  expect(result.bytesArray).toEqual([10, 20, 30]);
+});
+
+test("WebGateway: addRecent / listRecent persists across instances / removeRecent clears", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => !!(window as unknown as Record<string, unknown>).__webgateway,
+    { timeout: 15_000 },
+  );
+
+  const result = await page.evaluate(async () => {
+    type WG = typeof import("../src/web-gateway.js");
+    const { WebGateway } = (window as unknown as { __webgateway: WG }).__webgateway;
+
+    const root = await navigator.storage.getDirectory();
+    const opfsDir = await root.getDirectoryHandle("test-recent-" + Date.now(), { create: true });
+    const dbName = "test-recent-" + Date.now();
+
+    const gw1 = new WebGateway({ pickDirectory: async () => opfsDir, dbName });
+    const ref = await gw1.pickOpen();
+    if (!ref) return { error: "pickOpen returned null" };
+    await gw1.addRecent(ref);
+
+    // fresh gateway instance — same dbName
+    const gw2 = new WebGateway({ pickDirectory: async () => opfsDir, dbName });
+    const list = await gw2.listRecent();
+
+    const found = list.find((r) => r.id === ref.id);
+    const foundName = found?.name;
+    const foundHasHandle = found ? "handle" in found : false;
+
+    // removeRecent
+    await gw2.removeRecent(ref);
+    const listAfterRemove = await gw2.listRecent();
+    const stillPresent = listAfterRemove.some((r) => r.id === ref.id);
+
+    return { foundName, foundHasHandle, stillPresent, listLength: list.length };
+  });
+
+  if ("error" in result) throw new Error(result.error as string);
+  expect(result.listLength).toBeGreaterThanOrEqual(1);
+  expect(result.foundName).toBeTruthy();
+  expect(result.foundHasHandle).toBe(true);
+  expect(result.stillPresent).toBe(false);
+});
+
+test("WebGateway: pick-cancel resolves null", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => !!(window as unknown as Record<string, unknown>).__webgateway,
+    { timeout: 15_000 },
+  );
+
+  const result = await page.evaluate(async () => {
+    type WG = typeof import("../src/web-gateway.js");
+    const { WebGateway } = (window as unknown as { __webgateway: WG }).__webgateway;
+
+    const gw = new WebGateway({ pickDirectory: async () => null });
+    const ref = await gw.pickOpen();
+    return { isNull: ref === null };
+  });
+
+  expect(result.isNull).toBe(true);
+});
