@@ -4,6 +4,7 @@ export const RULER_HEIGHT = 24;
 export const DEFAULT_TRACK_HEIGHT = 50;
 export const TRIM_HANDLE_WIDTH = 4;
 export const INSERT_THRESHOLD = 10;
+export const TIMELINE_HEADER_WIDTH = 0;
 
 export interface TimelineGeometry {
   pixelsPerFrame: number;

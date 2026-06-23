@@ -6,6 +6,7 @@ import {
   makeGeometry,
   frameAtX,
   DEFAULT_TRACK_HEIGHT,
+  TIMELINE_HEADER_WIDTH,
 } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
@@ -69,7 +70,7 @@ export function App({ store, media, library }: AppProps) {
             const geom = makeGeometry({
               pixelsPerFrame: storeSnap.view.zoom,
               scrollX: storeSnap.view.scrollX,
-              headerWidth: 0,
+              headerWidth: TIMELINE_HEADER_WIDTH,
               trackHeights: storeSnap.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
               dropZoneHeight: 8,
             });
@@ -148,8 +149,8 @@ export function App({ store, media, library }: AppProps) {
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-            opacity: 0.9,
+            boxShadow: theme.shadow.lg,
+            opacity: theme.opacity.high,
           }}
         >
           {dragSnap.entry.name}

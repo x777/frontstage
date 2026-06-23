@@ -142,12 +142,14 @@ test("drag media item onto existing track creates a clip with one undo", async (
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
 
-  // Record clip count before drag
-  const beforeCount = await page.evaluate(() => {
-    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
+  // Record clip ids before drag
+  const beforeIds = await page.evaluate(() => {
+    type Clip = { id: string };
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
     const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
-    return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
+    return store.getSnapshot().timeline.tracks.flatMap(t => t.clips.map(c => c.id));
   });
+  const beforeCount = beforeIds.length;
 
   // Simulate the drag: pointerdown on media item, move over timeline, pointerup
   const startX = itemBox!.x + itemBox!.width / 2;
@@ -171,23 +173,16 @@ test("drag media item onto existing track creates a clip with one undo", async (
   });
   expect(afterCount).toBe(beforeCount + 1);
 
-  // The new clip should reference "clip.mp4"
-  const clipRef = await page.evaluate(() => {
-    type Clip = { mediaRef: string; startFrame: number };
+  // The newly-added clip must reference "clip.mp4" exactly
+  const newClipMediaRef = await page.evaluate((knownIds: string[]) => {
+    type Clip = { id: string; mediaRef: string };
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
     const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
-    for (const track of store.getSnapshot().timeline.tracks) {
-      for (const clip of track.clips) {
-        if (clip.mediaRef !== "clip.mp4" && !clip.mediaRef.startsWith("clip.mp4")) continue;
-        return clip.mediaRef;
-      }
-    }
-    // Return the last added clip's mediaRef
-    const tracks = store.getSnapshot().timeline.tracks;
-    const allClips = tracks.flatMap(t => t.clips);
-    return allClips[allClips.length - 1]?.mediaRef ?? null;
-  });
-  expect(clipRef).toBeTruthy();
+    const allClips = store.getSnapshot().timeline.tracks.flatMap(t => t.clips);
+    const newClip = allClips.find(c => !knownIds.includes(c.id));
+    return newClip?.mediaRef ?? null;
+  }, beforeIds);
+  expect(newClipMediaRef).toBe("clip.mp4");
 
   // canUndo should be true
   const canUndo = await page.evaluate(() => {

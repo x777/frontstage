@@ -41,7 +41,11 @@ export const theme = {
     medium: "var(--opacity-medium)",
     strong: "var(--opacity-strong)",
     prominent: "var(--opacity-prominent)",
+    high: "var(--opacity-high)",
     opaque: "var(--opacity-opaque)",
+  },
+  shadow: {
+    lg: "var(--shadow-lg)",
   },
   radius: {
     xs: "var(--radius-xs)",

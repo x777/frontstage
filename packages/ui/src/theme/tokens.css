@@ -40,6 +40,7 @@
   --opacity-medium: 0.35;
   --opacity-strong: 0.55;
   --opacity-prominent: 0.80;
+  --opacity-high: 0.9;
   --opacity-opaque: 1;
 
   /* Radius (px) */
@@ -109,6 +110,9 @@
   /* Timeline */
   --color-timeline-trim-handle: rgba(0, 0, 0, 0.25);
   --color-timeline-clip-label: rgba(255, 255, 255, 0.85);
+
+  /* Shadows */
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
 
   /* Overlay tokens */
   --size-overlay-handle: 10px;
