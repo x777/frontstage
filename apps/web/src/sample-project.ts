@@ -1,5 +1,5 @@
 import type { Timeline } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
+import { MediaLibrary } from "./media-library.js";
 
 export function sampleTimeline(): Timeline {
   const fps = 30;
@@ -54,10 +54,14 @@ export function sampleTimeline(): Timeline {
   };
 }
 
-export const webMediaSource: MediaByteSource = {
-  async open(ref: string): Promise<Blob> {
-    const r = await fetch("/" + ref);
-    if (!r.ok) throw new Error(`fetch ${ref}: ${r.status}`);
-    return r.blob();
-  },
-};
+export async function buildSampleLibrary(): Promise<MediaLibrary> {
+  const lib = new MediaLibrary();
+  await lib.seed("clip.mp4", "/clip.mp4", {
+    id: "clip.mp4",
+    name: "clip.mp4",
+    type: "video",
+    source: { kind: "external", absolutePath: "clip.mp4" },
+    duration: 3,
+  });
+  return lib;
+}
