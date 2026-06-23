@@ -18,6 +18,7 @@ export * from "./project/memory-store.js";
 export * from "./project/project-io.js";
 export * from "./project/gateway.js";
 export * from "./project/memory-gateway.js";
+export * from "./project/project-session.js";
 export * from "./mat2d.js";
 export * from "./render-plan.js";
 export * from "./fit-transform.js";
