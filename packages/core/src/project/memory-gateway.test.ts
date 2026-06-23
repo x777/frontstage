@@ -24,6 +24,15 @@ describe("InMemoryMediaGateway", () => {
     src[0] = 0;
     expect(Array.from(await m.readMedia("media/x"))).toEqual([9, 9]);
   });
+  it("readMedia returns a copy (no aliasing on read)", async () => {
+    const m = new InMemoryMediaGateway();
+    const bytes = new Uint8Array([5, 5, 5]);
+    await m.writeMedia("media/y", bytes);
+    const read1 = await m.readMedia("media/y");
+    read1[0] = 99;
+    const read2 = await m.readMedia("media/y");
+    expect(Array.from(read2)).toEqual([5, 5, 5]);
+  });
 });
 
 describe("InMemoryProjectGateway", () => {
@@ -69,5 +78,17 @@ describe("InMemoryProjectGateway", () => {
     expect(ref).toBeNull();
     const recent = await gw.listRecent();
     expect(recent).toHaveLength(0);
+  });
+  it("removeRecent removes a project from the recent list", async () => {
+    const gw = new InMemoryProjectGateway();
+    const a = await gw.pickSaveAs("A");
+    const b = await gw.pickSaveAs("B");
+    await gw.addRecent(a!);
+    await gw.addRecent(b!);
+    let recent = await gw.listRecent();
+    expect(recent.map((r) => r.id)).toEqual([b!.id, a!.id]);
+    await gw.removeRecent(a!);
+    recent = await gw.listRecent();
+    expect(recent.map((r) => r.id)).toEqual([b!.id]);
   });
 });

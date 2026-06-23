@@ -11,7 +11,7 @@ export class InMemoryMediaGateway implements MediaGateway {
   async readMedia(relativePath: string): Promise<Uint8Array> {
     const data = this.map.get(relativePath);
     if (data === undefined) throw new Error("media not found: " + relativePath);
-    return data;
+    return data.slice();
   }
 
   async hasMedia(relativePath: string): Promise<boolean> {
@@ -70,5 +70,9 @@ export class InMemoryProjectGateway implements ProjectGateway {
         return entry ? { id, name: entry.name } : null;
       })
       .filter((ref) => ref !== null) as ProjectRef[];
+  }
+
+  async removeRecent(ref: ProjectRef): Promise<void> {
+    this.recentIds = this.recentIds.filter((id) => id !== ref.id);
   }
 }

@@ -49,10 +49,12 @@ export class ProjectSession {
     this.savedManifest = host.getManifest();
   }
 
+  // Returns a fresh object each call; callers using useSyncExternalStore must memoize/select fields.
   getState(): ProjectSessionState {
     return { ...this.state };
   }
 
+  // Fires on lifecycle changes only (new/open/save/saveAs); UI must poll isDirty() via EditorStore/MediaLibrary subscription for dirty indicator.
   subscribe(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
@@ -62,6 +64,7 @@ export class ProjectSession {
     for (const cb of this.listeners) cb();
   }
 
+  // generationLog intentionally excluded from dirty — only timeline + manifest.
   isDirty(): boolean {
     return (
       this.host.getTimeline() !== this.savedTimeline ||

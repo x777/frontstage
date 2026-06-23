@@ -20,4 +20,6 @@ export interface ProjectGateway {
   bind(ref: ProjectRef): Promise<BoundProject>;
   listRecent(): Promise<ProjectRef[]>;
   addRecent(ref: ProjectRef): Promise<void>;
+  /** drop a project from the recent list — e.g. a stale/denied handle */
+  removeRecent(ref: ProjectRef): Promise<void>;
 }
