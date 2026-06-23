@@ -303,10 +303,12 @@ test("inspector: keyframe lanes — opacity toggle adds/removes keyframe (one un
   expect(afterUndo.canUndo).toBe(false);
 });
 
-test("inspector: keyframe lanes — two opacity keyframes interpolate", async ({ page }) => {
+test("inspector: keyframe lanes — two opacity keyframes interpolate (preview pixel)", async ({ page }) => {
   await waitForApp(page);
+  // Wait for engine ready so pixel reads are valid
+  await page.waitForSelector('[data-testid="preview-canvas"][data-engine-ready="1"]', { timeout: 10_000 });
 
-  // Select clip-1 (durationFrames=90, startFrame=0)
+  // Select clip-1 (durationFrames=90, startFrame=0, mediaType=video)
   await page.evaluate(() => {
     const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
     store.select(["clip-1"]);
@@ -314,21 +316,19 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate", async ({
 
   await expect(page.locator('[data-testid="kf-toggle-opacity"]')).toBeVisible({ timeout: 5_000 });
 
-  // Add first keyframe at frame 0, opacity=1 (default)
+  // Set kf at frame 0: opacity=1 (toggle adds current value via opacityAt)
   await page.evaluate(() => {
     const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
     store.setPlayhead(0);
   });
   await page.locator('[data-testid="kf-toggle-opacity"]').click();
 
-  // Change opacity to 0.2 via setClipPropertyCommand equivalent, then add 2nd kf at frame 60
+  // Set kf at frame 60: opacity≈0 — dispatch directly so the value is clearly 0
   await page.evaluate(() => {
     const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
-    store.setPlayhead(60);
-    // Dispatch setKeyframeCommand directly: add opacity kf at offset 60, value 0.2
     store.dispatch({
       label: "Set Keyframe",
-      coalesceKey: "kf-clip-1-opacity",
+      coalesceKey: "kf-clip-1-opacity-end",
       apply(timeline: { tracks: Array<{ clips: Array<{ id: string; opacityTrack?: { keyframes: Keyframe[] } }> }> }) {
         return {
           ...timeline,
@@ -338,7 +338,7 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate", async ({
               if (clip.id !== "clip-1") return clip;
               const existing = clip.opacityTrack ?? { keyframes: [] };
               const kfs = existing.keyframes.filter((k) => k.frame !== 60);
-              kfs.push({ frame: 60, value: 0.2, interpolationOut: "linear" });
+              kfs.push({ frame: 60, value: 0, interpolationOut: "linear" });
               kfs.sort((a, b) => a.frame - b.frame);
               return { ...clip, opacityTrack: { keyframes: kfs } };
             }),
@@ -348,7 +348,7 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate", async ({
     });
   });
 
-  // Verify 2 keyframes
+  // Verify 2 keyframes with correct values
   const kfCount = await page.evaluate(() => {
     const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
@@ -356,21 +356,36 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate", async ({
   });
   expect(kfCount).toBe(2);
 
-  // Sample opacityAt at frame 30 — should be between 1 and 0.2 (≈ 0.6)
-  const interpolatedOpacity = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
-    const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
-    // Manual linear interpolation check: frame 30 is midpoint between 0 and 60
-    // kf[0].value=1 at frame 0, kf[1].value=0.2 at frame 60 → at 30: 1 + (0.2-1)*0.5 = 0.6
-    const track = clip.opacityTrack!;
-    const kfs = track.keyframes;
-    const t = (30 - kfs[0]!.frame) / (kfs[1]!.frame - kfs[0]!.frame);
-    const a = kfs[0]!.value as number;
-    const b = kfs[1]!.value as number;
-    return a + (b - a) * t;
-  });
-  expect(interpolatedOpacity).toBeGreaterThan(0.2);
-  expect(interpolatedOpacity).toBeLessThan(1);
+  // Helper: seek playhead and read the center pixel after the engine settles
+  const readPixelAtFrame = async (frame: number): Promise<[number, number, number, number]> => {
+    await page.evaluate((f: number) => {
+      const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+      store.setPlayhead(f);
+    }, frame);
+    // Give the engine time to seek and render the frame
+    await page.waitForTimeout(600);
+    return page.evaluate(async () => {
+      const canvas = document.querySelector('[data-testid="preview-canvas"]') as
+        | (HTMLCanvasElement & { __readPixel?: (x: number, y: number) => Promise<[number, number, number, number]> })
+        | null;
+      if (!canvas?.__readPixel) return [0, 0, 0, 0] as [number, number, number, number];
+      return canvas.__readPixel(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2));
+    });
+  };
+
+  // AT frame 0: opacity=1 → pixel should be the video frame's color (non-zero)
+  const pixelAtKf0 = await readPixelAtFrame(0);
+
+  // MID frame 30: linear interpolation → opacity≈0.5 → pixel alpha/brightness is intermediate
+  const pixelAtMid = await readPixelAtFrame(30);
+
+  // The two readings must differ: interpolation changed the rendered opacity between them.
+  // Compare summed RGB brightness — at kf0 (opacity 1) it is higher than at mid (opacity 0.5).
+  const brightnessAt0 = pixelAtKf0[0] + pixelAtKf0[1] + pixelAtKf0[2];
+  const brightnessAtMid = pixelAtMid[0] + pixelAtMid[1] + pixelAtMid[2];
+  // Midpoint should be distinctly dimmer than the fully-opaque frame.
+  // Tolerance: allow up to 80% of the full brightness (i.e., must differ by at least 20%).
+  expect(brightnessAtMid).toBeLessThan(brightnessAt0 * 0.8);
 });
 
 test("inspector: keyframe lanes — drag keyframe moves it (one undo)", async ({ page }) => {

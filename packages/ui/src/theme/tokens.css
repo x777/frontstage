@@ -38,6 +38,7 @@
   --opacity-muted: 0.15;
   --opacity-moderate: 0.25;
   --opacity-medium: 0.35;
+  --opacity-disabled: 0.40;
   --opacity-strong: 0.55;
   --opacity-prominent: 0.80;
   --opacity-high: 0.9;
@@ -115,6 +116,12 @@
 
   /* Shadows */
   --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+  /* Keyframe lane tokens */
+  --size-kf-lane: 28px;
+  --size-kf-diamond: 10px;
+  --size-kf-toggle: 18px;
+  --size-kf-label: 52px;
 
   /* Overlay tokens */
   --size-overlay-handle: 10px;

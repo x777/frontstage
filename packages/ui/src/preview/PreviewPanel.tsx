@@ -89,14 +89,12 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
           prevTimelineRef.current = snap.timeline;
           prevPlayheadRef.current = snap.playhead; // always update — prevents stale seek on next emit
 
-          if (newSig !== oldSig) {
-            // structural change: tracks/clips added/removed or mediaRef changed
-            await engine.setTimeline(snap.timeline);
-          } else {
-            // property-only change: seek if not playing
-            if (!engine.isPlaying && snap.playhead !== engine.currentFrame) {
-              await engine.seek(snap.playhead, "exact");
-            }
+          // Always push the updated timeline so coordinator.timeline stays current.
+          // reconcile() is cheap when sources are unchanged (property-only diff).
+          await engine.setTimeline(snap.timeline);
+          if (newSig === oldSig && !engine.isPlaying) {
+            // property-only change: re-render at the current playhead with new properties
+            await engine.seek(snap.playhead, "exact");
           }
         } else if (snap.playhead !== prevPlayhead) {
           prevPlayheadRef.current = snap.playhead;

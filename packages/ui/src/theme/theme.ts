@@ -39,6 +39,7 @@ export const theme = {
     muted: "var(--opacity-muted)",
     moderate: "var(--opacity-moderate)",
     medium: "var(--opacity-medium)",
+    disabled: "var(--opacity-disabled)",
     strong: "var(--opacity-strong)",
     prominent: "var(--opacity-prominent)",
     high: "var(--opacity-high)",
@@ -110,6 +111,10 @@ export const theme = {
     mediaItemMin: "var(--size-media-item-min)",
     inspectorLabel: "var(--size-inspector-label)",
     inspectorValue: "var(--size-inspector-value)",
+    kfLane: "var(--size-kf-lane)",
+    kfDiamond: "var(--size-kf-diamond)",
+    kfToggle: "var(--size-kf-toggle)",
+    kfLabel: "var(--size-kf-label)",
   },
   overlay: {
     transformBorder: "var(--color-overlay-transform-border)",

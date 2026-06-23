@@ -12,9 +12,8 @@ import {
 import type { KeyframeValueMap } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 
-const LANE_HEIGHT = 28;
-const DIAMOND_HALF = 5;
-const PLAYHEAD_HALF = 4;
+// Mirrors --size-kf-diamond; needed as a number for hit-test geometry.
+const DIAMOND_PX = 10;
 
 type Prop = "opacity" | "rotation" | "scale" | "position" | "crop" | "volume";
 
@@ -68,14 +67,11 @@ const VOLUME_PROP: PropDef<"volumeTrack"> = {
   prop: "volume",
   trackKey: "volumeTrack",
   label: "Volume",
-  sample: (clip) => {
-    const track = clip.volumeTrack;
-    if (track && track.keyframes.length > 0) {
-      return 0 as never;
-    }
-    return 0 as never;
-  },
+  sample: () => 0 as never,
 };
+
+const VISUAL_TYPES = new Set(["video", "image", "text", "lottie"]);
+const AUDIO_TYPES = new Set(["audio", "video"]);
 
 export interface KeyframeLanesProps {
   clip: Clip;
@@ -84,9 +80,6 @@ export interface KeyframeLanesProps {
 }
 
 export function KeyframeLanes({ clip, playhead, store }: KeyframeLanesProps) {
-  const VISUAL_TYPES = new Set(["video", "image", "text", "lottie"]);
-  const AUDIO_TYPES = new Set(["audio", "video"]);
-
   const isVisual = VISUAL_TYPES.has(clip.mediaType);
   const hasAudio = AUDIO_TYPES.has(clip.mediaType);
 
@@ -189,7 +182,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
       let hitKf: { frame: number; value: unknown } | null = null;
       for (const kf of keyframes) {
         const kfX = xForKfFrame(kf.frame, laneWidth);
-        if (Math.abs(localX - kfX) <= DIAMOND_HALF * 2) {
+        if (Math.abs(localX - kfX) <= DIAMOND_PX) {
           hitKf = kf as { frame: number; value: unknown };
           break;
         }
@@ -269,8 +262,8 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
         onClick={handleToggle}
         title={hasKfAtOffset ? `Remove ${def.label} keyframe` : `Add ${def.label} keyframe`}
         style={{
-          width: 18,
-          height: 18,
+          width: theme.size.kfToggle,
+          height: theme.size.kfToggle,
           flexShrink: 0,
           background: hasKfAtOffset ? theme.accent.timecode : theme.bg.raised,
           border: `${theme.borderWidth.hairline} solid ${hasKfAtOffset ? theme.accent.timecode : theme.border.primary}`,
@@ -280,14 +273,14 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
           alignItems: "center",
           justifyContent: "center",
           padding: 0,
-          opacity: withinClip ? 1 : 0.4,
+          opacity: withinClip ? theme.opacity.opaque : theme.opacity.disabled,
         }}
       >
         {/* Diamond icon */}
         <svg width="8" height="8" viewBox="0 0 8 8">
           <polygon
             points="4,0 8,4 4,8 0,4"
-            fill={hasKfAtOffset ? "var(--bg-base)" : "var(--text-muted)"}
+            fill={hasKfAtOffset ? theme.bg.base : theme.text.muted}
           />
         </svg>
       </button>
@@ -297,7 +290,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
         style={{
           fontSize: theme.fontSize.xs,
           color: theme.text.secondary,
-          minWidth: "52px",
+          minWidth: theme.size.kfLabel,
           flexShrink: 0,
         }}
       >
@@ -315,7 +308,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
         style={{
           position: "relative",
           flex: 1,
-          height: LANE_HEIGHT,
+          height: theme.size.kfLane,
           background: theme.bg.raised,
           borderRadius: theme.radius.xs,
           border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
@@ -335,8 +328,8 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
             top: 0,
             bottom: 0,
             left: `${playheadRatio * 100}%`,
-            width: 1,
-            background: "var(--accent-timecode)",
+            width: theme.borderWidth.thin,
+            background: theme.accent.timecode,
             transform: "translateX(-50%)",
             pointerEvents: "none",
           }}
@@ -355,9 +348,9 @@ function KfDiamond({ frame, dur }: { frame: number; dur: number }) {
         top: "50%",
         left: `${ratio * 100}%`,
         transform: "translate(-50%, -50%) rotate(45deg)",
-        width: DIAMOND_HALF * 2,
-        height: DIAMOND_HALF * 2,
-        background: "var(--accent-timecode)",
+        width: theme.size.kfDiamond,
+        height: theme.size.kfDiamond,
+        background: theme.accent.timecode,
         cursor: "ew-resize",
         pointerEvents: "auto",
       }}
