@@ -4,7 +4,19 @@ import {
   RULER_HEIGHT,
   makeGeometry,
   frameAtX,
+  xForFrame,
+  trackAtY,
   timelineTotalFrames,
+  clipTypesCompatible,
+  collectTargets,
+  findSnap,
+  newSnapState,
+  moveDelta,
+  trimLeftDelta,
+  trimRightDelta,
+  moveClipCommand,
+  trimClipCommand,
+  splitClipCommand,
 } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
@@ -14,6 +26,7 @@ import { hitTest } from "./pointer.js";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 40;
+const DRAG_THRESHOLD = 3;
 
 export interface TimelinePanelProps {
   store: EditorStore;
@@ -45,6 +58,7 @@ function resolvePalette(el: Element): TimelinePalette {
 export function TimelinePanel({ store }: TimelinePanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const snapLineXRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -72,7 +86,6 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
 
       const snap = store.getSnapshot();
       const { view, timeline } = snap;
-      // EditorView.zoom is defined as pixels-per-frame, matching makeGeometry's pixelsPerFrame
       const geom = makeGeometry({
         pixelsPerFrame: view.zoom,
         scrollX: view.scrollX,
@@ -80,7 +93,7 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
         trackHeights: timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette);
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current);
     }
 
     function scheduleDraw() {
@@ -122,8 +135,33 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
     // Store subscription — rAF-coalesced redraw
     const unsub = store.subscribe(scheduleDraw);
 
-    // pointer: Task 4 — select, scrub, zoom, scroll
+    // pointer: scrub + drag gestures (move, trim)
     let scrubbing = false;
+
+    // Drag state (move or trim)
+    type DragKind = "move" | "trim-left" | "trim-right";
+    type DragState = {
+      kind: DragKind;
+      clipId: string;
+      trackIndex: number;
+      pointerId: number;
+      downX: number;
+      downY: number;
+      started: boolean;
+      // move
+      grabOffsetFrames: number;
+      originalFrame: number;
+      originalTrackIndex: number;
+      // trim
+      originalDuration: number;
+      originalTrimStart: number;
+      originalTrimEnd: number;
+      originalStartFrame: number;
+      hasNoSourceMedia: boolean;
+      snapState: ReturnType<typeof newSnapState>;
+    } | null;
+
+    let drag: DragState = null;
 
     function getGeomAndCoords(e: PointerEvent | WheelEvent): { geom: ReturnType<typeof makeGeometry>; x: number; y: number } | null {
       const cv = canvasRef.current;
@@ -155,25 +193,222 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
         cv.setPointerCapture(e.pointerId);
         store.setPlayhead(frameAtX(geom, x));
       } else if (hit.kind === "clip") {
+        // Always select on pointerdown
         store.select([hit.clipId]);
+
+        const tracks = snap.timeline.tracks;
+        const track = tracks[hit.trackIndex];
+        const clip = track?.clips.find((c) => c.id === hit.clipId);
+        if (!clip) return;
+
+        const hasNoSourceMedia = clip.mediaType === "image" || clip.mediaType === "text";
+
+        if (hit.edge === "left" || hit.edge === "right") {
+          // Start a trim drag
+          cv.setPointerCapture(e.pointerId);
+          drag = {
+            kind: hit.edge === "left" ? "trim-left" : "trim-right",
+            clipId: hit.clipId,
+            trackIndex: hit.trackIndex,
+            pointerId: e.pointerId,
+            downX: x,
+            downY: y,
+            started: false,
+            grabOffsetFrames: 0,
+            originalFrame: clip.startFrame,
+            originalTrackIndex: hit.trackIndex,
+            originalDuration: clip.durationFrames,
+            originalTrimStart: clip.trimStartFrame,
+            originalTrimEnd: clip.trimEndFrame,
+            originalStartFrame: clip.startFrame,
+            hasNoSourceMedia,
+            snapState: newSnapState(),
+          };
+        } else {
+          // Clip body — start a move drag (DRAG_THRESHOLD before dispatching)
+          cv.setPointerCapture(e.pointerId);
+          const cursorFrame = frameAtX(geom, x);
+          drag = {
+            kind: "move",
+            clipId: hit.clipId,
+            trackIndex: hit.trackIndex,
+            pointerId: e.pointerId,
+            downX: x,
+            downY: y,
+            started: false,
+            grabOffsetFrames: cursorFrame - clip.startFrame,
+            originalFrame: clip.startFrame,
+            originalTrackIndex: hit.trackIndex,
+            originalDuration: clip.durationFrames,
+            originalTrimStart: clip.trimStartFrame,
+            originalTrimEnd: clip.trimEndFrame,
+            originalStartFrame: clip.startFrame,
+            hasNoSourceMedia,
+            snapState: newSnapState(),
+          };
+        }
       } else {
         store.select([]);
       }
     }
 
     function onPointerMove(e: PointerEvent) {
-      if (!scrubbing) return;
+      if (scrubbing) {
+        const coords = getGeomAndCoords(e);
+        if (!coords) return;
+        const { geom, x } = coords;
+        store.setPlayhead(frameAtX(geom, x));
+        return;
+      }
+
+      if (!drag) return;
+
       const coords = getGeomAndCoords(e);
       if (!coords) return;
-      const { geom, x } = coords;
-      store.setPlayhead(frameAtX(geom, x));
+      const { geom, x, y } = coords;
+
+      const dx = x - drag.downX;
+      if (!drag.started && Math.abs(dx) < DRAG_THRESHOLD) return;
+      drag.started = true;
+
+      const snap = store.getSnapshot();
+      const tracks = snap.timeline.tracks;
+      const playheadFrame = snap.playhead;
+
+      if (drag.kind === "move") {
+        const cursorFrame = frameAtX(geom, x);
+        const targets = collectTargets(tracks, {
+          playheadFrame,
+          excludeClipIds: new Set([drag.clipId]),
+          includePlayhead: true,
+        });
+        const snapResult = findSnap({
+          position: cursorFrame - drag.grabOffsetFrames,
+          probeOffsets: [0, drag.originalDuration],
+          targets,
+          state: drag.snapState,
+          baseThresholdPx: 8,
+          pixelsPerFrame: geom.pixelsPerFrame,
+        });
+        const delta = moveDelta({
+          cursorFrame,
+          grabOffsetFrames: drag.grabOffsetFrames,
+          originalFrame: drag.originalFrame,
+          minOriginalFrame: drag.originalFrame,
+          snap: snapResult,
+        });
+
+        // Determine target track (clamp to compatible)
+        let toTrack = trackAtY(geom, y);
+        const srcTrackType = tracks[drag.originalTrackIndex]?.type;
+        const destTrack = tracks[toTrack];
+        if (!destTrack || !srcTrackType || !clipTypesCompatible(destTrack.type, srcTrackType)) {
+          toTrack = drag.originalTrackIndex;
+        }
+
+        store.dispatch(moveClipCommand(drag.clipId, toTrack, drag.originalFrame + delta, "move-" + drag.clipId));
+
+        // Update snap line (content px → screen px)
+        if (snapResult) {
+          snapLineXRef.current = xForFrame(geom, snapResult.frame);
+        } else {
+          snapLineXRef.current = null;
+        }
+        scheduleDraw();
+      } else if (drag.kind === "trim-left") {
+        const cursorFrame = frameAtX(geom, x);
+        const targets = collectTargets(tracks, {
+          playheadFrame,
+          excludeClipIds: new Set([drag.clipId]),
+          includePlayhead: true,
+        });
+        const snapResult = findSnap({
+          position: cursorFrame,
+          probeOffsets: [0],
+          targets,
+          state: drag.snapState,
+          baseThresholdPx: 8,
+          pixelsPerFrame: geom.pixelsPerFrame,
+        });
+        const snappedStartFrame = snapResult ? snapResult.frame : cursorFrame;
+        const delta = trimLeftDelta({
+          snappedStartFrame,
+          originalStartFrame: drag.originalStartFrame,
+          originalDuration: drag.originalDuration,
+          originalTrimStart: drag.originalTrimStart,
+          hasNoSourceMedia: drag.hasNoSourceMedia,
+        });
+        store.dispatch(trimClipCommand(drag.clipId, "left", delta, "trim-" + drag.clipId));
+
+        if (snapResult) {
+          snapLineXRef.current = xForFrame(geom, snapResult.frame);
+        } else {
+          snapLineXRef.current = null;
+        }
+        scheduleDraw();
+      } else if (drag.kind === "trim-right") {
+        const cursorFrame = frameAtX(geom, x);
+        const targets = collectTargets(tracks, {
+          playheadFrame,
+          excludeClipIds: new Set([drag.clipId]),
+          includePlayhead: true,
+        });
+        const snapResult = findSnap({
+          position: cursorFrame,
+          probeOffsets: [0],
+          targets,
+          state: drag.snapState,
+          baseThresholdPx: 8,
+          pixelsPerFrame: geom.pixelsPerFrame,
+        });
+        const snappedEndFrame = snapResult ? snapResult.frame : cursorFrame;
+        const delta = trimRightDelta({
+          snappedEndFrame,
+          originalStartFrame: drag.originalStartFrame,
+          originalDuration: drag.originalDuration,
+          originalTrimEnd: drag.originalTrimEnd,
+          hasNoSourceMedia: drag.hasNoSourceMedia,
+        });
+        store.dispatch(trimClipCommand(drag.clipId, "right", delta, "trim-" + drag.clipId));
+
+        if (snapResult) {
+          snapLineXRef.current = xForFrame(geom, snapResult.frame);
+        } else {
+          snapLineXRef.current = null;
+        }
+        scheduleDraw();
+      }
     }
 
     function onPointerUpOrCancel(e: PointerEvent) {
-      if (!scrubbing) return;
-      scrubbing = false;
-      const cv = canvasRef.current;
-      if (cv) cv.releasePointerCapture(e.pointerId);
+      if (scrubbing) {
+        scrubbing = false;
+        const cv = canvasRef.current;
+        if (cv) cv.releasePointerCapture(e.pointerId);
+        return;
+      }
+
+      if (drag && drag.pointerId === e.pointerId) {
+        drag = null;
+        snapLineXRef.current = null;
+        const cv = canvasRef.current;
+        if (cv) cv.releasePointerCapture(e.pointerId);
+        scheduleDraw();
+      }
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "s" || e.key === "b" || e.key === "S" || e.key === "B") {
+        const snap = store.getSnapshot();
+        const playhead = snap.playhead;
+        for (const track of snap.timeline.tracks) {
+          for (const clip of track.clips) {
+            if (snap.selection.has(clip.id) && playhead > clip.startFrame && playhead < clip.startFrame + clip.durationFrames) {
+              store.dispatch(splitClipCommand(clip.id, playhead, "split-" + clip.id + "-" + playhead));
+            }
+          }
+        }
+      }
     }
 
     function onWheel(e: WheelEvent) {
@@ -204,6 +439,8 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
     canvas.addEventListener("pointerup", onPointerUpOrCancel);
     canvas.addEventListener("pointercancel", onPointerUpOrCancel);
     canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.setAttribute("tabindex", "0");
+    canvas.addEventListener("keydown", onKeyDown);
 
     return () => {
       aborted = true;
@@ -218,6 +455,7 @@ export function TimelinePanel({ store }: TimelinePanelProps) {
       canvas.removeEventListener("pointerup", onPointerUpOrCancel);
       canvas.removeEventListener("pointercancel", onPointerUpOrCancel);
       canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("keydown", onKeyDown);
     };
   }, [store]); // eslint-disable-line react-hooks/exhaustive-deps
 

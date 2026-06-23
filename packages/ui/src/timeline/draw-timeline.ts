@@ -92,13 +92,15 @@ function formatTimecode(frame: number, fps: number): string {
 /**
  * Pure canvas draw — no store, DOM, or var() access.
  * All colors come from `palette` (pre-resolved from getComputedStyle).
+ * snapLineX: optional screen-px x for a snap indicator vertical line.
  */
 export function drawTimeline(
   ctx: CanvasRenderingContext2D,
   state: EditorState,
   geom: TimelineGeometry,
   size: { width: number; height: number; dpr: number },
-  palette: TimelinePalette
+  palette: TimelinePalette,
+  snapLineX: number | null = null
 ): void {
   const { width, height, dpr } = size;
 
@@ -252,5 +254,17 @@ export function drawTimeline(
   if (phX >= 0 && phX <= width) {
     ctx.fillStyle = palette.accentTimecode;
     ctx.fillRect(phX, 0, 2, height);
+  }
+
+  // ── Snap indicator ────────────────────────────────────────────────────────────
+  if (snapLineX !== null) {
+    const sx = Math.round(snapLineX);
+    if (sx >= 0 && sx <= width) {
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = palette.accentPrimary;
+      ctx.fillRect(sx, RULER_HEIGHT, 1, height - RULER_HEIGHT);
+      ctx.restore();
+    }
   }
 }

@@ -323,3 +323,419 @@ test("ctrl+wheel changes zoom; plain wheel changes scrollX", async ({ page }) =>
   });
   expect(scrollAfter).toBeGreaterThan(scrollBefore);
 });
+
+// ── Task 5: move, trim, split ────────────────────────────────────────────────
+// Geometry: zoom=10 (10px/frame), startFrame=0, durationFrames=90, scrollX=0
+//   clip starts at x=0, ends at x=900, body center at x=450, y=49
+//   TRIM_HANDLE_WIDTH=4 → left edge 0–4px, right edge 896–900px
+
+type FullStoreProxy = {
+  getSnapshot(): {
+    selection: ReadonlySet<string>;
+    playhead: number;
+    view: { zoom: number; scrollX: number };
+    timeline: {
+      tracks: Array<{
+        id: string;
+        clips: Array<{
+          id: string;
+          startFrame: number;
+          durationFrames: number;
+          trimStartFrame: number;
+          trimEndFrame: number;
+        }>;
+      }>;
+    };
+  };
+  select(ids: string[]): void;
+  setPlayhead(frame: number): void;
+  setZoom(z: number): void;
+  dispatch(cmd: unknown): void;
+  undo(): void;
+  canUndo(): boolean;
+};
+
+function getFullStore(win: Window): FullStoreProxy {
+  return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+}
+
+async function setupZoom10(page: import("@playwright/test").Page): Promise<{
+  canvas: import("@playwright/test").Locator;
+  box: { x: number; y: number; width: number; height: number };
+}> {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.reload();
+  const canvas = page.locator('[data-testid="timeline-canvas"]');
+  await expect(canvas).toBeVisible({ timeout: 10_000 });
+  await expect.poll(
+    () => page.evaluate(() => {
+      const cv = document.querySelector('[data-testid="timeline-canvas"]') as HTMLCanvasElement | null;
+      return cv ? cv.width : 0;
+    }),
+    { timeout: 5_000 },
+  ).toBeGreaterThan(0);
+  await page.waitForTimeout(150);
+
+  // Set zoom=10 so 1 frame = 10px (cleaner math)
+  await page.evaluate(() => {
+    const store = getFullStore(window);
+    store.setZoom(10);
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      setZoom(z: number): void;
+    };
+  });
+  await page.waitForTimeout(100);
+
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  return { canvas, box: box! };
+}
+
+test("move: drag clip body changes startFrame; one undo restores", async ({ page }) => {
+  const { box } = await setupZoom10(page);
+
+  // At zoom=10: clip body center is at ~x=450 in canvas CSS coords.
+  // We drag 50px right = 5 frames right.
+  // Grab from middle of clip (frame 45, grabOffsetFrames=45)
+  // Drag to x=500 → cursorFrame=50 → startFrame = 50-45 = 5
+  const ZOOM = 10;
+  const START_FRAME = 0;
+  const GRAB_FRAME = 45; // middle of clip (90 frames)
+  const DROP_X = 500;   // cursorFrame = 50 → startFrame = 50 - 45 = 5
+
+  const clipBodyX = box.x + GRAB_FRAME * ZOOM;
+  const clipBodyY = box.y + CLIP_Y;
+
+  // Record original clip id
+  const origState = await page.evaluate(() => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    const clip = snap.timeline.tracks[0]!.clips[0]!;
+    return { clipId: clip.id, startFrame: clip.startFrame };
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number }> }> };
+      };
+    };
+  });
+  expect(origState.startFrame).toBe(START_FRAME);
+
+  // Perform drag: down, move past threshold, move to target, up
+  await page.mouse.move(clipBodyX, clipBodyY);
+  await page.mouse.down();
+  await page.mouse.move(clipBodyX + 5, clipBodyY); // cross DRAG_THRESHOLD
+  await page.mouse.move(box.x + DROP_X, clipBodyY);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const afterMove = await page.evaluate((clipId: string) => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    for (const track of snap.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { startFrame: clip.startFrame, canUndo: store.canUndo() };
+    }
+    return null;
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number }> }> };
+        selection: ReadonlySet<string>;
+      };
+      canUndo(): boolean;
+    };
+  }, origState.clipId);
+
+  expect(afterMove).not.toBeNull();
+  // cursorFrame=50 - grabOffsetFrames=45 = 5
+  expect(afterMove!.startFrame).toBeGreaterThan(0);
+  expect(afterMove!.canUndo).toBe(true);
+
+  // ONE undo should restore original startFrame
+  await page.evaluate(() => {
+    const store = getFullStore(window);
+    store.undo();
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      undo(): void;
+    };
+  });
+  await page.waitForTimeout(100);
+
+  const afterUndo = await page.evaluate((clipId: string) => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    for (const track of snap.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { startFrame: clip.startFrame };
+    }
+    return null;
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number }> }> };
+      };
+    };
+  }, origState.clipId);
+
+  expect(afterUndo).not.toBeNull();
+  expect(afterUndo!.startFrame).toBe(START_FRAME);
+});
+
+test("move: drag near playhead snaps exactly to playhead frame", async ({ page }) => {
+  const { box } = await setupZoom10(page);
+
+  const ZOOM = 10;
+  const PLAYHEAD_FRAME = 20;
+
+  // Set playhead to frame 20
+  await page.evaluate((ph: number) => {
+    const store = getFullStore(window);
+    store.setPlayhead(ph);
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      setPlayhead(f: number): void;
+    };
+  }, PLAYHEAD_FRAME);
+  await page.waitForTimeout(50);
+
+  const origState = await page.evaluate(() => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    const clip = snap.timeline.tracks[0]!.clips[0]!;
+    return { clipId: clip.id, startFrame: clip.startFrame, durationFrames: clip.durationFrames };
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number; durationFrames: number }> }> };
+      };
+    };
+  });
+
+  // Grab clip at frame 45 (x=450), drag so clip start would land at ~frame 19 (close to playhead 20)
+  // grabOffsetFrames=45 → want startFrame=20 → cursorFrame=65 (but snap pulls it to 20)
+  // Actually: drag so clip start is near frame 20 — close enough for snap threshold (8px = 0.8 frames at zoom=10)
+  // Set grab at clip center (frame 45) and drag to x = (20 + 45) * 10 = 650 → startFrame should snap to 20
+  const grabX = box.x + 45 * ZOOM;
+  const grabY = box.y + CLIP_Y;
+  const dropX = box.x + (PLAYHEAD_FRAME + 45) * ZOOM;
+
+  await page.mouse.move(grabX, grabY);
+  await page.mouse.down();
+  await page.mouse.move(grabX + 5, grabY);
+  await page.mouse.move(dropX, grabY);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const afterSnap = await page.evaluate((clipId: string) => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    for (const track of snap.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { startFrame: clip.startFrame };
+    }
+    return null;
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number }> }> };
+      };
+    };
+  }, origState.clipId);
+
+  expect(afterSnap).not.toBeNull();
+  // Snapped to playhead frame 20
+  expect(afterSnap!.startFrame).toBe(PLAYHEAD_FRAME);
+});
+
+test("trim: drag right edge inward; one undo restores", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.reload();
+  const canvas = page.locator('[data-testid="timeline-canvas"]');
+  await expect(canvas).toBeVisible({ timeout: 10_000 });
+  await expect.poll(
+    () => page.evaluate(() => {
+      const cv = document.querySelector('[data-testid="timeline-canvas"]') as HTMLCanvasElement | null;
+      return cv ? cv.width : 0;
+    }),
+    { timeout: 5_000 },
+  ).toBeGreaterThan(0);
+  await page.waitForTimeout(150);
+
+  // Use zoom=4: clip right edge at x = 90*4 = 360, well within a ~1280px viewport
+  const ZOOM = 4;
+  await page.evaluate((z: number) => {
+    const store = getFullStore(window);
+    store.setZoom(z);
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = { setZoom(z: number): void };
+  }, ZOOM);
+  await page.waitForTimeout(100);
+
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+
+  const clipY = box!.y + CLIP_Y;
+  // TRIM_HANDLE_WIDTH=4; right edge zone x in [90*4-4, 90*4] = [356, 360] (canvas CSS px from left)
+  // Position 2px inside right handle: canvas x = 90*4 - 2 = 358
+  const rightEdgeX = box!.x + 90 * ZOOM - 2;
+
+  const origState = await page.evaluate(() => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    const clip = snap.timeline.tracks[0]!.clips[0]!;
+    return { clipId: clip.id, durationFrames: clip.durationFrames, startFrame: clip.startFrame };
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; durationFrames: number; startFrame: number }> }> };
+      };
+    };
+  });
+  expect(origState.durationFrames).toBe(90);
+
+  // Drag right edge 10 frames left (40px at zoom=4) → durationFrames should decrease by ~10
+  const dragTo = rightEdgeX - 10 * ZOOM;
+  await page.mouse.move(rightEdgeX, clipY);
+  await page.mouse.down();
+  await page.mouse.move(rightEdgeX - 5, clipY); // cross DRAG_THRESHOLD
+  await page.mouse.move(dragTo, clipY);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const afterTrim = await page.evaluate((clipId: string) => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    for (const track of snap.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { durationFrames: clip.durationFrames, canUndo: store.canUndo() };
+    }
+    return null;
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; durationFrames: number }> }> };
+      };
+      canUndo(): boolean;
+    };
+  }, origState.clipId);
+
+  expect(afterTrim).not.toBeNull();
+  expect(afterTrim!.durationFrames).toBeLessThan(90);
+  expect(afterTrim!.canUndo).toBe(true);
+
+  // ONE undo restores original duration
+  await page.evaluate(() => {
+    const store = getFullStore(window);
+    store.undo();
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = { undo(): void };
+  });
+  await page.waitForTimeout(100);
+
+  const afterUndo = await page.evaluate((clipId: string) => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    for (const track of snap.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { durationFrames: clip.durationFrames };
+    }
+    return null;
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; durationFrames: number }> }> };
+      };
+    };
+  }, origState.clipId);
+
+  expect(afterUndo).not.toBeNull();
+  expect(afterUndo!.durationFrames).toBe(90);
+});
+
+test("split: key press at playhead inside clip produces two clips", async ({ page }) => {
+  const { box } = await setupZoom10(page);
+
+  // Select the clip and set playhead at frame 30 (inside 0–90 clip)
+  const ZOOM = 10;
+  const clipBodyX = box.x + 45 * ZOOM;
+  const clipY = box.y + CLIP_Y;
+
+  await page.mouse.click(clipBodyX, clipY);
+  await page.waitForTimeout(50);
+
+  await page.evaluate(() => {
+    const store = getFullStore(window);
+    store.setPlayhead(30);
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      setPlayhead(f: number): void;
+    };
+  });
+  await page.waitForTimeout(50);
+
+  // Focus the canvas and press "s" to split
+  const canvas = page.locator('[data-testid="timeline-canvas"]');
+  await canvas.focus();
+  await page.keyboard.press("s");
+  await page.waitForTimeout(150);
+
+  const afterSplit = await page.evaluate(() => {
+    const store = getFullStore(window);
+    const snap = store.getSnapshot();
+    const track = snap.timeline.tracks[0]!;
+    return {
+      clipCount: track.clips.length,
+      clips: track.clips.map((c) => ({ id: c.id, startFrame: c.startFrame, durationFrames: c.durationFrames })),
+    };
+    function getFullStore(win: Window): FullStoreProxy {
+      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+    }
+    type FullStoreProxy = {
+      getSnapshot(): {
+        timeline: { tracks: Array<{ clips: Array<{ id: string; startFrame: number; durationFrames: number }> }> };
+      };
+    };
+  });
+
+  expect(afterSplit.clipCount).toBe(2);
+  // Left clip: starts at 0, ends at 30
+  const left = afterSplit.clips.find((c) => c.startFrame === 0);
+  const right = afterSplit.clips.find((c) => c.startFrame === 30);
+  expect(left).toBeDefined();
+  expect(right).toBeDefined();
+  expect(left!.durationFrames).toBe(30);
+  expect(right!.durationFrames).toBe(60);
+});
