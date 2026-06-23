@@ -5,6 +5,7 @@ import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost } from "@palmier/ui";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
+import "./web-fs-test-entry.js";
 
 async function bootstrap() {
   const store = new EditorStore(sampleTimeline());
