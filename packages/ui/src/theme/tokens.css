@@ -94,10 +94,14 @@
   /* Icon sizes (px) */
   --icon-size-lg-xl: 28px;
 
+  /* Letter spacing */
+  --letter-spacing-wide: 0.05em;
+
   /* UI chrome sizes */
   --size-topbar: 36px;
   --size-resize-handle: 4px;
   --size-transport-play: 36px;
+  --size-media-item-min: 80px;
 
   /* Preview */
   --color-preview-letterbox: #000000;

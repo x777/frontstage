@@ -137,7 +137,7 @@ export function MediaPanel({ library, onItemPointerDown }: MediaPanelProps) {
           overflowY: "auto",
           padding: theme.spacing.xs,
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+          gridTemplateColumns: `repeat(auto-fill, minmax(${theme.size.mediaItemMin}, 1fr))`,
           gap: theme.spacing.xs,
           alignContent: "start",
         }}
@@ -208,7 +208,7 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
           padding: `0 ${theme.spacing.xxs} ${theme.spacing.xxs}`,
           display: "flex",
           flexDirection: "column",
-          gap: "2px",
+          gap: theme.spacing.xxs,
         }}
       >
         <span
@@ -232,7 +232,7 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
             padding: `0 ${theme.spacing.xxs}`,
             alignSelf: "flex-start",
             textTransform: "uppercase",
-            letterSpacing: "0.05em",
+            letterSpacing: theme.letterSpacing.wide,
           }}
         >
           {entry.type}

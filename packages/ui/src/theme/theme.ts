@@ -95,11 +95,15 @@ export const theme = {
   iconSize: {
     lgXl: "var(--icon-size-lg-xl)",
   },
+  letterSpacing: {
+    wide: "var(--letter-spacing-wide)",
+  },
   size: {
     topBar: "var(--size-topbar)",
     resizeHandle: "var(--size-resize-handle)",
     transportPlay: "var(--size-transport-play)",
     overlayHandle: "var(--size-overlay-handle)",
+    mediaItemMin: "var(--size-media-item-min)",
   },
   overlay: {
     transformBorder: "var(--color-overlay-transform-border)",
