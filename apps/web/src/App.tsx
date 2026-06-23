@@ -72,7 +72,6 @@ export function App({ store, media, library }: AppProps) {
               scrollX: storeSnap.view.scrollX,
               headerWidth: TIMELINE_HEADER_WIDTH,
               trackHeights: storeSnap.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
-              dropZoneHeight: 8,
             });
             const target = dropTargetAt(geom, ly);
             const dropFrame = frameAtX(geom, lx);
@@ -80,12 +79,22 @@ export function App({ store, media, library }: AppProps) {
           }
         }
       }
+      removeListeners();
+    };
+
+    const onPointerCancel = () => {
+      dragController.cancel();
+      removeListeners();
+    };
+
+    function removeListeners() {
       if (listenersAttached) {
         document.removeEventListener("pointermove", onPointerMove);
         document.removeEventListener("pointerup", onPointerUp);
+        document.removeEventListener("pointercancel", onPointerCancel);
         listenersAttached = false;
       }
-    };
+    }
 
     const unsubDrag = dragController.subscribe(() => {
       const snap = dragController.getSnapshot();
@@ -93,22 +102,17 @@ export function App({ store, media, library }: AppProps) {
         // Drag just started
         document.addEventListener("pointermove", onPointerMove);
         document.addEventListener("pointerup", onPointerUp);
+        document.addEventListener("pointercancel", onPointerCancel);
         listenersAttached = true;
       } else if (!snap && listenersAttached) {
         // Drag ended/cancelled externally
-        document.removeEventListener("pointermove", onPointerMove);
-        document.removeEventListener("pointerup", onPointerUp);
-        listenersAttached = false;
+        removeListeners();
       }
     });
 
     return () => {
       unsubDrag();
-      if (listenersAttached) {
-        document.removeEventListener("pointermove", onPointerMove);
-        document.removeEventListener("pointerup", onPointerUp);
-        listenersAttached = false;
-      }
+      removeListeners();
     };
   }, [dragController, store]);
 

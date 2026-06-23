@@ -210,6 +210,66 @@ test("drag media item onto existing track creates a clip with one undo", async (
   await expect(page.locator('[data-testid="preview-canvas"]')).toBeVisible();
 });
 
+test("drag to top boundary of track 0 lands on track 0, not a new track", async ({ page }) => {
+  await page.goto("/");
+  await waitForEngineReady(page);
+
+  const item = page.locator('[data-testid="media-item"]').first();
+  await expect(item).toBeVisible({ timeout: 8_000 });
+
+  const itemBox = await item.boundingBox();
+  expect(itemBox).not.toBeNull();
+
+  const canvas = page.locator('[data-testid="timeline-canvas"]');
+  await expect(canvas).toBeVisible({ timeout: 5_000 });
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+
+  // Record track count before
+  const beforeTracks = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.length;
+  });
+  const beforeClips = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
+  });
+
+  const startX = itemBox!.x + itemBox!.width / 2;
+  const startY = itemBox!.y + itemBox!.height / 2;
+  // Drop just a few px below the ruler (RULER_HEIGHT=24), inside track 0's visual area.
+  // With dropZoneHeight=0 this resolves to track 0, not a new track.
+  const dropX = canvasBox!.x + canvasBox!.width * 0.1;
+  const dropY = canvasBox!.y + 27; // ruler=24px, so y=27 is well inside track 0
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 10, startY + 5, { steps: 3 });
+  await page.mouse.move(dropX, dropY, { steps: 10 });
+  await page.mouse.up();
+
+  // Track count must NOT have increased (clip lands on existing track 0)
+  const afterTracks = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.length;
+  });
+  expect(afterTracks).toBe(beforeTracks);
+
+  // Clip count must have increased by 1
+  const afterClips = await page.evaluate(() => {
+    type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
+    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
+  });
+  expect(afterClips).toBe(beforeClips + 1);
+
+  // Preview still live
+  await expect(page.locator('[data-testid="preview-canvas"]')).toBeVisible();
+});
+
 test("drag media item below last track creates a new track", async ({ page }) => {
   await page.goto("/");
   await waitForEngineReady(page);

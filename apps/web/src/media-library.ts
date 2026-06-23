@@ -87,10 +87,13 @@ export class MediaLibrary {
         } else if (type === "image") {
           duration = 5;
           const bmp = await createImageBitmap(blob);
-          sourceWidth = bmp.width;
-          sourceHeight = bmp.height;
-          thumbUrl = bitmapToThumbnail(bmp);
-          bmp.close();
+          try {
+            sourceWidth = bmp.width;
+            sourceHeight = bmp.height;
+            thumbUrl = bitmapToThumbnail(bmp);
+          } finally {
+            bmp.close();
+          }
         }
 
         const id = crypto.randomUUID();

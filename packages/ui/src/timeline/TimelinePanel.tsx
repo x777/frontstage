@@ -474,7 +474,6 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
             scrollX: snap2.view.scrollX,
             headerWidth: TIMELINE_HEADER_WIDTH,
             trackHeights: snap2.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
-            dropZoneHeight: 8,
           });
           const target = dropTargetAt(geomDrop, ly);
           const dropFrame = frameAtX(geomDrop, lx);
