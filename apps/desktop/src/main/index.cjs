@@ -25,7 +25,7 @@ function assertAuthorized(dir) {
 function assertInside(dir, rel) {
   const base = path.resolve(dir);
   const full = path.resolve(base, rel);
-  if (full !== base && !full.startsWith(base + path.sep)) throw new Error("path escapes project dir: " + rel);
+  if (full === base || !full.startsWith(base + path.sep)) throw new Error("path escapes project dir: " + rel);
   return full;
 }
 
@@ -131,10 +131,10 @@ ipcMain.handle("project:listRecent", () => {
 });
 
 ipcMain.handle("project:addRecent", (_e, rec) => {
+  assertAuthorized(rec.path); // only user-picked paths may enter recent.json
   let entries = loadRecent();
   entries = [rec, ...entries.filter((e) => e.id !== rec.id && e.path !== rec.path)].slice(0, 10);
   saveRecent(entries);
-  authorize(rec.path);
 });
 
 ipcMain.handle("project:removeRecent", (_e, id) => {
@@ -161,7 +161,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Authorize recent project paths from persistent storage
+  // recent.json only ever holds user-picked (authorized) paths — see addRecent's assertAuthorized — so authorizing them on startup is safe.
   const recent = loadRecent();
   for (const entry of recent) {
     if (entry && entry.path) authorize(entry.path);

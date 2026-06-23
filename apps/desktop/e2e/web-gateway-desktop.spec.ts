@@ -103,6 +103,39 @@ test("DesktopGateway: pickSaveAs, writeProject, writeMedia, readProject, readMed
     });
     expect(recentAfterRemove).not.toContain(tempDir);
 
+    // ── SECURITY: addRecent rejects unpicked (never-authorized) path ──────
+    const unpickedDir = mkdtempSync(join(os.tmpdir(), "palmier-unpicked-"));
+    try {
+      const addRecentUnpickedError = await page.evaluate(async (unpickedPath: string) => {
+        try {
+          await (window as any).desktopProject.addRecent({ id: unpickedPath, name: "evil", path: unpickedPath });
+          return null;
+        } catch (e) {
+          return (e as Error).message;
+        }
+      }, unpickedDir);
+      expect(addRecentUnpickedError, "addRecent must reject unpicked path").toBeTruthy();
+      expect(addRecentUnpickedError).toMatch(/unauthorized/i);
+    } finally {
+      try { rmSync(unpickedDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+
+    // ── SECURITY: addRecent succeeds for a user-picked (authorized) path ──
+    const tempB = mkdtempSync(join(os.tmpdir(), "palmier-picked-"));
+    try {
+      const legitRecentResult = await page.evaluate(async (pickedDir: string) => {
+        await (window as any).desktopProject.__setNextPick(pickedDir);
+        await (window as any).desktopProject.pickSaveAs("Q");
+        const ref = { id: pickedDir, name: "legit", path: pickedDir };
+        await (window as any).desktopProject.addRecent(ref);
+        const list = await (window as any).desktopProject.listRecent();
+        return list.map((r: any) => r.id);
+      }, tempB);
+      expect(legitRecentResult, "addRecent must succeed for user-picked path").toContain(tempB);
+    } finally {
+      try { rmSync(tempB, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+
     // ── SECURITY: path traversal writeMedia rejects ────────────────────────
     const traversalError = await page.evaluate(async () => {
       const gw = new (window as any).__DesktopGateway();
