@@ -6,6 +6,6 @@ export interface AppProps extends EditorProps {
   session: ProjectSession;
 }
 
-export function App({ session, ...editorProps }: AppProps) {
-  return <Editor {...editorProps} session={session} />;
+export function App({ ...editorProps }: AppProps) {
+  return <Editor {...editorProps} />;
 }

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost } from "@palmier/ui";
+import { AgentSession, ToolExecutor, buildCatalog } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
@@ -41,18 +42,35 @@ async function bootstrap() {
     | undefined;
   const exportGateway = new WebExportGateway(pickSaveFile ? { pickSaveFile } : undefined);
 
+  // Build agent session — __aiGateway seam takes precedence (e2e injects a fake)
+  const agentGateway = (window as unknown as Record<string, unknown>).__aiGateway ?? webAiGateway;
+  const executor = new ToolExecutor(buildCatalog(), {
+    store,
+    getManifest: () => library.getManifest(),
+    newId: () => crypto.randomUUID(),
+  });
+  const agentModel = "anthropic/claude-sonnet-4-6";
+  const agentSession = new AgentSession({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    gateway: agentGateway as any,
+    executor,
+    tools: buildCatalog(),
+    model: agentModel,
+  });
+
   // Expose for E2E tests
   (window as unknown as Record<string, unknown>).__palmierStore = store;
   (window as unknown as Record<string, unknown>).__mediaLibrary = library;
   (window as unknown as Record<string, unknown>).__projectSession = session;
   (window as unknown as Record<string, unknown>).__projectGateway = gateway;
   (window as unknown as Record<string, unknown>).__webExportGateway = exportGateway;
+  (window as unknown as Record<string, unknown>).__agentSession = agentSession;
 
   const root = document.getElementById("root");
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} />
+      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} agent={{ session: agentSession, model: agentModel }} />
     </StrictMode>,
   );
 }
