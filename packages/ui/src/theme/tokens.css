@@ -118,6 +118,7 @@
   --size-dialog-min: 280px;
   --size-mention-picker-max: 160px;
   --size-session-list-max: 120px;
+  --size-generation-panel-min: 320px;
 
   /* Z-index layers */
   --z-menu: 9000;

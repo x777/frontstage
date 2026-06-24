@@ -74,7 +74,7 @@ createRoot(root).render(
       library={library}
       session={session}
       exportGateway={exportGateway}
-      agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems }}
+      agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems, imageGenerator }}
       onReady={(cmds) => {
         window.desktopProject?.onMenuCommand((c, arg) => {
           if (c === "open-recent") {

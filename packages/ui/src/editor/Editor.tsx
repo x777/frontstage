@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
-import type { AgentSession, ChatSessionStore } from "@palmier/ai";
+import type { AgentSession, ChatSessionStore, ImageGenerator } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import {
   addClipCommand,
@@ -21,6 +21,7 @@ import { MediaDragController } from "../media/media-drag.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { FileMenu } from "./FileMenu.js";
 import { AgentPanel } from "../agent/AgentPanel.js";
+import { GenerationPanel } from "../agent/GenerationPanel.js";
 import { useStore } from "../store/use-store.js";
 import { useExportCommand } from "./use-export-command.js";
 import { ExportProgress } from "./ExportProgress.js";
@@ -42,7 +43,7 @@ export interface EditorProps {
   session?: ProjectSession;
   exportGateway?: ExportGateway;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
-  agent?: { session: AgentSession; model?: string; sessionStore?: ChatSessionStore; mentionItems?: MentionItem[] };
+  agent?: { session: AgentSession; model?: string; sessionStore?: ChatSessionStore; mentionItems?: MentionItem[]; imageGenerator?: ImageGenerator };
 }
 
 interface DiscardDialogState {
@@ -65,6 +66,8 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
       return next;
     });
   }
+
+  const [generateVisible, setGenerateVisible] = useState(false);
 
   const dragSnap = useSyncExternalStore(
     dragController.subscribe.bind(dragController),
@@ -335,6 +338,24 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
                   Agent
                 </button>
               )}
+              {agent?.imageGenerator && (
+                <button
+                  data-testid="generate-toggle"
+                  onClick={() => setGenerateVisible((v) => !v)}
+                  style={{
+                    background: generateVisible ? theme.accent.primary : "none",
+                    border: `${theme.borderWidth.thin} solid ${generateVisible ? theme.accent.primary : theme.border.subtle}`,
+                    borderRadius: theme.radius.xs,
+                    color: generateVisible ? theme.text.onAccent : theme.text.secondary,
+                    cursor: "pointer",
+                    fontSize: theme.fontSize.xs,
+                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                    lineHeight: 1,
+                  }}
+                >
+                  Generate
+                </button>
+              )}
             </>
           ) : undefined
         }
@@ -356,6 +377,14 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
       />
 
       <ExportProgress state={exportState} />
+
+      {generateVisible && agent?.imageGenerator && (
+        <GenerationPanel
+          generate={(i) => agent.imageGenerator!.generate(i)}
+          model={agent.model}
+          onClose={() => setGenerateVisible(false)}
+        />
+      )}
 
       {dragSnap && (
         <div

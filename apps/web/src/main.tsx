@@ -93,7 +93,7 @@ async function bootstrap() {
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems }} />
+      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems, imageGenerator }} />
     </StrictMode>,
   );
 }

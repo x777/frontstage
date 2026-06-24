@@ -121,6 +121,7 @@ export const theme = {
     dialogMin: "var(--size-dialog-min)",
     mentionPickerMax: "var(--size-mention-picker-max)",
     sessionListMax: "var(--size-session-list-max)",
+    generationPanelMin: "var(--size-generation-panel-min)",
   },
   z: {
     menu: "var(--z-menu)",
