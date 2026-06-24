@@ -602,7 +602,7 @@ ipcMain.on("ai:streamChat", async (event, { id, body }) => {
     return;
   }
   try {
-    const base = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+    const base = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
     const res = await fetch(base + "/chat/completions", {
       method: "POST",
       headers: {

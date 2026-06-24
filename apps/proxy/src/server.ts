@@ -16,7 +16,7 @@ function corsHeaders(origin: string): Record<string, string> {
 
 export function createProxyServer(opts: ProxyServerOptions): http.Server {
   const origin = opts.allowOrigin ?? "*";
-  const upstream = opts.upstreamBaseUrl ?? "https://openrouter.ai/api/v1";
+  const upstream = (opts.upstreamBaseUrl ?? "https://openrouter.ai/api/v1").replace(/\/+$/, "");
 
   return http.createServer((req, res) => {
     if (req.method === "OPTIONS") {

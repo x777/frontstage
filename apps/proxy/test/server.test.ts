@@ -130,3 +130,53 @@ describe("createProxyServer", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("createProxyServer — trailing-slash base URL normalization", () => {
+  let fakeUpstream: { server: http.Server; port: number; lastUrl: () => string | undefined };
+  let proxy: { server: http.Server; port: number };
+
+  beforeAll(async () => {
+    let captured: string | undefined;
+    const server = http.createServer((req, res) => {
+      captured = req.url;
+      if (req.url === "/chat/completions" && req.method === "POST") {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.end('data: [DONE]\n');
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const addr = server.address() as { port: number };
+    fakeUpstream = { server, port: addr.port, lastUrl: () => captured };
+
+    // Intentional trailing slash — must not produce //chat/completions
+    const proxyServer = createProxyServer({
+      apiKey: "k",
+      upstreamBaseUrl: `http://127.0.0.1:${addr.port}/`,
+    });
+    await new Promise<void>((resolve) => proxyServer.listen(0, "127.0.0.1", () => resolve()));
+    proxy = { server: proxyServer, port: (proxyServer.address() as { port: number }).port };
+  });
+
+  afterAll(() => {
+    proxy.server.close();
+    fakeUpstream.server.close();
+  });
+
+  it("trailing-slash base URL: upstream receives /chat/completions not //chat/completions", async () => {
+    const chatBody = JSON.stringify({ model: "test", messages: [], stream: true });
+    await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(chatBody) },
+      },
+      chatBody,
+    );
+    expect(fakeUpstream.lastUrl()).toBe("/chat/completions");
+  });
+});
