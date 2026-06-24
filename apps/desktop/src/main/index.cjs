@@ -5,6 +5,88 @@ const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
+const crypto = require("node:crypto");
+
+// ── MCP server state ─────────────────────────────────────────────────────────
+
+const MCP_PORT = Number(process.env.MCP_PORT) || 19789;
+
+let _mcpServer = null;
+let _mcpToken = null; // set after app.getPath("userData") is available
+
+function mcpTokenFile() {
+  return path.join(app.getPath("userData"), "mcp-token");
+}
+
+function mcpEnabledFile() {
+  return path.join(app.getPath("userData"), "mcp-enabled");
+}
+
+function loadOrCreateToken() {
+  try {
+    const existing = fs.readFileSync(mcpTokenFile(), "utf8").trim();
+    if (existing) return existing;
+  } catch { /* not found */ }
+  const token = crypto.randomBytes(32).toString("hex");
+  try {
+    fs.mkdirSync(path.dirname(mcpTokenFile()), { recursive: true });
+    fs.writeFileSync(mcpTokenFile(), token, { mode: 0o600 });
+  } catch { /* best-effort */ }
+  return token;
+}
+
+function writeToken(token) {
+  try {
+    fs.mkdirSync(path.dirname(mcpTokenFile()), { recursive: true });
+    fs.writeFileSync(mcpTokenFile(), token, { mode: 0o600 });
+  } catch { /* best-effort */ }
+}
+
+function writeEnabled(on) {
+  try {
+    fs.mkdirSync(path.dirname(mcpEnabledFile()), { recursive: true });
+    fs.writeFileSync(mcpEnabledFile(), on ? "1" : "0", "utf8");
+  } catch { /* best-effort */ }
+}
+
+function readEnabled() {
+  try {
+    return fs.readFileSync(mcpEnabledFile(), "utf8").trim() === "1";
+  } catch {
+    return false;
+  }
+}
+
+ipcMain.handle("mcp:getStatus", () => ({
+  enabled: _mcpServer != null,
+  running: _mcpServer != null,
+  url: `http://127.0.0.1:${MCP_PORT}/mcp`,
+  token: _mcpToken,
+}));
+
+ipcMain.handle("mcp:setEnabled", async (_e, on) => {
+  if (on && !_mcpServer) {
+    const mod = await import("./mcp/server.mjs");
+    _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken });
+    writeEnabled(true);
+  } else if (!on && _mcpServer) {
+    await _mcpServer.close();
+    _mcpServer = null;
+    writeEnabled(false);
+  }
+  return { enabled: _mcpServer != null };
+});
+
+ipcMain.handle("mcp:regenerateToken", async () => {
+  _mcpToken = crypto.randomBytes(32).toString("hex");
+  writeToken(_mcpToken);
+  if (_mcpServer) {
+    await _mcpServer.close();
+    const mod = await import("./mcp/server.mjs");
+    _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken });
+  }
+  return _mcpToken;
+});
 
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
@@ -323,14 +405,33 @@ function rebuildMenu() {
   Menu.setApplicationMenu(buildMenu());
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // recent.json only ever holds user-picked (authorized) paths — see addRecent's assertAuthorized — so authorizing them on startup is safe.
   const recent = loadRecent();
   for (const entry of recent) {
     if (entry && typeof entry.path === "string") authorize(entry.path);
   }
+
+  // Initialize MCP token (requires userData path, available after app.whenReady)
+  _mcpToken = loadOrCreateToken();
+
+  // Restore MCP server if previously enabled
+  if (readEnabled()) {
+    try {
+      const mod = await import("./mcp/server.mjs");
+      _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken });
+    } catch { /* not fatal */ }
+  }
+
   rebuildMenu();
   createWindow();
+});
+
+app.on("before-quit", async () => {
+  if (_mcpServer) {
+    await _mcpServer.close();
+    _mcpServer = null;
+  }
 });
 
 app.on("window-all-closed", () => {

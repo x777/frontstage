@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
     "@palmier/ai": "workspace:*",
     "@palmier/core": "workspace:*",
     "@palmier/engine": "workspace:*",

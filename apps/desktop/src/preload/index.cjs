@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld("desktopAI", {
   generateImage: (body) => ipcRenderer.invoke("ai:generateImage", body),
 });
 
+contextBridge.exposeInMainWorld("desktopMcp", {
+  setEnabled: (on) => ipcRenderer.invoke("mcp:setEnabled", on),
+  getStatus: () => ipcRenderer.invoke("mcp:getStatus"),
+  regenerateToken: () => ipcRenderer.invoke("mcp:regenerateToken"),
+});
+
 contextBridge.exposeInMainWorld("desktopProject", {
   pickOpen: () => ipcRenderer.invoke("project:pickOpen"),
   pickSaveAs: (n) => ipcRenderer.invoke("project:pickSaveAs", n),
