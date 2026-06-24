@@ -147,6 +147,41 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     const pingTool = toolsResult.tools.find((t: any) => t.name === "ping");
     expect(pingTool).toBeUndefined(); // stub is gone
 
+    // 7b. tools/call: add_texts edits the live timeline
+    const beforeCount = await page.evaluate(() => {
+      const store = (window as any).__palmierStore;
+      const tl = store.getSnapshot().timeline;
+      return tl.tracks.reduce((sum: number, tr: any) => sum + tr.clips.length, 0);
+    });
+
+    const callRes = await client.callTool({
+      name: "add_texts",
+      arguments: { texts: [{ content: "From MCP", startFrame: 0 }] },
+    });
+    expect(callRes.isError).toBeFalsy();
+    expect(Array.isArray(callRes.content)).toBe(true);
+    expect((callRes.content as any[]).length).toBeGreaterThan(0);
+    expect((callRes.content as any[])[0].type).toBe("text");
+
+    // The live timeline must have gained a clip
+    const afterCount = await page.evaluate(() => {
+      const store = (window as any).__palmierStore;
+      const tl = store.getSnapshot().timeline;
+      return tl.tracks.reduce((sum: number, tr: any) => sum + tr.clips.length, 0);
+    });
+    expect(afterCount).toBeGreaterThan(beforeCount);
+
+    // 7c. bad call: missing required field → isError true
+    let badCallIsError = false;
+    try {
+      const badRes = await client.callTool({ name: "add_texts", arguments: {} });
+      badCallIsError = !!badRes.isError;
+    } catch {
+      // some SDK versions throw on isError results
+      badCallIsError = true;
+    }
+    expect(badCallIsError).toBe(true);
+
     await client.close();
 
     // 8. MCP client WITHOUT token → connect rejects (401)

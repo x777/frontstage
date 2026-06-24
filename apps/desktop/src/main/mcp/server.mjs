@@ -4,16 +4,31 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
+function toMcpResult(result) {
+  return {
+    content: (result.blocks ?? []).map((b) =>
+      b.kind === "image"
+        ? { type: "image", data: b.base64, mimeType: b.mediaType }
+        : { type: "text", text: b.text },
+    ),
+    isError: !!result.isError,
+  };
+}
+
 function createMcpServer(bridge) {
   const mcp = new Server(
     { name: "palmier-pro", version: "0.1.0" },
     { capabilities: { tools: {}, resources: {} } },
   );
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await bridge("listTools") }));
-  mcp.setRequestHandler(CallToolRequestSchema, async () => ({
-    content: [{ type: "text", text: "tool execution is not wired yet (7.2)" }],
-    isError: true,
-  }));
+  mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
+    try {
+      const toolResult = await bridge("callTool", { name: req.params.name, args: req.params.arguments ?? {} });
+      return toMcpResult(toolResult);
+    } catch (e) {
+      return { content: [{ type: "text", text: "editor not ready: " + String(e) }], isError: true };
+    }
+  });
   return mcp;
 }
 

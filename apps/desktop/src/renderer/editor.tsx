@@ -65,13 +65,16 @@ const mentionItems = library.getManifest().entries.map((e) => ({
 }));
 
 // Register MCP bridge handler (main↔renderer IPC)
-window.desktopMcp?.onBridgeRequest(async ({ id, kind }) => {
+window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
   try {
     let result: unknown;
     if (kind === "listTools") {
       result = toolsToMcp(executor.list());
+    } else if (kind === "callTool") {
+      const p = payload as { name: string; args: unknown };
+      result = await executor.execute(p.name, p.args);
     } else {
-      result = { __unhandled: true }; // callTool is Task 2
+      result = { __error: "unknown bridge kind: " + kind };
     }
     window.desktopMcp!.bridgeRespond(id, { result });
   } catch (e) {
