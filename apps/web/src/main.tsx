@@ -49,6 +49,7 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
       localStorage.setItem("palmier.ai.proxyUrl", url);
       setProxyUrl(url);
       if (token) localStorage.setItem("palmier.ai.proxyToken", token);
+      else localStorage.removeItem("palmier.ai.proxyToken");
     },
   };
 

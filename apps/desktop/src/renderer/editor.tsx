@@ -90,10 +90,12 @@ function PalmierDesktopApp() {
     kind: "keychain",
     hasKey,
     onSetKey: async (k) => {
+      if (!window.desktopAI) return;
       await window.desktopAI.setKey(k);
       setHasKey(true);
     },
     onClearKey: async () => {
+      if (!window.desktopAI) return;
       await window.desktopAI.clearKey();
       setHasKey(false);
     },
