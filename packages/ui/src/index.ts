@@ -31,3 +31,5 @@ export { FileMenu } from "./editor/FileMenu.js";
 export type { FileMenuProps } from "./editor/FileMenu.js";
 export { createEditorHost } from "./editor/editor-host.js";
 export type { EditorMediaHost, EditorHostResult } from "./editor/editor-host.js";
+export type { ExportGateway, ExportTarget, ExportProgressFn } from "./editor/export-gateway.js";
+export type { ExportState } from "./editor/use-export-command.js";

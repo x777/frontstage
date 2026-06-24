@@ -7,9 +7,10 @@ export interface FileMenuProps {
   session: ProjectSession;
   confirmDiscard: ConfirmDiscard;
   runProjectCommand: RunProjectCommand;
+  onExport?: () => void;
 }
 
-export function FileMenu({ session, confirmDiscard, runProjectCommand }: FileMenuProps) {
+export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport }: FileMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentRefs, setRecentRefs] = useState<ProjectRef[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -151,6 +152,18 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand }: FileMen
           <button data-testid="file-save-as" style={itemStyle} onClick={handleSaveAs}>
             Save As…
           </button>
+          {onExport && (
+            <>
+              <div style={sepStyle} />
+              <button
+                data-testid="file-export"
+                style={itemStyle}
+                onClick={() => { setMenuOpen(false); onExport(); }}
+              >
+                Export…
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

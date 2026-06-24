@@ -19,6 +19,9 @@ import { MediaDragController } from "../media/media-drag.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { FileMenu } from "./FileMenu.js";
 import { useStore } from "../store/use-store.js";
+import { useExportCommand } from "./use-export-command.js";
+import { ExportProgress } from "./ExportProgress.js";
+import type { ExportGateway } from "./export-gateway.js";
 
 // Duck-typed library interface covering what MediaPanel, InspectorPanel, and drag-drop each need.
 export interface EditorLibrary {
@@ -34,7 +37,8 @@ export interface EditorProps {
   media: MediaByteSource;
   library: EditorLibrary;
   session?: ProjectSession;
-  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void }) => void;
+  exportGateway?: ExportGateway;
+  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void }) => void;
 }
 
 interface DiscardDialogState {
@@ -43,7 +47,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, onReady }: EditorProps) {
+export function Editor({ store, media, library, session, exportGateway, onReady }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const dragSnap = useSyncExternalStore(
@@ -92,6 +96,14 @@ export function Editor({ store, media, library, session, onReady }: EditorProps)
     });
   }, []);
 
+  const { exportProject, exportState, canExport } = useExportCommand({
+    exportGateway,
+    getTimeline: () => store.getSnapshot().timeline,
+    media,
+    suggestedName: () => session?.getState().name ?? "Untitled",
+    runProjectCommand,
+  });
+
   // Discard-guard dialog shared by both keyboard shortcuts and FileMenu
   const [dialog, setDialog] = useState<DiscardDialogState | null>(null);
 
@@ -127,6 +139,8 @@ export function Editor({ store, media, library, session, onReady }: EditorProps)
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   const confirmDiscardRef = useRef(confirmDiscard);
   useEffect(() => { confirmDiscardRef.current = confirmDiscard; }, [confirmDiscard]);
+  const exportProjectRef = useRef(exportProject);
+  useEffect(() => { exportProjectRef.current = exportProject; }, [exportProject]);
   useEffect(() => {
     if (!session || !onReadyRef.current) return;
     onReadyRef.current({
@@ -134,6 +148,7 @@ export function Editor({ store, media, library, session, onReady }: EditorProps)
       open: () => runProjectCommand(() => session.open(() => confirmDiscardRef.current())),
       save: () => runProjectCommand(() => session.save()),
       saveAs: () => runProjectCommand(() => session.saveAs()),
+      export: () => exportProjectRef.current(),
     });
   // Run once when session + handlers are stable
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -280,6 +295,7 @@ export function Editor({ store, media, library, session, onReady }: EditorProps)
               session={session}
               confirmDiscard={confirmDiscard}
               runProjectCommand={runProjectCommand}
+              onExport={canExport ? exportProject : undefined}
             />
           ) : undefined
         }
@@ -297,6 +313,8 @@ export function Editor({ store, media, library, session, onReady }: EditorProps)
         timeline={<TimelinePanel store={store} dragController={dragController} />}
         inspector={<InspectorPanel store={store} library={library} />}
       />
+
+      <ExportProgress state={exportState} />
 
       {dragSnap && (
         <div
