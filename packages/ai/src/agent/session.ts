@@ -4,6 +4,7 @@ import { toWireMessages } from "./conversation.js";
 import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js";
 import type { ToolExecutor } from "../tools/executor.js";
 import type { ToolSpec } from "../tools/types.js";
+import type { ChatSessionDoc } from "./session-store.js";
 
 export interface AgentSessionDeps {
   gateway: AiGateway;
@@ -13,6 +14,8 @@ export interface AgentSessionDeps {
   systemPrompt?: string;
   maxTurns?: number;
   newId?: () => string;
+  id?: string;
+  now?: () => string;
 }
 
 export interface StreamingDraft {
@@ -43,6 +46,9 @@ export class AgentSession {
   private readonly maxTurns: number;
   private readonly newId: () => string;
 
+  id: string;
+  createdAt: string;
+
   private messages: AgentMessage[] = [];
   private streaming: StreamingDraft | null = null;
   private status: AgentStatus = "idle";
@@ -58,6 +64,37 @@ export class AgentSession {
     this.systemPrompt = deps.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
     this.maxTurns = deps.maxTurns ?? 20;
     this.newId = deps.newId ?? (() => crypto.randomUUID());
+    const now = deps.now ?? (() => new Date().toISOString());
+    this.id = deps.id ?? this.newId();
+    this.createdAt = now();
+  }
+
+  toDoc(): ChatSessionDoc {
+    const firstUserMsg = this.messages.find((m) => m.role === "user");
+    let title = "New Chat";
+    if (firstUserMsg) {
+      const textBlock = firstUserMsg.content.find((b) => b.kind === "text");
+      if (textBlock && textBlock.kind === "text") {
+        const raw = textBlock.text.trim();
+        title = raw.length > 60 ? raw.slice(0, 60) + "..." : raw;
+      }
+    }
+    return {
+      id: this.id,
+      title,
+      createdAt: this.createdAt,
+      messages: [...this.messages],
+    };
+  }
+
+  loadDoc(doc: ChatSessionDoc): void {
+    this.id = doc.id;
+    this.createdAt = doc.createdAt;
+    this.messages = [...doc.messages];
+    this.streaming = null;
+    this.status = "idle";
+    this.error = undefined;
+    this.emit();
   }
 
   getState(): AgentSessionState {

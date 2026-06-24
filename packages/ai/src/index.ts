@@ -18,3 +18,5 @@ export type {
   MentionContext,
 } from "./agent/session.js";
 export { AgentSession } from "./agent/session.js";
+export type { ChatSessionDoc, ChatSessionIndexEntry } from "./agent/session-store.js";
+export { ChatSessionStore } from "./agent/session-store.js";
