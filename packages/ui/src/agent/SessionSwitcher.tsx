@@ -81,7 +81,7 @@ export function SessionSwitcher({ session, sessionStore, onNew }: SessionSwitche
         <div
           style={{
             overflowY: "auto",
-            maxHeight: "120px",
+            maxHeight: theme.size.sessionListMax,
             display: "flex",
             flexDirection: "column",
           }}

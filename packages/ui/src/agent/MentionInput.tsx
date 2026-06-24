@@ -88,7 +88,7 @@ export function MentionInput({ value, onChange, onSend, disabled, mentionItems }
             background: theme.bg.raised,
             border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
             borderRadius: theme.radius.sm,
-            maxHeight: "160px",
+            maxHeight: theme.size.mentionPickerMax,
             overflowY: "auto",
             zIndex: theme.z.menu,
             marginBottom: theme.spacing.xxs,
