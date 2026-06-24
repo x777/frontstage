@@ -100,6 +100,50 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     await expect(
       httpGet(`http://127.0.0.1:${MCP_PORT}/healthz`, { Authorization: `Bearer ${newToken}` }),
     ).rejects.toThrow();
+
+    // Re-enable to test MCP client
+    await page.evaluate(async () => {
+      await (window as any).desktopMcp.setEnabled(true);
+    });
+
+    const status2 = await page.evaluate(async () => {
+      return (window as any).desktopMcp.getStatus();
+    });
+    const liveToken: string = status2.token;
+
+    // 7. MCP client: connect with token → initialize succeeds → listTools → ping stub
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js" as any);
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js" as any);
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`http://127.0.0.1:${MCP_PORT}/mcp`),
+      { requestInit: { headers: { Authorization: `Bearer ${liveToken}` } } },
+    );
+    const client = new Client({ name: "test", version: "0.0.0" }, { capabilities: {} });
+    await client.connect(transport);
+
+    const toolsResult = await client.listTools();
+    expect(Array.isArray(toolsResult.tools)).toBe(true);
+    const pingTool = toolsResult.tools.find((t: any) => t.name === "ping");
+    expect(pingTool).toBeDefined();
+    expect(pingTool.description).toBeTruthy();
+
+    await client.close();
+
+    // 8. MCP client WITHOUT token → connect rejects (401)
+    const transportNoAuth = new StreamableHTTPClientTransport(
+      new URL(`http://127.0.0.1:${MCP_PORT}/mcp`),
+    );
+    const clientNoAuth = new Client({ name: "test-noauth", version: "0.0.0" }, { capabilities: {} });
+    let connectError: unknown;
+    try {
+      await clientNoAuth.connect(transportNoAuth);
+    } catch (err) {
+      connectError = err;
+    }
+    expect(connectError).toBeDefined();
+
+    await transportNoAuth.close().catch(() => {});
   } finally {
     await app.close();
   }
