@@ -11,6 +11,33 @@ const crypto = require("node:crypto");
 
 const MCP_PORT = Number(process.env.MCP_PORT) || 19789;
 
+// ── MCP bridge (main↔renderer) ───────────────────────────────────────────────
+
+const _bridgePending = new Map();
+let _bridgeSeq = 0;
+
+ipcMain.on("mcp:response", (_e, { id, result, error }) => {
+  const p = _bridgePending.get(id);
+  if (!p) return;
+  _bridgePending.delete(id);
+  clearTimeout(p.timer);
+  if (error != null) p.reject(new Error(error));
+  else p.resolve(result);
+});
+
+function mcpBridge(kind, payload) {
+  const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && !w.webContents.isDestroyed());
+  if (!win) return Promise.reject(new Error("editor not ready"));
+  const id = ++_bridgeSeq;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (_bridgePending.delete(id)) reject(new Error("bridge timeout"));
+    }, 30000);
+    _bridgePending.set(id, { resolve, reject, timer });
+    win.webContents.send("mcp:request", { id, kind, payload });
+  });
+}
+
 let _mcpServer = null;
 let _mcpToken = null; // set after app.getPath("userData") is available
 
@@ -67,7 +94,7 @@ ipcMain.handle("mcp:getStatus", () => ({
 ipcMain.handle("mcp:setEnabled", async (_e, on) => {
   if (on && !_mcpServer) {
     const mod = await import("./mcp/server.mjs");
-    _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken });
+    _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken, bridge: mcpBridge });
     writeEnabled(true);
   } else if (!on && _mcpServer) {
     await _mcpServer.close();
@@ -83,7 +110,7 @@ ipcMain.handle("mcp:regenerateToken", async () => {
   if (_mcpServer) {
     await _mcpServer.close();
     const mod = await import("./mcp/server.mjs");
-    _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken });
+    _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken, bridge: mcpBridge });
   }
   return _mcpToken;
 });
@@ -419,7 +446,7 @@ app.whenReady().then(async () => {
   if (readEnabled()) {
     try {
       const mod = await import("./mcp/server.mjs");
-      _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken });
+      _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken, bridge: mcpBridge });
     } catch { /* not fatal */ }
   }
 

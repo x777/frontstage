@@ -16,6 +16,18 @@ export function toolsToOpenAI(tools: ToolSpec[]): {
   });
 }
 
+export function toolsToMcp(tools: { name: string; description: string; inputSchema: ToolSpec["inputSchema"] }[]): {
+  name: string;
+  description: string;
+  inputSchema: object;
+}[] {
+  return tools.map((t) => {
+    const schema = zodToJsonSchema(t.inputSchema, { $refStrategy: "none" }) as Record<string, unknown>;
+    delete schema["$schema"];
+    return { name: t.name, description: t.description, inputSchema: schema };
+  });
+}
+
 export function buildChatBody(req: ChatRequest): object {
   return {
     model: req.model,

@@ -4,7 +4,19 @@ import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
+
+declare global {
+  interface Window {
+    desktopMcp?: {
+      setEnabled(on: boolean): Promise<{ enabled: boolean }>;
+      getStatus(): Promise<{ enabled: boolean; running: boolean; url: string; token: string }>;
+      regenerateToken(): Promise<string>;
+      onBridgeRequest(cb: (msg: { id: number; kind: string; payload?: unknown }) => void): void;
+      bridgeRespond(id: number, payload: { result?: unknown; error?: string }): void;
+    };
+  }
+}
 import { DesktopGateway } from "./desktop-gateway.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
@@ -51,6 +63,21 @@ const mentionItems = library.getManifest().entries.map((e) => ({
   kind: "media" as const,
   contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
 }));
+
+// Register MCP bridge handler (main↔renderer IPC)
+window.desktopMcp?.onBridgeRequest(async ({ id, kind }) => {
+  try {
+    let result: unknown;
+    if (kind === "listTools") {
+      result = toolsToMcp(executor.list());
+    } else {
+      result = { __unhandled: true }; // callTool is Task 2
+    }
+    window.desktopMcp!.bridgeRespond(id, { result });
+  } catch (e) {
+    window.desktopMcp!.bridgeRespond(id, { error: String(e) });
+  }
+});
 
 // Expose for E2E tests
 (window as unknown as Record<string, unknown>).__palmierStore = store;

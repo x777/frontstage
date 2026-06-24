@@ -37,6 +37,11 @@ contextBridge.exposeInMainWorld("desktopMcp", {
   setEnabled: (on) => ipcRenderer.invoke("mcp:setEnabled", on),
   getStatus: () => ipcRenderer.invoke("mcp:getStatus"),
   regenerateToken: () => ipcRenderer.invoke("mcp:regenerateToken"),
+  onBridgeRequest: (cb) => {
+    ipcRenderer.removeAllListeners("mcp:request");
+    ipcRenderer.on("mcp:request", (_e, msg) => cb(msg));
+  },
+  bridgeRespond: (id, payload) => ipcRenderer.send("mcp:response", { id, ...payload }),
 });
 
 contextBridge.exposeInMainWorld("desktopProject", {

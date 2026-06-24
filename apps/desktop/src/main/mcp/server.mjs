@@ -4,20 +4,12 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
-const STUB_TOOLS = [
-  {
-    name: "ping",
-    description: "A stub tool (real catalog comes from the renderer in 7.2)",
-    inputSchema: { type: "object", properties: {} },
-  },
-];
-
-function createMcpServer() {
+function createMcpServer(bridge) {
   const mcp = new Server(
     { name: "palmier-pro", version: "0.1.0" },
     { capabilities: { tools: {}, resources: {} } },
   );
-  mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: STUB_TOOLS }));
+  mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await bridge("listTools") }));
   mcp.setRequestHandler(CallToolRequestSchema, async () => ({
     content: [{ type: "text", text: "tool execution is not wired yet (7.2)" }],
     isError: true,
@@ -38,7 +30,7 @@ function readBody(req) {
   });
 }
 
-export async function startMcpServer({ port, token }) {
+export async function startMcpServer({ port, token, bridge }) {
   const server = http.createServer(async (req, res) => {
     const a = checkAuth(req, token);
     if (!a.ok) {
@@ -57,7 +49,7 @@ export async function startMcpServer({ port, token }) {
     if (url === "/mcp" && (req.method === "POST" || req.method === "GET" || req.method === "DELETE")) {
       const parsedBody = req.method === "POST" ? await readBody(req) : undefined;
       // stateless mode: new Server + transport per request
-      const mcp = createMcpServer();
+      const mcp = createMcpServer(bridge);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await mcp.connect(transport);
       res.on("close", () => { transport.close(); mcp.close(); });

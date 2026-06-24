@@ -11,7 +11,7 @@ export type { ModelEntry } from "./agent/model-catalog.js";
 export { MODEL_CATALOG, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "./agent/model-catalog.js";
 export type { ImageGenInput, ImageImportHost, ImageGeneratorDeps } from "./agent/image-generator.js";
 export type { OpenAIMessage, ChatRequest, StreamEvent, AiGateway, ImageRequest, ImageResult } from "./agent/wire.js";
-export { toolsToOpenAI, buildChatBody, parseOpenRouterStream } from "./agent/openrouter.js";
+export { toolsToOpenAI, toolsToMcp, buildChatBody, parseOpenRouterStream } from "./agent/openrouter.js";
 export { buildImageBody, parseImageResponse } from "./agent/image.js";
 export type { AgentMessage, AgentContentBlock } from "./agent/conversation.js";
 export { toWireMessages, toolResultToText } from "./agent/conversation.js";
