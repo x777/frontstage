@@ -119,8 +119,8 @@ export const theme = {
     kfLabel: "var(--size-kf-label)",
     menuMin: "var(--size-menu-min)",
     dialogMin: "var(--size-dialog-min)",
-    mentionPickerMax: "160px",
-    sessionListMax: "120px",
+    mentionPickerMax: "var(--size-mention-picker-max)",
+    sessionListMax: "var(--size-session-list-max)",
   },
   z: {
     menu: "var(--z-menu)",

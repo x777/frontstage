@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext } from "@palmier/ai";
+import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext, ToolBlock } from "@palmier/ai";
 import { toolResultToText } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { useAgentSession } from "./use-agent-session.js";
@@ -87,7 +87,7 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
 
   // role === "tool"
   const toolResultBlocks = msg.content.filter(
-    (b): b is { kind: "toolResult"; toolCallId: string; blocks: import("@palmier/ai").ToolBlock[]; isError: boolean } =>
+    (b): b is { kind: "toolResult"; toolCallId: string; blocks: ToolBlock[]; isError: boolean } =>
       b.kind === "toolResult",
   );
   return (

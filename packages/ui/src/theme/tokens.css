@@ -116,6 +116,8 @@
   /* Component min-widths */
   --size-menu-min: 160px;
   --size-dialog-min: 280px;
+  --size-mention-picker-max: 160px;
+  --size-session-list-max: 120px;
 
   /* Z-index layers */
   --z-menu: 9000;
