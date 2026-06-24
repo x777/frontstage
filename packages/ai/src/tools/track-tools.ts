@@ -21,7 +21,7 @@ export function removeTracksTool(): ToolSpec {
       asUndoStep(
         ctx.store,
         "Remove Tracks",
-        trackIds.map((id) => removeTrackCommand(id).apply.bind(removeTrackCommand(id))),
+        trackIds.map((id) => { const cmd = removeTrackCommand(id); return cmd.apply.bind(cmd); }),
       );
 
       return ok(`Removed ${trackIds.length} track(s): ${trackIds.join(", ")}`);

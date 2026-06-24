@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand } from "@palmier/core";
+import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -19,31 +19,38 @@ export function addClipsTool(): ToolSpec {
     run(args, ctx) {
       const { clips } = args as { clips: { mediaId: string; trackIndex?: number; startFrame: number }[] };
       const manifest = ctx.getManifest();
-      const fps = ctx.store.getSnapshot().timeline.fps;
+      const tl = ctx.store.getSnapshot().timeline;
+      const fps = tl.fps;
 
       // Validate all before touching the store
       const entries = [];
       for (const c of clips) {
         const entry = manifest.entries.find((e) => e.id === c.mediaId);
         if (!entry) return errorResult(`unknown media: ${c.mediaId}`);
+        if (c.trackIndex !== undefined) {
+          if (c.trackIndex < 0 || c.trackIndex >= tl.tracks.length)
+            return errorResult(`trackIndex ${c.trackIndex} out of range`);
+          const track = tl.tracks[c.trackIndex]!;
+          if (!clipTypesCompatible(track.type, entry.type))
+            return errorResult(`media type "${entry.type}" incompatible with track type "${track.type}" at index ${c.trackIndex}`);
+        }
         entries.push({ entry, trackIndex: c.trackIndex, startFrame: c.startFrame });
       }
 
+      const newIds: string[] = [];
       const commands = entries.map(({ entry, trackIndex, startFrame }) => {
         const target =
           trackIndex !== undefined
             ? ({ kind: "existing" as const, index: trackIndex })
             : ({ kind: "new" as const, index: 0 });
         const id = ctx.newId();
+        newIds.push(id);
         return addClipCommand(entry, target, startFrame, fps, undefined, () => id);
       });
 
       asUndoStep(ctx.store, "Add Clips", commands.map((cmd) => cmd.apply.bind(cmd)));
 
-      // Collect the new clip ids from the snapshot
-      const tl = ctx.store.getSnapshot().timeline;
-      const allClipIds: string[] = tl.tracks.flatMap((t) => t.clips.map((c) => c.id));
-      return ok(`Added ${commands.length} clip(s). Clip ids in timeline: ${allClipIds.join(", ")}`);
+      return ok(`Added ${newIds.length} clip(s): ${newIds.join(", ")}`);
     },
   };
 }
@@ -67,7 +74,7 @@ export function removeClipsTool(): ToolSpec {
       asUndoStep(
         ctx.store,
         "Remove Clips",
-        clipIds.map((id) => removeClipCommand(id).apply.bind(removeClipCommand(id))),
+        clipIds.map((id) => { const cmd = removeClipCommand(id); return cmd.apply.bind(cmd); }),
       );
 
       return ok(`Removed ${clipIds.length} clip(s): ${clipIds.join(", ")}`);
@@ -99,9 +106,7 @@ export function moveClipsTool(): ToolSpec {
       asUndoStep(
         ctx.store,
         "Move Clips",
-        moves.map((m) => moveClipCommand(m.clipId, m.toTrackIndex, m.toStartFrame).apply.bind(
-          moveClipCommand(m.clipId, m.toTrackIndex, m.toStartFrame),
-        )),
+        moves.map((m) => { const cmd = moveClipCommand(m.clipId, m.toTrackIndex, m.toStartFrame); return cmd.apply.bind(cmd); }),
       );
 
       return ok(`Moved ${moves.length} clip(s).`);
@@ -123,12 +128,11 @@ export function splitClipTool(): ToolSpec {
 
       if (!findClip(tl, clipId)) return errorResult(`unknown clip: ${clipId}`);
 
-      const cmd = splitClipCommand(clipId, atFrame, undefined, ctx.newId);
+      let newClipId = "";
+      const cmd = splitClipCommand(clipId, atFrame, undefined, () => { newClipId = ctx.newId(); return newClipId; });
       asUndoStep(ctx.store, "Split Clip", [cmd.apply.bind(cmd)]);
 
-      const after = ctx.store.getSnapshot().timeline;
-      const allIds = after.tracks.flatMap((t) => t.clips.map((c) => c.id));
-      return ok(`Split clip ${clipId} at frame ${atFrame}. Clips: ${allIds.join(", ")}`);
+      return ok(`Split clip ${clipId} at frame ${atFrame}. New clip id: ${newClipId}`);
     },
   };
 }
@@ -157,9 +161,7 @@ export function trimClipsTool(): ToolSpec {
       asUndoStep(
         ctx.store,
         "Trim Clips",
-        trims.map((tr) => trimClipCommand(tr.clipId, tr.edge, tr.deltaFrames).apply.bind(
-          trimClipCommand(tr.clipId, tr.edge, tr.deltaFrames),
-        )),
+        trims.map((tr) => { const cmd = trimClipCommand(tr.clipId, tr.edge, tr.deltaFrames); return cmd.apply.bind(cmd); }),
       );
 
       return ok(`Trimmed ${trims.length} clip(s).`);

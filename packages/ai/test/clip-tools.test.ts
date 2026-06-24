@@ -163,8 +163,8 @@ describe("add_clips", () => {
     expect(store.canUndo()).toBe(false);
   });
 
-  test("result text contains added clip ids", async () => {
-    const store = new EditorStore(makeTimeline());
+  test("result text contains only the NEW clip ids, not pre-existing ones", async () => {
+    const store = new EditorStore(makeTimeline()); // already has c1 on track 0
     const ctx = makeCtx(store);
     const spec = addClipsTool();
     const result = await spec.run(
@@ -173,8 +173,68 @@ describe("add_clips", () => {
     );
     expect(result.isError).toBe(false);
     const text = result.blocks.map((b: ToolBlock) => (b.kind === "text" ? b.text : "")).join("");
-    // should mention count or ids
-    expect(text.length).toBeGreaterThan(0);
+    // must NOT mention the pre-existing clip id
+    expect(text).not.toContain("c1");
+    // must mention exactly 1 new id (the generated one)
+    expect(text).toMatch(/Added 1 clip\(s\):/);
+  });
+
+  test("out-of-range trackIndex returns isError:true, store unchanged", async () => {
+    const store = new EditorStore(makeTimeline()); // 1 track at index 0
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const spec = addClipsTool();
+    const result = await spec.run(
+      { clips: [{ mediaId: "media-1", trackIndex: 5, startFrame: 0 }] },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("incompatible track type returns isError:true, store unchanged", async () => {
+    // timeline has a video track at index 0; manifest has audio at media-3
+    const audioTrack: Track = { id: "at1", type: "audio", muted: false, hidden: false, syncLocked: false, clips: [] };
+    const store = new EditorStore({ ...makeTimeline(), tracks: [audioTrack] });
+    const before = store.getSnapshot().timeline;
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [
+        { id: "media-v", name: "vid.mp4", type: "video", source: { kind: "external", absolutePath: "/v.mp4" }, duration: 2 },
+      ],
+      folders: [],
+    };
+    const ctx: ToolContext = {
+      store,
+      getManifest: () => manifest,
+      newId: () => `gen-incompat`,
+    };
+    const result = await addClipsTool().run(
+      { clips: [{ mediaId: "media-v", trackIndex: 0, startFrame: 0 }] },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("batch with one bad trackIndex rejects all (all-or-nothing)", async () => {
+    const store = new EditorStore(makeTimeline()); // 1 track
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await addClipsTool().run(
+      {
+        clips: [
+          { mediaId: "media-1", trackIndex: 0, startFrame: 0 },
+          { mediaId: "media-2", trackIndex: 99, startFrame: 10 }, // out of range
+        ],
+      },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
   });
 });
 
@@ -309,6 +369,19 @@ describe("split_clip", () => {
     // store may or may not have changed (command is no-op), just verify it didn't explode
     // and the clip is still there
     expect(findClip(store.getSnapshot().timeline, "c1")).not.toBeNull();
+  });
+
+  test("result reports new clip id (not all clip ids)", async () => {
+    const store = new EditorStore(makeTimeline()); // has c1
+    const ctx = makeCtx(store);
+    const spec = splitClipTool();
+    const result = await spec.run({ clipId: "c1", atFrame: 30 }, ctx);
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b: ToolBlock) => (b.kind === "text" ? b.text : "")).join("");
+    // must mention "New clip id:" (not "Clips: id1, id2" listing all)
+    expect(text).toMatch(/New clip id:/);
+    // should not list c1 as a new id (c1 was the original, not newly created)
+    expect(text).not.toMatch(/New clip id:.*c1/);
   });
 });
 

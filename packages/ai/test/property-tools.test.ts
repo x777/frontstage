@@ -229,6 +229,61 @@ describe("set_keyframes", () => {
     expect(store.getSnapshot().timeline).toBe(before);
     expect(store.canUndo()).toBe(false);
   });
+
+  test("wrong-shaped value for opacityTrack (AnimPair) returns isError, store unchanged", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await setKeyframesTool().run({
+      clipId: "c1",
+      trackKey: "opacityTrack",
+      keyframes: [{ frame: 0, value: { a: 0.5, b: 0.5 } }],
+    }, ctx);
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("wrong-shaped value for positionTrack (number) returns isError, store unchanged", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await setKeyframesTool().run({
+      clipId: "c1",
+      trackKey: "positionTrack",
+      keyframes: [{ frame: 0, value: 0.5 }],
+    }, ctx);
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("wrong-shaped value for cropTrack (number) returns isError, store unchanged", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await setKeyframesTool().run({
+      clipId: "c1",
+      trackKey: "cropTrack",
+      keyframes: [{ frame: 0, value: 0.5 }],
+    }, ctx);
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("correct crop shape for cropTrack succeeds", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeCtx(store);
+    const result = await setKeyframesTool().run({
+      clipId: "c1",
+      trackKey: "cropTrack",
+      keyframes: [{ frame: 0, value: { left: 0.1, top: 0.1, right: 0.1, bottom: 0.1 } }],
+    }, ctx);
+    expect(result.isError).toBe(false);
+    const clip = getClip(store, "c1");
+    expect(clip.cropTrack?.keyframes).toHaveLength(1);
+  });
 });
 
 // ── add_texts ─────────────────────────────────────────────────────────────
@@ -293,5 +348,30 @@ describe("add_texts", () => {
     }, ctx);
     const tl = store.getSnapshot().timeline;
     expect(tl.tracks[0]!.clips).toHaveLength(1);
+  });
+
+  test("incompatible trackIndex (audio track) returns isError, store unchanged", async () => {
+    const audioTrack: Track = { id: "at1", type: "audio", muted: false, hidden: false, syncLocked: false, clips: [] };
+    const store = new EditorStore({ ...defaultTimeline(), tracks: [audioTrack] });
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await addTextsTool().run({
+      texts: [{ content: "Won't fit", startFrame: 0, trackIndex: 0 }],
+    }, ctx);
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("out-of-range trackIndex returns isError, store unchanged", async () => {
+    const store = new EditorStore({ ...defaultTimeline() }); // no tracks
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await addTextsTool().run({
+      texts: [{ content: "No track", startFrame: 0, trackIndex: 5 }],
+    }, ctx);
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
   });
 });

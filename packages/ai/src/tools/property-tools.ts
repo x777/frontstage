@@ -8,6 +8,7 @@ import {
   setKeyframeCommand,
   removeKeyframeCommand,
   addClipCommand,
+  clipTypesCompatible,
   type KeyframeTrackKey,
 } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
@@ -120,6 +121,38 @@ export function setClipPropertiesTool(): ToolSpec {
   };
 }
 
+const KeyframeValueSchema = z.union([
+  z.number(),
+  AnimPairSchema,
+  CropSchema,
+]);
+
+type KeyframeValueInput = z.infer<typeof KeyframeValueSchema>;
+
+function validateKeyframeValue(trackKey: KeyframeTrackKey, value: KeyframeValueInput): string | null {
+  const isNumber = typeof value === "number";
+  const isAnimPair = typeof value === "object" && value !== null && "a" in value && "b" in value &&
+    !("left" in value) && !("top" in value);
+  const isCrop = typeof value === "object" && value !== null && "left" in value && "top" in value &&
+    "right" in value && "bottom" in value;
+
+  switch (trackKey) {
+    case "opacityTrack":
+    case "rotationTrack":
+    case "volumeTrack":
+      if (!isNumber) return `trackKey "${trackKey}" requires a number value`;
+      break;
+    case "positionTrack":
+    case "scaleTrack":
+      if (!isAnimPair) return `trackKey "${trackKey}" requires an {a, b} AnimPair value`;
+      break;
+    case "cropTrack":
+      if (!isCrop) return `trackKey "${trackKey}" requires a {left, top, right, bottom} Crop value`;
+      break;
+  }
+  return null;
+}
+
 export function setKeyframesTool(): ToolSpec {
   return {
     name: "set_keyframes",
@@ -129,7 +162,7 @@ export function setKeyframesTool(): ToolSpec {
       trackKey: z.enum(KEYFRAME_TRACK_KEYS),
       keyframes: z.array(z.object({
         frame: z.number().int(),
-        value: z.any(),
+        value: KeyframeValueSchema.optional(),
         interpolationOut: z.enum(["linear", "smooth"]).optional(),
         remove: z.boolean().optional(),
       })).min(1),
@@ -138,10 +171,19 @@ export function setKeyframesTool(): ToolSpec {
       const { clipId, trackKey, keyframes } = args as {
         clipId: string;
         trackKey: KeyframeTrackKey;
-        keyframes: { frame: number; value: unknown; interpolationOut?: "linear" | "smooth"; remove?: boolean }[];
+        keyframes: { frame: number; value?: KeyframeValueInput; interpolationOut?: "linear" | "smooth"; remove?: boolean }[];
       };
       const tl = ctx.store.getSnapshot().timeline;
       if (!findClip(tl, clipId)) return errorResult(`unknown clip: ${clipId}`);
+
+      // Validate all non-remove keyframe values before touching the store
+      for (const kf of keyframes) {
+        if (!kf.remove) {
+          if (kf.value === undefined) return errorResult(`keyframe at frame ${kf.frame} missing value`);
+          const err = validateKeyframeValue(trackKey, kf.value);
+          if (err) return errorResult(err);
+        }
+      }
 
       const reducers = keyframes.map((kf) => {
         if (kf.remove) {
@@ -181,7 +223,19 @@ export function addTextsTool(): ToolSpec {
           style?: z.infer<typeof TextStyleSchema>;
         }[];
       };
-      const fps = ctx.store.getSnapshot().timeline.fps;
+      const tl = ctx.store.getSnapshot().timeline;
+      const fps = tl.fps;
+
+      // Validate all targets before touching the store
+      for (const text of texts) {
+        if (text.trackIndex !== undefined) {
+          if (text.trackIndex < 0 || text.trackIndex >= tl.tracks.length)
+            return errorResult(`trackIndex ${text.trackIndex} out of range`);
+          const track = tl.tracks[text.trackIndex]!;
+          if (!clipTypesCompatible(track.type, "text"))
+            return errorResult(`track type "${track.type}" at index ${text.trackIndex} is incompatible with text clips`);
+        }
+      }
 
       // Build a synthetic text MediaManifestEntry per text and collect command reducers
       const reducers: ((t: ReturnType<typeof ctx.store.getSnapshot>["timeline"]) => ReturnType<typeof ctx.store.getSnapshot>["timeline"])[] = [];
