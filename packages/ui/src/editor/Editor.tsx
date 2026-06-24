@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { EditorStore, MediaManifestEntry } from "@palmier/core";
+import type { EditorStore, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
 import {
   addClipCommand,
@@ -38,7 +38,7 @@ export interface EditorProps {
   library: EditorLibrary;
   session?: ProjectSession;
   exportGateway?: ExportGateway;
-  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void }) => void;
+  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
 }
 
 interface DiscardDialogState {
@@ -149,6 +149,7 @@ export function Editor({ store, media, library, session, exportGateway, onReady 
       save: () => runProjectCommand(() => session.save()),
       saveAs: () => runProjectCommand(() => session.saveAs()),
       export: () => exportProjectRef.current(),
+      openRecent: (ref: ProjectRef) => runProjectCommand(() => session.open(() => confirmDiscardRef.current(), ref)),
     });
   // Run once when session + handlers are stable
   // eslint-disable-next-line react-hooks/exhaustive-deps

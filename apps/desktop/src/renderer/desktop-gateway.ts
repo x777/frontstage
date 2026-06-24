@@ -16,7 +16,7 @@ interface DesktopProjectBridge {
   removeRecent(id: string): Promise<void>;
   __setNextPick(p: string): Promise<void>;
   __setNextExportPick?(p: string): Promise<void>;
-  onMenuCommand(cb: (cmd: string) => void): void;
+  onMenuCommand(cb: (cmd: string, arg?: unknown) => void): void;
 }
 
 declare global {

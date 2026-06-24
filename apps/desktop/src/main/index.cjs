@@ -169,17 +169,49 @@ ipcMain.handle("project:addRecent", (_e, rec) => {
   let entries = loadRecent();
   entries = [rec, ...entries.filter((e) => e.id !== rec.id && e.path !== rec.path)].slice(0, 10);
   saveRecent(entries);
+  rebuildMenu();
 });
 
 ipcMain.handle("project:removeRecent", (_e, id) => {
   const entries = loadRecent().filter((e) => e.id !== id);
   saveRecent(entries);
+  rebuildMenu();
 });
 
+// ── Window state persistence ─────────────────────────────────────────────────
+
+function windowStatePath() {
+  return path.join(app.getPath("userData"), "window-state.json");
+}
+
+function loadWindowState() {
+  try {
+    const raw = fs.readFileSync(windowStatePath(), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { width: 1280, height: 800 };
+    const { x, y, width, height } = parsed;
+    if (
+      typeof width !== "number" || typeof height !== "number" ||
+      typeof x !== "number" || typeof y !== "number"
+    ) return { width: 1280, height: 800 };
+    return { x, y, width, height };
+  } catch {
+    return { width: 1280, height: 800 };
+  }
+}
+
+function saveWindowState(bounds) {
+  try {
+    const p = windowStatePath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }));
+  } catch { /* never throw */ }
+}
+
 function createWindow() {
+  const bounds = loadWindowState();
   const win = new BrowserWindow({
-    width: 800,
-    height: 600,
+    ...bounds,
     show: true,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
@@ -190,11 +222,34 @@ function createWindow() {
     },
   });
 
+  let debounceTimer = null;
+  function scheduleSave() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => { saveWindowState(win.getBounds()); }, 300);
+  }
+
+  win.on("resize", scheduleSave);
+  win.on("move", scheduleSave);
+  win.on("close", () => {
+    clearTimeout(debounceTimer);
+    saveWindowState(win.getBounds());
+  });
+
   const rendererPort = process.env.RENDERER_PORT || "5190";
   win.loadURL(`http://localhost:${rendererPort}/editor.html`);
 }
 
+// ── Menu with Open Recent submenu ────────────────────────────────────────────
+
 function buildMenu() {
+  const recent = loadRecent();
+  const recentItems = recent.length > 0
+    ? recent.map((ref) => ({
+        label: ref.name,
+        click: (_i, win) => win?.webContents.send("menu:command", "open-recent", ref),
+      }))
+    : [{ label: "No Recent Projects", enabled: false }];
+
   return Menu.buildFromTemplate([
     {
       label: "File",
@@ -208,6 +263,10 @@ function buildMenu() {
           label: "Open…",
           accelerator: "CmdOrCtrl+O",
           click: (_i, win) => win?.webContents.send("menu:command", "open"),
+        },
+        {
+          label: "Open Recent",
+          submenu: recentItems,
         },
         {
           label: "Save",
@@ -260,13 +319,17 @@ function buildMenu() {
   ]);
 }
 
+function rebuildMenu() {
+  Menu.setApplicationMenu(buildMenu());
+}
+
 app.whenReady().then(() => {
   // recent.json only ever holds user-picked (authorized) paths — see addRecent's assertAuthorized — so authorizing them on startup is safe.
   const recent = loadRecent();
   for (const entry of recent) {
     if (entry && typeof entry.path === "string") authorize(entry.path);
   }
-  Menu.setApplicationMenu(buildMenu());
+  rebuildMenu();
   createWindow();
 });
 

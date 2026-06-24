@@ -31,15 +31,19 @@ createRoot(root).render(
       session={session}
       exportGateway={exportGateway}
       onReady={(cmds) => {
-        window.desktopProject?.onMenuCommand((c) => {
-          const m: Record<string, () => void> = {
-            "new": cmds.newProject,
-            "open": cmds.open,
-            "save": cmds.save,
-            "save-as": cmds.saveAs,
-            "export": cmds.export,
-          };
-          m[c]?.();
+        window.desktopProject?.onMenuCommand((c, arg) => {
+          if (c === "open-recent") {
+            cmds.openRecent(arg as import("@palmier/core").ProjectRef);
+          } else {
+            const m: Record<string, () => void> = {
+              "new": cmds.newProject,
+              "open": cmds.open,
+              "save": cmds.save,
+              "save-as": cmds.saveAs,
+              "export": cmds.export,
+            };
+            m[c]?.();
+          }
         });
       }}
     />
