@@ -64,6 +64,8 @@ interface LayoutProps {
   inspector: ReactNode;
   topBarSlot?: ReactNode;
   title?: string;
+  agent?: ReactNode;
+  agentVisible?: boolean;
 }
 
 const resizeHandleStyle: React.CSSProperties = {
@@ -137,7 +139,7 @@ function PanelHeader({
   );
 }
 
-export function Layout({ store, media, preview, timeline, inspector, topBarSlot, title }: LayoutProps) {
+export function Layout({ store, media, preview, timeline, inspector, topBarSlot, title, agent, agentVisible }: LayoutProps) {
   const layout = useStore(store, (s) => s.layout);
 
   function handleFocus(p: FocusedPanel) {
@@ -281,6 +283,31 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                 <div style={{ flex: 1, overflow: "hidden" }}>{inspector}</div>
               </section>
             </Panel>
+
+            {agent && agentVisible && (
+              <>
+                <PanelResizeHandle style={resizeHandleStyle} />
+                <Panel defaultSize={22} minSize={14}>
+                  <section data-testid="panel-agent" style={panelSectionStyle}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                        borderBottom: `${theme.borderWidth.thin} solid ${theme.border.divider}`,
+                        background: theme.bg.raised,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
+                        Agent
+                      </span>
+                    </div>
+                    <div style={{ flex: 1, overflow: "hidden" }}>{agent}</div>
+                  </section>
+                </Panel>
+              </>
+            )}
           </PanelGroup>
         </div>
       )}

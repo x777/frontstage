@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
+import type { AgentSession } from "@palmier/ai";
 import {
   addClipCommand,
   dropTargetAt,
@@ -18,6 +19,7 @@ import { MediaPanel } from "../media/MediaPanel.js";
 import { MediaDragController } from "../media/media-drag.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { FileMenu } from "./FileMenu.js";
+import { AgentPanel } from "../agent/AgentPanel.js";
 import { useStore } from "../store/use-store.js";
 import { useExportCommand } from "./use-export-command.js";
 import { ExportProgress } from "./ExportProgress.js";
@@ -39,6 +41,7 @@ export interface EditorProps {
   session?: ProjectSession;
   exportGateway?: ExportGateway;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
+  agent?: { session: AgentSession; model?: string };
 }
 
 interface DiscardDialogState {
@@ -47,8 +50,20 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, exportGateway, onReady }: EditorProps) {
+export function Editor({ store, media, library, session, exportGateway, onReady, agent }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
+
+  const [agentVisible, setAgentVisible] = useState(() => {
+    try { return localStorage.getItem("palmier.agent.visible") === "1"; } catch { return false; }
+  });
+
+  function toggleAgent() {
+    setAgentVisible((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("palmier.agent.visible", next ? "1" : "0"); } catch { /* storage unavailable */ }
+      return next;
+    });
+  }
 
   const dragSnap = useSyncExternalStore(
     dragController.subscribe.bind(dragController),
@@ -291,16 +306,40 @@ export function Editor({ store, media, library, session, exportGateway, onReady 
       <Layout
         store={store}
         topBarSlot={
-          session ? (
-            <FileMenu
-              session={session}
-              confirmDiscard={confirmDiscard}
-              runProjectCommand={runProjectCommand}
-              onExport={canExport ? exportProject : undefined}
-            />
+          (session || agent) ? (
+            <>
+              {session && (
+                <FileMenu
+                  session={session}
+                  confirmDiscard={confirmDiscard}
+                  runProjectCommand={runProjectCommand}
+                  onExport={canExport ? exportProject : undefined}
+                />
+              )}
+              {agent && (
+                <button
+                  data-testid="agent-toggle"
+                  onClick={toggleAgent}
+                  style={{
+                    background: agentVisible ? theme.accent.primary : "none",
+                    border: `${theme.borderWidth.thin} solid ${agentVisible ? theme.accent.primary : theme.border.subtle}`,
+                    borderRadius: theme.radius.xs,
+                    color: agentVisible ? theme.text.onAccent : theme.text.secondary,
+                    cursor: "pointer",
+                    fontSize: theme.fontSize.xs,
+                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                    lineHeight: 1,
+                  }}
+                >
+                  Agent
+                </button>
+              )}
+            </>
           ) : undefined
         }
         title={title}
+        agent={agent ? <AgentPanel session={agent.session} model={agent.model} /> : undefined}
+        agentVisible={agentVisible}
         media={
           <MediaPanel
             library={library}
