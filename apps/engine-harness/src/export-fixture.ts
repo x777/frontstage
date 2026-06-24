@@ -3,7 +3,7 @@ import {
   timelineTotalFrames,
   type Timeline, type Clip,
 } from "@palmier/core";
-import { demuxMp4, exportTimelineToMp4, type MediaByteSource } from "@palmier/engine";
+import { demuxMp4, runExport, WebCodecsMp4Sink, type MediaByteSource } from "@palmier/engine";
 
 declare global {
   interface Window {
@@ -19,6 +19,9 @@ declare global {
       audioSampleRate: number | undefined;
       videoDurationUs: number | undefined;
       audioDurationUs: number | undefined;
+      progressCalls: number;
+      progressLast: [number, number];
+      progressMonotonic: boolean;
     }>) | undefined;
     __status: string;
   }
@@ -125,8 +128,10 @@ async function main(): Promise<void> {
     const totalFrames = timelineTotalFrames(timeline);
 
     window.__exportAndDemux = async () => {
-      const blob = await exportTimelineToMp4(timeline, source);
-      const demuxResult = await demuxMp4(blob);
+      const calls: Array<[number, number]> = [];
+      const onProgress = (c: number, t: number) => calls.push([c, t]);
+      const blob = await runExport(timeline, source, new WebCodecsMp4Sink(), onProgress);
+      const demuxResult = await demuxMp4(blob!);
 
       const videoSamples = demuxResult.video?.samples;
       const audioSamples = demuxResult.audio?.samples;
@@ -141,6 +146,10 @@ async function main(): Promise<void> {
         ? lastAudioSample.cts + Math.round((lastAudioSample.durationTicks / demuxResult.audio!.timescale) * 1_000_000)
         : undefined;
 
+      const progressMonotonic = calls.length > 0 &&
+        calls.every(([c], i) => i === 0 ? c === 1 : c === calls[i - 1]![0] + 1) &&
+        calls.every(([, t]) => t === calls[calls.length - 1]![1]);
+
       return {
         hasVideo: !!demuxResult.video,
         width: demuxResult.video?.codedWidth,
@@ -153,6 +162,9 @@ async function main(): Promise<void> {
         audioSampleRate: demuxResult.audio?.sampleRate,
         videoDurationUs,
         audioDurationUs,
+        progressCalls: calls.length,
+        progressLast: calls[calls.length - 1] ?? [0, 0],
+        progressMonotonic,
       };
     };
 

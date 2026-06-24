@@ -14,6 +14,9 @@ declare global {
       audioSampleRate: number | undefined;
       videoDurationUs: number | undefined;
       audioDurationUs: number | undefined;
+      progressCalls: number;
+      progressLast: [number, number];
+      progressMonotonic: boolean;
     }>) | undefined;
     __status: string;
   }
@@ -39,4 +42,10 @@ test("exports a multi-track timeline to a valid MP4 (video + audio tracks round-
   expect(r.audioDurationUs).toBeDefined();
   const diffUs = Math.abs(r.audioDurationUs! - r.videoDurationUs!);
   expect(diffUs).toBeLessThanOrEqual(200_000);
+
+  // Progress callback assertions
+  expect(r.progressCalls).toBe(r.totalFrames);
+  expect(r.progressLast[0]).toBe(r.totalFrames);
+  expect(r.progressLast[1]).toBe(r.totalFrames);
+  expect(r.progressMonotonic).toBe(true);
 });

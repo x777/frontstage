@@ -10,7 +10,7 @@ export interface ExportOptions {
   bitrate?: number;
 }
 
-export async function runExport(timeline: Timeline, media: MediaByteSource, sink: ExportSink): Promise<Blob | undefined> {
+export async function runExport(timeline: Timeline, media: MediaByteSource, sink: ExportSink, onProgress?: (completed: number, total: number) => void): Promise<Blob | undefined> {
   const { width, height, fps } = timeline;
   const totalFrames = timelineTotalFrames(timeline);
 
@@ -43,6 +43,7 @@ export async function runExport(timeline: Timeline, media: MediaByteSource, sink
         durationUs: Math.round(1e6 / fps),
         keyFrame: frame % fps === 0,
       });
+      onProgress?.(frame + 1, totalFrames);
     }
 
     if (mixer) {
