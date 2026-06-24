@@ -62,6 +62,33 @@ ipcMain.handle("project:__setNextPick", (_e, p) => {
   nextPick = p;
 });
 
+let nextExportPick = null;
+
+ipcMain.handle("project:__setNextExportPick", (_e, p) => {
+  if (process.env.PALMIER_E2E !== "1") throw new Error("test-only");
+  nextExportPick = p;
+});
+
+ipcMain.handle("project:pickExportSave", async (_e, suggestedName) => {
+  let p;
+  if (nextExportPick) {
+    p = nextExportPick;
+    nextExportPick = null;
+  } else {
+    const r = await dialog.showSaveDialog({
+      defaultPath: suggestedName,
+      filters: [
+        { name: "MP4 video", extensions: ["mp4"] },
+        { name: "QuickTime", extensions: ["mov"] },
+      ],
+    });
+    if (r.canceled || !r.filePath) return null;
+    p = r.filePath;
+  }
+  authorize(path.dirname(p));
+  return p;
+});
+
 ipcMain.handle("project:pickOpen", async () => {
   if (nextPick) {
     const p = nextPick;
@@ -192,6 +219,11 @@ function buildMenu() {
           accelerator: "CmdOrCtrl+Shift+S",
           click: (_i, win) => win?.webContents.send("menu:command", "save-as"),
         },
+        {
+          label: "Export…",
+          accelerator: "CmdOrCtrl+E",
+          click: (_i, win) => win?.webContents.send("menu:command", "export"),
+        },
         { type: "separator" },
         { role: "quit" },
       ],
@@ -321,10 +353,12 @@ ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec
   const spec = CODECS[codec];
   if (!spec) throw new Error("unsupported codec: " + String(codec));
 
-  // Output-path containment — must resolve inside OS temp dir
+  // Output-path containment — must be in an authorized dir (user-picked via pickExportSave) or in os.tmpdir() (test harness only)
   const resolved = path.resolve(outPath);
+  const outDir = path.dirname(resolved);
   const tmpRoot = path.resolve(os.tmpdir());
-  if (!resolved.startsWith(tmpRoot + path.sep)) throw new Error("output path must be within the temp dir");
+  const inTmp = outDir === tmpRoot || outDir.startsWith(tmpRoot + path.sep);
+  if (!inTmp) assertAuthorized(outDir);
 
   let ffmpegPath;
   try {

@@ -5,6 +5,7 @@ export type DesktopProjectRef = ProjectRef & { path: string };
 interface DesktopProjectBridge {
   pickOpen(): Promise<string | null>;
   pickSaveAs(name: string): Promise<string | null>;
+  pickExportSave(name: string): Promise<string | null>;
   readText(dir: string, name: string): Promise<string | null>;
   writeText(dir: string, name: string, data: string): Promise<void>;
   writeMedia(dir: string, rel: string, bytes: Uint8Array): Promise<void>;
@@ -14,6 +15,7 @@ interface DesktopProjectBridge {
   addRecent(rec: { id: string; name: string; path: string }): Promise<void>;
   removeRecent(id: string): Promise<void>;
   __setNextPick(p: string): Promise<void>;
+  __setNextExportPick?(p: string): Promise<void>;
   onMenuCommand(cb: (cmd: string) => void): void;
 }
 

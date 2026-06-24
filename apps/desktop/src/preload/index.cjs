@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("desktopExport", {
 contextBridge.exposeInMainWorld("desktopProject", {
   pickOpen: () => ipcRenderer.invoke("project:pickOpen"),
   pickSaveAs: (n) => ipcRenderer.invoke("project:pickSaveAs", n),
+  pickExportSave: (name) => ipcRenderer.invoke("project:pickExportSave", name),
   readText: (d, n) => ipcRenderer.invoke("project:readText", d, n),
   writeText: (d, n, x) => ipcRenderer.invoke("project:writeText", d, n, x),
   writeMedia: (d, r, b) => ipcRenderer.invoke("project:writeMedia", d, r, b),
@@ -32,5 +33,6 @@ contextBridge.exposeInMainWorld("desktopProject", {
   addRecent: (rec) => ipcRenderer.invoke("project:addRecent", rec),
   removeRecent: (id) => ipcRenderer.invoke("project:removeRecent", id),
   __setNextPick: (p) => ipcRenderer.invoke("project:__setNextPick", p),
+  ...(process.env.PALMIER_E2E === "1" ? { __setNextExportPick: (p) => ipcRenderer.invoke("project:__setNextExportPick", p) } : {}),
   onMenuCommand: (cb) => { ipcRenderer.removeAllListeners("menu:command"); ipcRenderer.on("menu:command", (_e, c) => cb(c)); _menuCommandCb = cb; },
 });

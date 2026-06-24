@@ -4,12 +4,14 @@ import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost } from "@palmier/ui";
 import { DesktopGateway } from "./desktop-gateway.js";
+import { DesktopExportGateway } from "./desktop-export-gateway.js";
 
 const store = new EditorStore(defaultTimeline());
 const library = new MediaLibrary();
 const gateway = new DesktopGateway();
 const { host, wrappedGateway } = createEditorHost(store, library, gateway);
 const session = new ProjectSession(host, wrappedGateway);
+const exportGateway = new DesktopExportGateway();
 
 // Expose for E2E tests
 (window as unknown as Record<string, unknown>).__palmierStore = store;
@@ -27,6 +29,7 @@ createRoot(root).render(
       media={library.byteSource}
       library={library}
       session={session}
+      exportGateway={exportGateway}
       onReady={(cmds) => {
         window.desktopProject?.onMenuCommand((c) => {
           const m: Record<string, () => void> = {
@@ -34,6 +37,7 @@ createRoot(root).render(
             "open": cmds.open,
             "save": cmds.save,
             "save-as": cmds.saveAs,
+            "export": cmds.export,
           };
           m[c]?.();
         });
