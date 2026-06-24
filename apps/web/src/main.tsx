@@ -2,7 +2,7 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { restoreLayout, createEditorHost } from "@palmier/ui";
+import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
 import { App } from "./App.js";
@@ -91,7 +91,7 @@ async function bootstrap() {
     | ((opts?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle | null>)
     | undefined;
   const gateway = new WebGateway(pickDirectory ? { pickDirectory } : undefined);
-  const { host, wrappedGateway } = createEditorHost(store, library, gateway);
+  const { host, wrappedGateway, appendGenerationLog } = createEditorHost(store, library, gateway);
   const session = new ProjectSession(host, wrappedGateway);
 
   // Construct WebAiGateway; proxy URL from test-seam or env.
@@ -117,7 +117,7 @@ async function bootstrap() {
   const initialImageModel = localStorage.getItem("palmier.image.model") ?? defaultImageModel();
   const imageGenerator = new ImageGenerator({
     gateway: agentGateway as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    host: { addMedia: (e, b) => library.addEntry(e, b) },
+    host: { addMedia: (e, b) => library.addEntry(e, b), appendGenerationLog },
     model: initialImageModel,
   });
   (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
@@ -135,13 +135,7 @@ async function bootstrap() {
     model: initialAgentModel,
   });
 
-  // Build session store (in-memory ProjectStore — project-bound persistence is 6.6 polish)
-  const memStore = new Map<string, string>();
-  const inMemoryProjectStore = {
-    readText: async (key: string) => memStore.get(key) ?? null,
-    writeText: async (key: string, value: string) => { memStore.set(key, value); },
-  };
-  const sessionStore = new ChatSessionStore(inMemoryProjectStore);
+  const sessionStore = new ChatSessionStore(localProjectStore("palmier.chats"));
 
   // Build mention items from the library's media entries
   const mentionItems = library.getManifest().entries.map((e) => ({

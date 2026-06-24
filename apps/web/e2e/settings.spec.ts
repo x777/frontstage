@@ -37,6 +37,67 @@ test("settings: changing agent model updates agentSession model", async ({ page 
   expect(stored).toBe(newValue);
 });
 
+test("chat sessions persist across reload (localStorage)", async ({ page }) => {
+  const FAKE_GATEWAY_TEXT = `
+    window.__aiGateway = {
+      async *streamChat(req) {
+        yield { type: "textDelta", text: "Persisted reply." };
+        yield { type: "done", finishReason: "stop" };
+      },
+    };
+  `;
+  await page.addInitScript(FAKE_GATEWAY_TEXT);
+  await page.goto("/");
+  await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
+  await page.waitForFunction(() => !!(window as any).__agentSession, { timeout: 15_000 });
+
+  // Open agent panel
+  const toggle = page.locator('[data-testid="agent-toggle"]');
+  await expect(toggle).toBeVisible({ timeout: 10_000 });
+  await toggle.click();
+  await expect(page.locator('[data-testid="agent-panel"]')).toBeVisible({ timeout: 5_000 });
+
+  // Send a message to create a session
+  const input = page.locator('[data-testid="agent-input"]');
+  await expect(input).toBeVisible({ timeout: 5_000 });
+  await input.fill("hello persist");
+  await page.locator('[data-testid="agent-send"]').click();
+
+  // Wait for reply
+  await page.waitForFunction(
+    () => {
+      const s = (window as any).__agentSession?.getState?.();
+      return s?.status === "idle" && s?.messages?.length >= 2;
+    },
+    { timeout: 15_000 },
+  );
+
+  // Save the current session so it appears in the switcher list
+  await page.locator('[data-testid="agent-new"]').click();
+
+  // Verify session list has the saved session before reload
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="agent-session-0"]') !== null,
+    { timeout: 5_000 },
+  );
+
+  // Reload the page — addInitScript persists so the fake gateway is re-injected
+  await page.reload();
+  await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
+  await page.waitForFunction(() => !!(window as any).__agentSession, { timeout: 15_000 });
+
+  // Ensure the agent panel is visible (state was persisted via localStorage)
+  const panelLocator = page.locator('[data-testid="agent-panel"]');
+  const isPanelVisible = await panelLocator.isVisible();
+  if (!isPanelVisible) {
+    await page.locator('[data-testid="agent-toggle"]').click();
+    await expect(panelLocator).toBeVisible({ timeout: 5_000 });
+  }
+
+  // The saved session should still appear in the session list after reload
+  await expect(page.locator('[data-testid="agent-session-0"]')).toBeVisible({ timeout: 5_000 });
+});
+
 test("settings proxy: Save persists to localStorage", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });

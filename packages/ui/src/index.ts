@@ -45,3 +45,4 @@ export { SettingsPanel } from "./agent/SettingsPanel.js";
 export type { SettingsPanelProps, KeyConfig } from "./agent/SettingsPanel.js";
 export { ModelPicker } from "./agent/ModelPicker.js";
 export type { ModelPickerProps } from "./agent/ModelPicker.js";
+export { localProjectStore } from "./storage/local-project-store.js";

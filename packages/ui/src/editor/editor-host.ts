@@ -1,6 +1,7 @@
 import type { EditorStore } from "@palmier/core";
 import type { MediaManifest, MediaGateway } from "@palmier/core";
 import type { ProjectHost, ProjectGateway, BoundProject } from "@palmier/core";
+import type { GenerationLogEntry } from "@palmier/core";
 import { emptyGenerationLog } from "@palmier/core";
 
 export interface EditorMediaHost {
@@ -20,6 +21,7 @@ export interface WrappedGateway extends ProjectGateway {
 export interface EditorHostResult {
   host: ProjectHost;
   wrappedGateway: WrappedGateway;
+  appendGenerationLog: (entry: GenerationLogEntry) => void;
 }
 
 export function createEditorHost(
@@ -30,6 +32,7 @@ export function createEditorHost(
   let _lastMedia: MediaGateway | null = null;
   // True after bind(); consumed (reset false) on loadDoc so a new-doc loadDoc (no preceding bind) passes null.
   let _bindPending = false;
+  let _genLog: GenerationLogEntry[] = [];
 
   const wrappedGateway: WrappedGateway = {
     get _lastMedia() {
@@ -67,12 +70,13 @@ export function createEditorHost(
       return mediaHost.getManifest();
     },
     getGenerationLog() {
-      return emptyGenerationLog();
+      return { version: 1 as const, entries: [..._genLog] };
     },
     loadDoc(doc) {
       // No preceding bind means new-doc path: clear stale gateway so empty manifest has no stale store.
       if (!_bindPending) _lastMedia = null;
       _bindPending = false;
+      _genLog = doc.generationLog?.entries ? [...doc.generationLog.entries] : [];
       store.load(doc.timeline);
       mediaHost.loadManifest(doc.manifest, _lastMedia);
       mediaHost.setGateway(_lastMedia);
@@ -85,5 +89,9 @@ export function createEditorHost(
     },
   };
 
-  return { host, wrappedGateway };
+  function appendGenerationLog(entry: GenerationLogEntry): void {
+    _genLog.push(entry);
+  }
+
+  return { host, wrappedGateway, appendGenerationLog };
 }
