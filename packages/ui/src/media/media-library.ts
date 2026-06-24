@@ -104,6 +104,14 @@ export class MediaLibrary {
     this.emit();
   }
 
+  addEntry(entry: MediaManifestEntry, bytes: Uint8Array): void {
+    if (entry.source.kind !== "project") throw new Error("addEntry requires a project source");
+    const { relativePath } = entry.source;
+    this._bytes.set(relativePath, bytes);
+    this._entries.push(entry);
+    this.emit();
+  }
+
   async importFiles(files: File[] | FileList): Promise<MediaManifestEntry[]> {
     const added: MediaManifestEntry[] = [];
 

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
@@ -44,12 +44,19 @@ async function bootstrap() {
 
   // Build agent session — __aiGateway seam takes precedence (e2e injects a fake)
   const agentGateway = (window as unknown as Record<string, unknown>).__aiGateway ?? webAiGateway;
+  const agentModel = "anthropic/claude-sonnet-4-6";
+  const imageGenerator = new ImageGenerator({
+    gateway: agentGateway as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    host: { addMedia: (e, b) => library.addEntry(e, b) },
+    model: agentModel,
+  });
+  (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
   const executor = new ToolExecutor(buildCatalog(), {
     store,
     getManifest: () => library.getManifest(),
     newId: () => crypto.randomUUID(),
+    generateImage: (input) => imageGenerator.generate(input),
   });
-  const agentModel = "anthropic/claude-sonnet-4-6";
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     gateway: agentGateway as any,

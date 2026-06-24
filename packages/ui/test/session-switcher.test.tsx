@@ -75,6 +75,7 @@ class FakeGateway implements AiGateway {
     if (!events) throw new Error("FakeGateway: no more turns");
     for (const ev of events) yield ev;
   }
+  async generateImage() { return { images: [] }; }
 }
 
 function makeDeps(store: EditorStore): AgentSessionDeps {
