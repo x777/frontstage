@@ -4,7 +4,7 @@ import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG } from "@palmier/ai";
 
 declare global {
   interface Window {
@@ -73,8 +73,28 @@ window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
     } else if (kind === "callTool") {
       const p = payload as { name: string; args: unknown };
       result = await executor.execute(p.name, p.args);
+    } else if (kind === "listResources") {
+      result = [
+        { uri: "palmier://models", name: "Models", description: "Available AI models", mimeType: "application/json" },
+        { uri: "palmier://timeline", name: "Timeline", description: "Current project timeline", mimeType: "application/json" },
+      ];
+    } else if (kind === "readResource") {
+      const uri = (payload as { uri: string }).uri;
+      let text: string;
+      if (uri === "palmier://models") {
+        text = JSON.stringify(MODEL_CATALOG);
+      } else if (uri === "palmier://timeline") {
+        const r = await executor.execute("get_timeline", {});
+        const block = r.blocks.find((b) => b.kind === "text");
+        text = block && block.kind === "text" ? block.text : "{}";
+      } else {
+        window.desktopMcp!.bridgeRespond(id, { error: "unknown resource: " + uri });
+        return;
+      }
+      result = { contents: [{ uri, mimeType: "application/json", text }] };
     } else {
-      result = { __error: "unknown bridge kind: " + kind };
+      window.desktopMcp!.bridgeRespond(id, { error: "unknown bridge kind: " + kind });
+      return;
     }
     window.desktopMcp!.bridgeRespond(id, { result });
   } catch (e) {

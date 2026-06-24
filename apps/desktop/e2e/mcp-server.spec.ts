@@ -182,6 +182,28 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     }
     expect(badCallIsError).toBe(true);
 
+    // 7d. resources/list: two resources — palmier://models + palmier://timeline
+    const resList = await client.listResources();
+    expect(resList.resources.length).toBe(2);
+    const resUris = resList.resources.map((r: any) => r.uri);
+    expect(resUris).toContain("palmier://models");
+    expect(resUris).toContain("palmier://timeline");
+
+    // 7e. resources/read palmier://models → MODEL_CATALOG JSON with known model id
+    const modelsRes = await client.readResource({ uri: "palmier://models" });
+    const modelsCatalog = JSON.parse(modelsRes.contents[0].text);
+    expect(Array.isArray(modelsCatalog)).toBe(true);
+    const modelIds = modelsCatalog.map((m: any) => m.id);
+    expect(modelIds).toContain("anthropic/claude-sonnet-4-6");
+
+    // 7f. resources/read palmier://timeline → reflects live edits
+    // (add_texts was already called in 7b — timeline has at least one clip)
+    const tlRes = await client.readResource({ uri: "palmier://timeline" });
+    const tlJson = JSON.parse(tlRes.contents[0].text);
+    expect(typeof tlJson.fps).toBe("number");
+    const allClips = (tlJson.tracks ?? []).flatMap((tr: any) => tr.clips ?? []);
+    expect(allClips.length).toBeGreaterThan(0);
+
     await client.close();
 
     // 8. MCP client WITHOUT token → connect rejects (401)

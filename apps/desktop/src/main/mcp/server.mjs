@@ -2,7 +2,7 @@ import http from "node:http";
 import { checkAuth } from "./auth.mjs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { ListToolsRequestSchema, CallToolRequestSchema, ListResourcesRequestSchema, ReadResourceRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 function toMcpResult(result) {
   return {
@@ -29,6 +29,8 @@ function createMcpServer(bridge) {
       return { content: [{ type: "text", text: "editor not ready: " + String(e) }], isError: true };
     }
   });
+  mcp.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: await bridge("listResources") }));
+  mcp.setRequestHandler(ReadResourceRequestSchema, async (req) => await bridge("readResource", { uri: req.params.uri }));
   return mcp;
 }
 
