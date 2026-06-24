@@ -129,6 +129,25 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@22.19.21)
 
+  packages/ai:
+    dependencies:
+      '@palmier/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.19.21
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.19.21)(jsdom@24.1.3)
+
   packages/core:
     dependencies:
       zod:
