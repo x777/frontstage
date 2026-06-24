@@ -1,16 +1,19 @@
 import { useState, useRef, useEffect } from "react";
-import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext, ToolBlock } from "@palmier/ai";
+import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext, ToolBlock, ModelEntry } from "@palmier/ai";
 import { toolResultToText } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { useAgentSession } from "./use-agent-session.js";
 import { SessionSwitcher } from "./SessionSwitcher.js";
 import { MentionInput, type MentionItem } from "./MentionInput.js";
+import { ModelPicker } from "./ModelPicker.js";
 
 export interface AgentPanelProps {
   session: AgentSession;
   model?: string;
   sessionStore?: ChatSessionStore;
   mentionItems?: MentionItem[];
+  llmModels?: ModelEntry[];
+  onModelChange?: (id: string) => void;
 }
 
 function joinTextBlocks(content: AgentContentBlock[]): string {
@@ -115,7 +118,7 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   );
 }
 
-export function AgentPanel({ session, model, sessionStore, mentionItems }: AgentPanelProps) {
+export function AgentPanel({ session, model, sessionStore, mentionItems, llmModels, onModelChange }: AgentPanelProps) {
   const state = useAgentSession(session);
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -151,7 +154,11 @@ export function AgentPanel({ session, model, sessionStore, mentionItems }: Agent
         fontSize: theme.fontSize.sm,
       }}
     >
-      {model != null && (
+      {(llmModels && onModelChange) ? (
+        <div style={{ padding: `${theme.spacing.xxs} ${theme.spacing.sm}`, borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`, flexShrink: 0 }}>
+          <ModelPicker testid="agent-model-picker" models={llmModels} value={model ?? ""} onChange={onModelChange} />
+        </div>
+      ) : model != null ? (
         <div
           data-testid="agent-model"
           style={{
@@ -165,7 +172,7 @@ export function AgentPanel({ session, model, sessionStore, mentionItems }: Agent
         >
           {model}
         </div>
-      )}
+      ) : null}
 
       {sessionStore && (
         <SessionSwitcher session={session} sessionStore={sessionStore} />

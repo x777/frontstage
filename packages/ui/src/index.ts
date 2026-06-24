@@ -41,3 +41,7 @@ export { SessionSwitcher } from "./agent/SessionSwitcher.js";
 export { MentionInput } from "./agent/MentionInput.js";
 export type { MentionItem } from "./agent/MentionInput.js";
 export { useAgentSession } from "./agent/use-agent-session.js";
+export { SettingsPanel } from "./agent/SettingsPanel.js";
+export type { SettingsPanelProps, KeyConfig } from "./agent/SettingsPanel.js";
+export { ModelPicker } from "./agent/ModelPicker.js";
+export type { ModelPickerProps } from "./agent/ModelPicker.js";

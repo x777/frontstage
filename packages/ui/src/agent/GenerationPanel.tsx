@@ -1,15 +1,19 @@
 import { useState } from "react";
 import type { MediaManifestEntry } from "@palmier/core";
-import type { ImageGenInput } from "@palmier/ai";
+import type { ImageGenInput, ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { ModelPicker } from "./ModelPicker.js";
 
 export interface GenerationPanelProps {
   generate: (input: ImageGenInput) => Promise<MediaManifestEntry>;
   model?: string;
   onClose?: () => void;
+  imageModels?: ModelEntry[];
+  imageModel?: string;
+  onImageModelChange?: (id: string) => void;
 }
 
-export function GenerationPanel({ generate, model, onClose }: GenerationPanelProps) {
+export function GenerationPanel({ generate, model, onClose, imageModels, imageModel, onImageModelChange }: GenerationPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -95,18 +99,16 @@ export function GenerationPanel({ generate, model, onClose }: GenerationPanelPro
           )}
         </div>
 
-        {model != null && (
+        {(imageModels && imageModel && onImageModelChange) ? (
+          <ModelPicker testid="gen-model-picker" models={imageModels} value={imageModel} onChange={onImageModelChange} />
+        ) : model != null ? (
           <div
             data-testid="gen-model"
-            style={{
-              fontSize: theme.fontSize.xxs,
-              color: theme.text.muted,
-              fontWeight: theme.fontWeight.regular,
-            }}
+            style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted, fontWeight: theme.fontWeight.regular }}
           >
             {model}
           </div>
-        )}
+        ) : null}
 
         <textarea
           data-testid="gen-prompt"

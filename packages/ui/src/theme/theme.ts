@@ -122,6 +122,7 @@ export const theme = {
     mentionPickerMax: "var(--size-mention-picker-max)",
     sessionListMax: "var(--size-session-list-max)",
     generationPanelMin: "var(--size-generation-panel-min)",
+    settingsPanelMin: "var(--size-settings-panel-min)",
   },
   z: {
     menu: "var(--z-menu)",

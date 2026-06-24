@@ -1,15 +1,83 @@
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator } from "@palmier/ai";
+import type { KeyConfig } from "@palmier/ui";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
 import { WebExportGateway } from "./web-export.js";
 import { WebAiGateway } from "./web-ai-gateway.js";
 import "./web-fs-test-entry.js";
+
+interface PalmierAppProps {
+  store: EditorStore;
+  session: ProjectSession;
+  library: Awaited<ReturnType<typeof buildSampleLibrary>>;
+  exportGateway: WebExportGateway;
+  agentSession: AgentSession;
+  imageGenerator: ImageGenerator;
+  sessionStore: ChatSessionStore;
+  mentionItems: { id: string; label: string; kind: "media"; contextText: string }[];
+  aiProxyUrl: string;
+}
+
+function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl }: PalmierAppProps) {
+  const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
+  const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
+  const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
+
+  function onAgentModelChange(id: string) {
+    setAgentModel(id);
+    agentSession.setModel(id);
+    localStorage.setItem("palmier.agent.model", id);
+  }
+
+  function onImageModelChange(id: string) {
+    setImageModel(id);
+    imageGenerator.setModel(id);
+    localStorage.setItem("palmier.image.model", id);
+  }
+
+  const keyConfig: KeyConfig = {
+    kind: "proxy",
+    proxyUrl,
+    proxyToken: localStorage.getItem("palmier.ai.proxyToken") ?? undefined,
+    onSave: (url, token) => {
+      localStorage.setItem("palmier.ai.proxyUrl", url);
+      setProxyUrl(url);
+      if (token) localStorage.setItem("palmier.ai.proxyToken", token);
+    },
+  };
+
+  return (
+    <App
+      store={store}
+      media={library.byteSource}
+      library={library}
+      session={session}
+      exportGateway={exportGateway}
+      agent={{
+        session: agentSession,
+        model: agentModel,
+        sessionStore,
+        mentionItems,
+        imageGenerator,
+        settings: {
+          keyConfig,
+          llmModels: listLLMModels(),
+          imageModels: listImageModels(),
+          agentModel,
+          imageModel,
+          onAgentModelChange,
+          onImageModelChange,
+        },
+      }}
+    />
+  );
+}
 
 async function bootstrap() {
   const store = new EditorStore(sampleTimeline());
@@ -44,11 +112,12 @@ async function bootstrap() {
 
   // Build agent session — __aiGateway seam takes precedence (e2e injects a fake)
   const agentGateway = (window as unknown as Record<string, unknown>).__aiGateway ?? webAiGateway;
-  const agentModel = "anthropic/claude-sonnet-4-6";
+  const initialAgentModel = localStorage.getItem("palmier.agent.model") ?? defaultLLMModel();
+  const initialImageModel = localStorage.getItem("palmier.image.model") ?? defaultImageModel();
   const imageGenerator = new ImageGenerator({
     gateway: agentGateway as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     host: { addMedia: (e, b) => library.addEntry(e, b) },
-    model: agentModel,
+    model: initialImageModel,
   });
   (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
   const executor = new ToolExecutor(buildCatalog(), {
@@ -62,7 +131,7 @@ async function bootstrap() {
     gateway: agentGateway as any,
     executor,
     tools: buildCatalog(),
-    model: agentModel,
+    model: initialAgentModel,
   });
 
   // Build session store (in-memory ProjectStore — project-bound persistence is 6.6 polish)
@@ -93,7 +162,17 @@ async function bootstrap() {
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems, imageGenerator }} />
+      <PalmierApp
+        store={store}
+        session={session}
+        library={library}
+        exportGateway={exportGateway}
+        agentSession={agentSession}
+        imageGenerator={imageGenerator}
+        sessionStore={sessionStore}
+        mentionItems={mentionItems}
+        aiProxyUrl={aiProxyUrl}
+      />
     </StrictMode>,
   );
 }

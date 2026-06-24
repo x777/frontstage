@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
-import type { AgentSession, ChatSessionStore, ImageGenerator } from "@palmier/ai";
+import type { AgentSession, ChatSessionStore, ImageGenerator, ModelEntry } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
+import { SettingsPanel } from "../agent/SettingsPanel.js";
+import type { KeyConfig } from "../agent/SettingsPanel.js";
 import {
   addClipCommand,
   dropTargetAt,
@@ -43,7 +45,22 @@ export interface EditorProps {
   session?: ProjectSession;
   exportGateway?: ExportGateway;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
-  agent?: { session: AgentSession; model?: string; sessionStore?: ChatSessionStore; mentionItems?: MentionItem[]; imageGenerator?: ImageGenerator };
+  agent?: {
+    session: AgentSession;
+    model?: string;
+    sessionStore?: ChatSessionStore;
+    mentionItems?: MentionItem[];
+    imageGenerator?: ImageGenerator;
+    settings?: {
+      keyConfig: KeyConfig;
+      llmModels: ModelEntry[];
+      imageModels: ModelEntry[];
+      agentModel: string;
+      imageModel: string;
+      onAgentModelChange: (id: string) => void;
+      onImageModelChange: (id: string) => void;
+    };
+  };
 }
 
 interface DiscardDialogState {
@@ -68,6 +85,7 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
   }
 
   const [generateVisible, setGenerateVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   const dragSnap = useSyncExternalStore(
     dragController.subscribe.bind(dragController),
@@ -356,11 +374,29 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
                   Generate
                 </button>
               )}
+              {agent?.settings && (
+                <button
+                  data-testid="settings-toggle"
+                  onClick={() => setSettingsVisible((v) => !v)}
+                  style={{
+                    background: settingsVisible ? theme.accent.primary : "none",
+                    border: `${theme.borderWidth.thin} solid ${settingsVisible ? theme.accent.primary : theme.border.subtle}`,
+                    borderRadius: theme.radius.xs,
+                    color: settingsVisible ? theme.text.onAccent : theme.text.secondary,
+                    cursor: "pointer",
+                    fontSize: theme.fontSize.xs,
+                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                    lineHeight: 1,
+                  }}
+                >
+                  ⚙
+                </button>
+              )}
             </>
           ) : undefined
         }
         title={title}
-        agent={agent ? <AgentPanel session={agent.session} model={agent.model} sessionStore={agent.sessionStore} mentionItems={agent.mentionItems} /> : undefined}
+        agent={agent ? <AgentPanel session={agent.session} model={agent.model} sessionStore={agent.sessionStore} mentionItems={agent.mentionItems} llmModels={agent.settings?.llmModels} onModelChange={agent.settings?.onAgentModelChange} /> : undefined}
         agentVisible={agentVisible}
         media={
           <MediaPanel
@@ -381,8 +417,24 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
       {generateVisible && agent?.imageGenerator && (
         <GenerationPanel
           generate={(i) => agent.imageGenerator!.generate(i)}
-          model={agent.model}
+          model={agent.settings?.imageModel ?? agent.model}
+          imageModels={agent.settings?.imageModels}
+          imageModel={agent.settings?.imageModel}
+          onImageModelChange={agent.settings?.onImageModelChange}
           onClose={() => setGenerateVisible(false)}
+        />
+      )}
+
+      {settingsVisible && agent?.settings && (
+        <SettingsPanel
+          keyConfig={agent.settings.keyConfig}
+          llmModels={agent.settings.llmModels}
+          imageModels={agent.settings.imageModels}
+          agentModel={agent.settings.agentModel}
+          imageModel={agent.settings.imageModel}
+          onAgentModelChange={agent.settings.onAgentModelChange}
+          onImageModelChange={agent.settings.onImageModelChange}
+          onClose={() => setSettingsVisible(false)}
         />
       )}
 
