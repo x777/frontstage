@@ -6,6 +6,7 @@ import { restoreLayout, createEditorHost } from "@palmier/ui";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
+import { WebExportGateway } from "./web-export.js";
 import "./web-fs-test-entry.js";
 
 async function bootstrap() {
@@ -22,17 +23,24 @@ async function bootstrap() {
   const { host, wrappedGateway } = createEditorHost(store, library, gateway);
   const session = new ProjectSession(host, wrappedGateway);
 
+  // If __pickSaveFile is injected (e2e seam), use it; otherwise real showSaveFilePicker.
+  const pickSaveFile = (window as any).__pickSaveFile as
+    | ((suggestedName: string) => Promise<FileSystemFileHandle | null>)
+    | undefined;
+  const exportGateway = new WebExportGateway(pickSaveFile ? { pickSaveFile } : undefined);
+
   // Expose for E2E tests
   (window as unknown as Record<string, unknown>).__palmierStore = store;
   (window as unknown as Record<string, unknown>).__mediaLibrary = library;
   (window as unknown as Record<string, unknown>).__projectSession = session;
   (window as unknown as Record<string, unknown>).__projectGateway = gateway;
+  (window as unknown as Record<string, unknown>).__webExportGateway = exportGateway;
 
   const root = document.getElementById("root");
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <App store={store} media={library.byteSource} library={library} session={session} />
+      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} />
     </StrictMode>,
   );
 }
