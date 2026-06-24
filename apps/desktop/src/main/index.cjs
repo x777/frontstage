@@ -31,7 +31,7 @@ function loadOrCreateToken() {
   try {
     fs.mkdirSync(path.dirname(mcpTokenFile()), { recursive: true });
     fs.writeFileSync(mcpTokenFile(), token, { mode: 0o600 });
-  } catch { /* best-effort */ }
+  } catch (e) { console.warn("[mcp] failed to persist token:", e.message); }
   return token;
 }
 
@@ -39,7 +39,7 @@ function writeToken(token) {
   try {
     fs.mkdirSync(path.dirname(mcpTokenFile()), { recursive: true });
     fs.writeFileSync(mcpTokenFile(), token, { mode: 0o600 });
-  } catch { /* best-effort */ }
+  } catch (e) { console.warn("[mcp] failed to persist token:", e.message); }
 }
 
 function writeEnabled(on) {

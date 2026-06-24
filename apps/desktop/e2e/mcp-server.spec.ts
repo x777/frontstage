@@ -75,6 +75,13 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     });
     expect(r403.status).toBe(403);
 
+    // 4b. 403 with spoofed Host header (DNS-rebinding defense)
+    const r403host = await httpGet(`http://127.0.0.1:${MCP_PORT}/healthz`, {
+      Authorization: `Bearer ${token}`,
+      Host: "evil.com",
+    });
+    expect(r403host.status).toBe(403);
+
     // 5. regenerateToken: old token → 401, new token → 200
     const newToken: string = await page.evaluate(async () => {
       return (window as any).desktopMcp.regenerateToken();
