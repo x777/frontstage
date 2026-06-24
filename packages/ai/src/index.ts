@@ -10,3 +10,11 @@ export { toolsToOpenAI, buildChatBody, parseOpenRouterStream } from "./agent/ope
 export type { AgentMessage, AgentContentBlock } from "./agent/conversation.js";
 export { toWireMessages, toolResultToText } from "./agent/conversation.js";
 export { DEFAULT_SYSTEM_PROMPT } from "./agent/system-prompt.js";
+export type {
+  AgentSessionDeps,
+  StreamingDraft,
+  AgentStatus,
+  AgentSessionState,
+  MentionContext,
+} from "./agent/session.js";
+export { AgentSession } from "./agent/session.js";
