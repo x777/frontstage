@@ -215,6 +215,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@palmier/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@palmier/core':
         specifier: workspace:*
         version: link:../core
