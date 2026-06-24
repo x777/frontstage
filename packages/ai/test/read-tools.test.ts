@@ -12,6 +12,8 @@ import {
   ToolExecutor,
   getTimelineTool,
   getMediaTool,
+  inspectMediaTool,
+  searchMediaTool,
   type ToolContext,
 } from "../src/index.js";
 
@@ -145,5 +147,68 @@ describe("get_media tool", () => {
     const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
     expect(text).toContain("media-1");
     expect(text).toContain("media-2");
+  });
+});
+
+describe("inspect_media tool", () => {
+  test("unknown id returns error", async () => {
+    const ctx = makeCtx();
+    const ex = new ToolExecutor([inspectMediaTool()], ctx);
+    const result = await ex.execute("inspect_media", { mediaId: "does-not-exist" });
+    expect(result.isError).toBe(true);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("does-not-exist");
+  });
+
+  test("known id returns metadata text with name and duration", async () => {
+    const ctx = makeCtx();
+    const ex = new ToolExecutor([inspectMediaTool()], ctx);
+    const result = await ex.execute("inspect_media", { mediaId: "media-1" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("sunrise.mp4");
+    expect(text).toContain("10");
+    expect(text).toContain("external");
+  });
+
+  test("known id returns source path", async () => {
+    const ctx = makeCtx();
+    const ex = new ToolExecutor([inspectMediaTool()], ctx);
+    const result = await ex.execute("inspect_media", { mediaId: "media-2" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("/tmp/ocean.mp4");
+  });
+});
+
+describe("search_media tool", () => {
+  test("substring match returns matching entry id", async () => {
+    const ctx = makeCtx();
+    const ex = new ToolExecutor([searchMediaTool()], ctx);
+    const result = await ex.execute("search_media", { query: "sunrise" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("media-1");
+    expect(text).not.toContain("media-2");
+  });
+
+  test("case-insensitive match", async () => {
+    const ctx = makeCtx();
+    const ex = new ToolExecutor([searchMediaTool()], ctx);
+    const result = await ex.execute("search_media", { query: "OCEAN" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("media-2");
+    expect(text).not.toContain("media-1");
+  });
+
+  test("no match returns non-error informative text", async () => {
+    const ctx = makeCtx();
+    const ex = new ToolExecutor([searchMediaTool()], ctx);
+    const result = await ex.execute("search_media", { query: "xyznotfound" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("No media matches");
+    expect(text).toContain("xyznotfound");
   });
 });
