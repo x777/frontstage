@@ -104,6 +104,7 @@ function KeychainConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "keychain" }>
 }
 
 function ProxyConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "proxy" }> }) {
+  // Seeded from props once; the settings panel is a modal that remounts on open, so no re-sync is needed.
   const [url, setUrl] = useState(cfg.proxyUrl);
   const [token, setToken] = useState(cfg.proxyToken ?? "");
   const [saved, setSaved] = useState(false);

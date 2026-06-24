@@ -1,16 +1,5 @@
 import type { ProjectStore } from "@palmier/core";
 
-function isLocalStorageAvailable(): boolean {
-  try {
-    const t = "__palmier_ls_test__";
-    localStorage.setItem(t, "1");
-    localStorage.removeItem(t);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** ProjectStore backed by localStorage, keyed `namespace:name`. Falls back to an in-memory Map when localStorage is unavailable. */
 export function localProjectStore(namespace: string): ProjectStore {
   // Fallback: created once per call; survives the host's lifetime but not page reloads.

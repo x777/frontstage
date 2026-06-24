@@ -45,6 +45,7 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
     kind: "proxy",
     proxyUrl,
     proxyToken: localStorage.getItem("palmier.ai.proxyToken") ?? undefined,
+    // Proxy auth token (NOT the OpenRouter key — that lives only on the self-hosted proxy). Browser-resident by design for the BYO self-host model; scoped to a user-controlled endpoint.
     onSave: (url, token) => {
       localStorage.setItem("palmier.ai.proxyUrl", url);
       setProxyUrl(url);
