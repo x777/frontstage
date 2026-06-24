@@ -29,18 +29,6 @@ export function addClipsTool(): ToolSpec {
         entries.push({ entry, trackIndex: c.trackIndex, startFrame: c.startFrame });
       }
 
-      const reducers = entries.map(({ entry, trackIndex, startFrame }) => {
-        const target =
-          trackIndex !== undefined
-            ? ({ kind: "existing" as const, index: trackIndex })
-            : ({ kind: "new" as const, index: 0 });
-        const id = ctx.newId();
-        return addClipCommand(entry, target, startFrame, fps, undefined, () => id).apply.bind(
-          addClipCommand(entry, target, startFrame, fps, undefined, () => id),
-        );
-      });
-
-      // Rebuild reducers properly — bind .apply from the command objects
       const commands = entries.map(({ entry, trackIndex, startFrame }) => {
         const target =
           trackIndex !== undefined

@@ -250,6 +250,20 @@ export function clipFromAsset(
   };
 }
 
+// --- removeTrackCommand ---
+
+export function removeTrackCommand(trackId: string): Command {
+  return {
+    label: "Remove Track",
+    apply(timeline: Timeline): Timeline {
+      const idx = timeline.tracks.findIndex((t) => t.id === trackId);
+      if (idx === -1) return timeline;
+      const newTracks = timeline.tracks.filter((_, i) => i !== idx);
+      return { ...timeline, tracks: newTracks };
+    },
+  };
+}
+
 // --- addClipCommand ---
 
 export function addClipCommand(
