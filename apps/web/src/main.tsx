@@ -29,7 +29,10 @@ async function bootstrap() {
     (window as unknown as Record<string, unknown>).__aiProxyUrl as string | undefined ??
     (import.meta.env.VITE_AI_PROXY_URL as string | undefined) ??
     "http://localhost:8787";
-  const webAiGateway = new WebAiGateway(aiProxyUrl);
+  const aiProxyToken =
+    (window as unknown as Record<string, unknown>).__aiProxyToken as string | undefined ??
+    (import.meta.env.VITE_AI_PROXY_TOKEN as string | undefined);
+  const webAiGateway = new WebAiGateway(aiProxyUrl, aiProxyToken);
   (window as unknown as Record<string, unknown>).__webAiGateway = webAiGateway;
 
   // If __pickSaveFile is injected (e2e seam), use it; otherwise real showSaveFilePicker.

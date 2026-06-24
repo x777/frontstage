@@ -2,6 +2,8 @@ import http from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createProxyServer } from "../src/server.js";
 
+const TEST_ORIGIN = "https://app.example.com";
+
 // Canned SSE payload the fake upstream returns
 const CANNED_SSE = [
   'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}',
@@ -11,11 +13,13 @@ const CANNED_SSE = [
   "data: [DONE]",
 ].join("\n") + "\n";
 
-function startFakeUpstream(): Promise<{ server: http.Server; port: number; lastAuthHeader: () => string | undefined }> {
+function startFakeUpstream(): Promise<{ server: http.Server; port: number; lastAuthHeader: () => string | undefined; callCount: () => number }> {
   return new Promise((resolve) => {
     let lastAuth: string | undefined;
+    let calls = 0;
     const server = http.createServer((req, res) => {
       lastAuth = req.headers["authorization"];
+      calls++;
       if (req.url === "/chat/completions" && req.method === "POST") {
         res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
         res.end(CANNED_SSE);
@@ -26,16 +30,18 @@ function startFakeUpstream(): Promise<{ server: http.Server; port: number; lastA
     });
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address() as { port: number };
-      resolve({ server, port: addr.port, lastAuthHeader: () => lastAuth });
+      resolve({ server, port: addr.port, lastAuthHeader: () => lastAuth, callCount: () => calls });
     });
   });
 }
 
-function startProxy(upstreamPort: number): Promise<{ server: http.Server; port: number }> {
+function startProxy(upstreamPort: number, extra?: Partial<Parameters<typeof createProxyServer>[0]>): Promise<{ server: http.Server; port: number }> {
   return new Promise((resolve) => {
     const server = createProxyServer({
       apiKey: "secret-xyz",
       upstreamBaseUrl: `http://127.0.0.1:${upstreamPort}`,
+      allowOrigin: TEST_ORIGIN,
+      ...extra,
     });
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address() as { port: number };
@@ -57,8 +63,67 @@ function httpRequest(options: http.RequestOptions, body?: string): Promise<{ sta
   });
 }
 
+// ── Construction guards ──────────────────────────────────────────────────────
+
+describe("createProxyServer — construction guards", () => {
+  it("throws when allowOrigin is '*'", () => {
+    expect(() =>
+      createProxyServer({ apiKey: "k", allowOrigin: "*" }),
+    ).toThrow("allowOrigin must be a specific origin (not '*')");
+  });
+
+  it("throws when allowOrigin is empty string", () => {
+    expect(() =>
+      createProxyServer({ apiKey: "k", allowOrigin: "" }),
+    ).toThrow("allowOrigin must be a specific origin (not '*')");
+  });
+});
+
+// ── CORS headers reflect specific origin ────────────────────────────────────
+
+describe("createProxyServer — CORS headers", () => {
+  let fakeUpstream: { server: http.Server; port: number; lastAuthHeader: () => string | undefined; callCount: () => number };
+  let proxy: { server: http.Server; port: number };
+
+  beforeAll(async () => {
+    fakeUpstream = await startFakeUpstream();
+    proxy = await startProxy(fakeUpstream.port);
+  });
+
+  afterAll(() => {
+    proxy.server.close();
+    fakeUpstream.server.close();
+  });
+
+  it("OPTIONS → 204 + specific origin (not *) + Authorization in allow-headers", async () => {
+    const res = await httpRequest({ host: "127.0.0.1", port: proxy.port, path: "/v1/chat/completions", method: "OPTIONS" });
+    expect(res.status).toBe(204);
+    expect(res.headers["access-control-allow-origin"]).toBe(TEST_ORIGIN);
+    expect(res.headers["access-control-allow-origin"]).not.toBe("*");
+    expect(res.headers["access-control-allow-headers"]).toMatch(/Authorization/i);
+  });
+
+  it("POST → response carries specific origin", async () => {
+    const chatBody = JSON.stringify({ model: "test", messages: [], stream: true });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(chatBody) },
+      },
+      chatBody,
+    );
+    expect(res.headers["access-control-allow-origin"]).toBe(TEST_ORIGIN);
+    expect(res.headers["access-control-allow-origin"]).not.toBe("*");
+  });
+});
+
+// ── Main proxy behaviour ─────────────────────────────────────────────────────
+
 describe("createProxyServer", () => {
-  let fakeUpstream: { server: http.Server; port: number; lastAuthHeader: () => string | undefined };
+  let fakeUpstream: { server: http.Server; port: number; lastAuthHeader: () => string | undefined; callCount: () => number };
   let proxy: { server: http.Server; port: number };
 
   beforeAll(async () => {
@@ -80,7 +145,7 @@ describe("createProxyServer", () => {
   it("OPTIONS → 204 + CORS headers", async () => {
     const res = await httpRequest({ host: "127.0.0.1", port: proxy.port, path: "/v1/chat/completions", method: "OPTIONS" });
     expect(res.status).toBe(204);
-    expect(res.headers["access-control-allow-origin"]).toBe("*");
+    expect(res.headers["access-control-allow-origin"]).toBe(TEST_ORIGIN);
     expect(res.headers["access-control-allow-methods"]).toMatch(/POST/);
   });
 
@@ -131,6 +196,102 @@ describe("createProxyServer", () => {
   });
 });
 
+// ── Token authentication ─────────────────────────────────────────────────────
+
+describe("createProxyServer — proxyToken auth", () => {
+  let fakeUpstream: { server: http.Server; port: number; lastAuthHeader: () => string | undefined; callCount: () => number };
+  let proxy: { server: http.Server; port: number };
+  const TOKEN = "my-secret-token";
+
+  beforeAll(async () => {
+    fakeUpstream = await startFakeUpstream();
+    proxy = await startProxy(fakeUpstream.port, { proxyToken: TOKEN });
+  });
+
+  afterAll(() => {
+    proxy.server.close();
+    fakeUpstream.server.close();
+  });
+
+  it("POST without Authorization → 401, upstream NOT called", async () => {
+    const before = fakeUpstream.callCount();
+    const chatBody = JSON.stringify({ model: "test", messages: [], stream: true });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(chatBody) },
+      },
+      chatBody,
+    );
+    expect(res.status).toBe(401);
+    expect(fakeUpstream.callCount()).toBe(before); // upstream not called
+  });
+
+  it("POST with wrong token → 401, upstream NOT called", async () => {
+    const before = fakeUpstream.callCount();
+    const chatBody = JSON.stringify({ model: "test", messages: [], stream: true });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(chatBody),
+          Authorization: "Bearer wrong-token",
+        },
+      },
+      chatBody,
+    );
+    expect(res.status).toBe(401);
+    expect(fakeUpstream.callCount()).toBe(before);
+  });
+
+  it("POST with correct token → forwarded + streamed", async () => {
+    const chatBody = JSON.stringify({ model: "test", messages: [], stream: true });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(chatBody),
+          Authorization: `Bearer ${TOKEN}`,
+        },
+      },
+      chatBody,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("[DONE]");
+    // Upstream saw the API key (not the proxy token)
+    expect(fakeUpstream.lastAuthHeader()).toBe("Bearer secret-xyz");
+  });
+
+  it("401 response includes specific CORS origin", async () => {
+    const chatBody = JSON.stringify({ model: "test", messages: [], stream: true });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(chatBody) },
+      },
+      chatBody,
+    );
+    expect(res.status).toBe(401);
+    expect(res.headers["access-control-allow-origin"]).toBe(TEST_ORIGIN);
+  });
+});
+
+// ── Trailing-slash base URL normalization ────────────────────────────────────
+
 describe("createProxyServer — trailing-slash base URL normalization", () => {
   let fakeUpstream: { server: http.Server; port: number; lastUrl: () => string | undefined };
   let proxy: { server: http.Server; port: number };
@@ -155,6 +316,7 @@ describe("createProxyServer — trailing-slash base URL normalization", () => {
     const proxyServer = createProxyServer({
       apiKey: "k",
       upstreamBaseUrl: `http://127.0.0.1:${addr.port}/`,
+      allowOrigin: TEST_ORIGIN,
     });
     await new Promise<void>((resolve) => proxyServer.listen(0, "127.0.0.1", () => resolve()));
     proxy = { server: proxyServer, port: (proxyServer.address() as { port: number }).port };

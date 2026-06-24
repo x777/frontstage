@@ -23,8 +23,12 @@ function makeFakeReadableStream(text: string): ReadableStream<Uint8Array> {
 }
 
 describe("WebAiGateway", () => {
+  let capturedInit: RequestInit | undefined;
+
   beforeEach(() => {
-    vi.stubGlobal("fetch", async (_url: string, _opts: RequestInit) => {
+    capturedInit = undefined;
+    vi.stubGlobal("fetch", async (_url: string, opts: RequestInit) => {
+      capturedInit = opts;
       return {
         ok: true,
         status: 200,
@@ -73,5 +77,26 @@ describe("WebAiGateway", () => {
     await expect(async () => {
       for await (const _ of gw.streamChat({ model: "x", system: "", tools: [], messages: [] })) { /* noop */ }
     }).rejects.toThrow("AI proxy error: 502");
+  });
+
+  it("without proxyToken — no Authorization header sent", async () => {
+    const gw = new WebAiGateway("http://localhost:8787");
+    for await (const _ of gw.streamChat({ model: "x", tools: [], messages: [] })) { /* drain */ }
+    const headers = capturedInit?.headers as Record<string, string> | undefined;
+    expect(headers?.["Authorization"]).toBeUndefined();
+  });
+
+  it("with proxyToken — Authorization: Bearer <token> sent", async () => {
+    const gw = new WebAiGateway("http://localhost:8787", "my-tok");
+    for await (const _ of gw.streamChat({ model: "x", tools: [], messages: [] })) { /* drain */ }
+    const headers = capturedInit?.headers as Record<string, string> | undefined;
+    expect(headers?.["Authorization"]).toBe("Bearer my-tok");
+  });
+
+  it("Content-Type is always application/json regardless of token", async () => {
+    const gw = new WebAiGateway("http://localhost:8787", "tok");
+    for await (const _ of gw.streamChat({ model: "x", tools: [], messages: [] })) { /* drain */ }
+    const headers = capturedInit?.headers as Record<string, string> | undefined;
+    expect(headers?.["Content-Type"]).toBe("application/json");
   });
 });

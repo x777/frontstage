@@ -1,22 +1,38 @@
+import crypto from "node:crypto";
 import http from "node:http";
 
 export interface ProxyServerOptions {
   apiKey: string;
   upstreamBaseUrl?: string;
-  allowOrigin?: string;
+  allowOrigin: string;
+  proxyToken?: string;
 }
 
 function corsHeaders(origin: string): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
   };
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  // Always compare same-length buffers to avoid length timing leak.
+  const aBytes = Buffer.from(a, "utf-8");
+  const bBytes = Buffer.from(b, "utf-8");
+  const len = Math.max(aBytes.length, bBytes.length);
+  const aPad = Buffer.concat([aBytes, Buffer.alloc(len - aBytes.length)]);
+  const bPad = Buffer.concat([bBytes, Buffer.alloc(len - bBytes.length)]);
+  return crypto.timingSafeEqual(aPad, bPad) && aBytes.length === bBytes.length;
+}
+
 export function createProxyServer(opts: ProxyServerOptions): http.Server {
-  const origin = opts.allowOrigin ?? "*";
+  if (!opts.allowOrigin || opts.allowOrigin === "*") {
+    throw new Error("allowOrigin must be a specific origin (not '*')");
+  }
+  const origin = opts.allowOrigin;
   const upstream = (opts.upstreamBaseUrl ?? "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+  const proxyToken = opts.proxyToken;
 
   return http.createServer((req, res) => {
     if (req.method === "OPTIONS") {
@@ -32,6 +48,17 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
     }
 
     if (req.method === "POST" && req.url === "/v1/chat/completions") {
+      // Inbound token auth when proxyToken is configured.
+      if (proxyToken) {
+        const inbound = req.headers["authorization"] ?? "";
+        const expected = "Bearer " + proxyToken;
+        if (!timingSafeEqual(inbound, expected)) {
+          res.writeHead(401, { "Content-Type": "text/plain", ...corsHeaders(origin) });
+          res.end("Unauthorized");
+          return;
+        }
+      }
+
       const chunks: Buffer[] = [];
       req.on("data", (c: Buffer) => chunks.push(c));
       req.on("end", () => {
