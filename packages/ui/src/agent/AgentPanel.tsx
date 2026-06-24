@@ -1,12 +1,16 @@
-import { useState, useRef, useEffect, type KeyboardEvent } from "react";
-import type { AgentSession, AgentMessage, AgentContentBlock } from "@palmier/ai";
+import { useState, useRef, useEffect } from "react";
+import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext } from "@palmier/ai";
 import { toolResultToText } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { useAgentSession } from "./use-agent-session.js";
+import { SessionSwitcher } from "./SessionSwitcher.js";
+import { MentionInput, type MentionItem } from "./MentionInput.js";
 
 export interface AgentPanelProps {
   session: AgentSession;
   model?: string;
+  sessionStore?: ChatSessionStore;
+  mentionItems?: MentionItem[];
 }
 
 function joinTextBlocks(content: AgentContentBlock[]): string {
@@ -111,7 +115,7 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   );
 }
 
-export function AgentPanel({ session, model }: AgentPanelProps) {
+export function AgentPanel({ session, model, sessionStore, mentionItems }: AgentPanelProps) {
   const state = useAgentSession(session);
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -125,19 +129,13 @@ export function AgentPanel({ session, model }: AgentPanelProps) {
   }, [state.messages, state.streaming]);
 
   const isBusy = state.status === "streaming" || state.status === "tools";
-  const canSend = inputText.trim().length > 0 && !isBusy;
 
-  async function handleSend() {
-    if (!canSend) return;
-    const text = inputText.trim();
+  async function handleSend(text: string, context?: MentionContext) {
+    if (!text.trim() || isBusy) return;
     setInputText("");
-    await session.send(text);
-  }
-
-  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+    await session.send(text, context);
+    if (sessionStore) {
+      await sessionStore.save(session.toDoc());
     }
   }
 
@@ -167,6 +165,10 @@ export function AgentPanel({ session, model }: AgentPanelProps) {
         >
           {model}
         </div>
+      )}
+
+      {sessionStore && (
+        <SessionSwitcher session={session} sessionStore={sessionStore} />
       )}
 
       <div
@@ -249,69 +251,39 @@ export function AgentPanel({ session, model }: AgentPanelProps) {
       <div
         style={{
           display: "flex",
-          alignItems: "flex-end",
-          gap: theme.spacing.xs,
+          flexDirection: "column",
           padding: theme.spacing.sm,
           borderTop: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
           flexShrink: 0,
+          gap: theme.spacing.xxs,
         }}
       >
-        <textarea
-          data-testid="agent-input"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={1}
-          style={{
-            flex: 1,
-            resize: "none",
-            background: theme.bg.surface,
-            color: theme.text.primary,
-            border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-            borderRadius: theme.radius.sm,
-            padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-            fontSize: theme.fontSize.sm,
-            fontWeight: theme.fontWeight.regular,
-            outline: "none",
-            fontFamily: "inherit",
-          }}
-        />
         {isBusy && (
-          <button
-            data-testid="agent-cancel"
-            onClick={() => session.cancel()}
-            style={{
-              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-              background: theme.bg.raised,
-              color: theme.text.secondary,
-              border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-              borderRadius: theme.radius.sm,
-              fontSize: theme.fontSize.sm,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            Cancel
-          </button>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              data-testid="agent-cancel"
+              onClick={() => session.cancel()}
+              style={{
+                padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                background: theme.bg.raised,
+                color: theme.text.secondary,
+                border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+                borderRadius: theme.radius.sm,
+                fontSize: theme.fontSize.sm,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         )}
-        <button
-          data-testid="agent-send"
-          onClick={handleSend}
-          disabled={!canSend}
-          style={{
-            padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-            background: canSend ? theme.accent.primary : theme.bg.raised,
-            color: canSend ? theme.text.onAccent : theme.text.muted,
-            border: "none",
-            borderRadius: theme.radius.sm,
-            fontSize: theme.fontSize.sm,
-            fontWeight: theme.fontWeight.medium,
-            cursor: canSend ? "pointer" : "not-allowed",
-            flexShrink: 0,
-          }}
-        >
-          Send
-        </button>
+        <MentionInput
+          value={inputText}
+          onChange={setInputText}
+          onSend={handleSend}
+          disabled={isBusy}
+          mentionItems={mentionItems ?? []}
+        />
       </div>
     </div>
   );

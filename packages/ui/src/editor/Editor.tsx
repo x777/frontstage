@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
-import type { AgentSession } from "@palmier/ai";
+import type { AgentSession, ChatSessionStore } from "@palmier/ai";
+import type { MentionItem } from "../agent/MentionInput.js";
 import {
   addClipCommand,
   dropTargetAt,
@@ -41,7 +42,7 @@ export interface EditorProps {
   session?: ProjectSession;
   exportGateway?: ExportGateway;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
-  agent?: { session: AgentSession; model?: string };
+  agent?: { session: AgentSession; model?: string; sessionStore?: ChatSessionStore; mentionItems?: MentionItem[] };
 }
 
 interface DiscardDialogState {
@@ -338,7 +339,7 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
           ) : undefined
         }
         title={title}
-        agent={agent ? <AgentPanel session={agent.session} model={agent.model} /> : undefined}
+        agent={agent ? <AgentPanel session={agent.session} model={agent.model} sessionStore={agent.sessionStore} mentionItems={agent.mentionItems} /> : undefined}
         agentVisible={agentVisible}
         media={
           <MediaPanel

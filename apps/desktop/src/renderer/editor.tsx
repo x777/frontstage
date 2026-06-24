@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost } from "@palmier/ui";
-import { AgentSession, ToolExecutor, buildCatalog } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog } from "@palmier/ai";
 import { DesktopGateway } from "./desktop-gateway.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
@@ -32,6 +32,22 @@ const agentSession = new AgentSession({
   model: agentModel,
 });
 
+// Build session store (in-memory ProjectStore — project-bound persistence is 6.6 polish)
+const _memStore = new Map<string, string>();
+const _inMemoryProjectStore = {
+  readText: async (key: string) => _memStore.get(key) ?? null,
+  writeText: async (key: string, value: string) => { _memStore.set(key, value); },
+};
+const sessionStore = new ChatSessionStore(_inMemoryProjectStore);
+
+// Build mention items from the library's media entries
+const mentionItems = library.getManifest().entries.map((e) => ({
+  id: e.id,
+  label: e.name,
+  kind: "media" as const,
+  contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
+}));
+
 // Expose for E2E tests
 (window as unknown as Record<string, unknown>).__palmierStore = store;
 (window as unknown as Record<string, unknown>).__mediaLibrary = library;
@@ -50,7 +66,7 @@ createRoot(root).render(
       library={library}
       session={session}
       exportGateway={exportGateway}
-      agent={{ session: agentSession, model: agentModel }}
+      agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems }}
       onReady={(cmds) => {
         window.desktopProject?.onMenuCommand((c, arg) => {
           if (c === "open-recent") {

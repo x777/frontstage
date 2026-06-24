@@ -25,6 +25,17 @@ const FAKE_GATEWAY_SCRIPT = `
   };
 `;
 
+const FAKE_GATEWAY_TEXT_ONLY = `
+  window.__aiGateway = {
+    _lastReq: null,
+    async *streamChat(req) {
+      this._lastReq = req;
+      yield { type: "textDelta", text: "Got it." };
+      yield { type: "done", finishReason: "stop" };
+    },
+  };
+`;
+
 test("agent panel: chat message adds a clip to the timeline", async ({ page }) => {
   // Inject fake gateway BEFORE bootstrap
   await page.addInitScript(FAKE_GATEWAY_SCRIPT);
@@ -101,4 +112,103 @@ test("agent panel: chat message adds a clip to the timeline", async ({ page }) =
 
   // "Done." text also present in a later assistant message
   await expect(assistantMsgs.last()).toContainText("Done.", { timeout: 5_000 });
+});
+
+test("agent panel: New Chat button resets the session", async ({ page }) => {
+  await page.addInitScript(FAKE_GATEWAY_TEXT_ONLY);
+  await page.goto("/");
+
+  await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
+  await page.waitForFunction(
+    () => !!(window as any).__agentSession,
+    { timeout: 15_000 },
+  );
+
+  // Open agent panel
+  await page.locator('[data-testid="agent-toggle"]').click();
+  await expect(page.locator('[data-testid="agent-panel"]')).toBeVisible({ timeout: 5_000 });
+
+  // The New Chat button should be visible (session switcher is mounted)
+  const newBtn = page.locator('[data-testid="agent-new"]');
+  await expect(newBtn).toBeVisible({ timeout: 5_000 });
+
+  // Type and send a message so we have something to clear
+  const input = page.locator('[data-testid="agent-input"]');
+  await input.fill("hello");
+  await page.locator('[data-testid="agent-send"]').click();
+
+  // Wait for the reply
+  await page.waitForFunction(
+    () => {
+      const s = (window as any).__agentSession?.getState?.();
+      return s?.status === "idle" && s?.messages?.length >= 2;
+    },
+    { timeout: 15_000 },
+  );
+
+  // Click New Chat
+  await newBtn.click();
+
+  // Session should now be empty
+  const isEmpty = await page.evaluate(() => {
+    const s = (window as any).__agentSession?.getState?.();
+    return s?.messages?.length === 0;
+  });
+  expect(isEmpty).toBe(true);
+});
+
+test("agent panel: @-mention picker appears + text context sent", async ({ page }) => {
+  await page.addInitScript(FAKE_GATEWAY_TEXT_ONLY);
+  await page.goto("/");
+
+  await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
+  await page.waitForFunction(
+    () => !!(window as any).__agentSession,
+    { timeout: 15_000 },
+  );
+
+  // Open agent panel
+  await page.locator('[data-testid="agent-toggle"]').click();
+  await expect(page.locator('[data-testid="agent-panel"]')).toBeVisible({ timeout: 5_000 });
+
+  const input = page.locator('[data-testid="agent-input"]');
+  await expect(input).toBeVisible({ timeout: 5_000 });
+
+  // Type @ to trigger mention picker
+  await input.fill("@");
+
+  // The mention option should appear (seeded library has clip.mp4)
+  const option0 = page.locator('[data-testid="agent-mention-option-0"]');
+  await expect(option0).toBeVisible({ timeout: 5_000 });
+
+  // Select the mention
+  await option0.click();
+
+  // Input should now contain @clip.mp4
+  const inputVal = await input.inputValue();
+  expect(inputVal).toContain("@clip.mp4");
+
+  // Send the message
+  const sendBtn = page.locator('[data-testid="agent-send"]');
+  await expect(sendBtn).toBeEnabled({ timeout: 3_000 });
+  await sendBtn.click();
+
+  // Wait for reply
+  await page.waitForFunction(
+    () => {
+      const s = (window as any).__agentSession?.getState?.();
+      return s?.status === "idle" && s?.messages?.length >= 2;
+    },
+    { timeout: 15_000 },
+  );
+
+  // The first user message should contain the @media context text
+  const firstUserMsg = await page.evaluate(() => {
+    const s = (window as any).__agentSession?.getState?.();
+    const firstMsg = s?.messages?.[0];
+    const block = firstMsg?.content?.[0];
+    return block?.kind === "text" ? block.text : "";
+  });
+
+  expect(firstUserMsg).toContain("@media clip.mp4");
 });

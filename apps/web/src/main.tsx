@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost } from "@palmier/ui";
-import { AgentSession, ToolExecutor, buildCatalog } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
@@ -58,6 +58,22 @@ async function bootstrap() {
     model: agentModel,
   });
 
+  // Build session store (in-memory ProjectStore — project-bound persistence is 6.6 polish)
+  const memStore = new Map<string, string>();
+  const inMemoryProjectStore = {
+    readText: async (key: string) => memStore.get(key) ?? null,
+    writeText: async (key: string, value: string) => { memStore.set(key, value); },
+  };
+  const sessionStore = new ChatSessionStore(inMemoryProjectStore);
+
+  // Build mention items from the library's media entries
+  const mentionItems = library.getManifest().entries.map((e) => ({
+    id: e.id,
+    label: e.name,
+    kind: "media" as const,
+    contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
+  }));
+
   // Expose for E2E tests
   (window as unknown as Record<string, unknown>).__palmierStore = store;
   (window as unknown as Record<string, unknown>).__mediaLibrary = library;
@@ -70,7 +86,7 @@ async function bootstrap() {
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} agent={{ session: agentSession, model: agentModel }} />
+      <App store={store} media={library.byteSource} library={library} session={session} exportGateway={exportGateway} agent={{ session: agentSession, model: agentModel, sessionStore, mentionItems }} />
     </StrictMode>,
   );
 }
