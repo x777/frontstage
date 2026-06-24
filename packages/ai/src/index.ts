@@ -7,6 +7,8 @@ export { removeTracksTool } from "./tools/track-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";
 export { ImageGenerator } from "./agent/image-generator.js";
+export type { ModelEntry } from "./agent/model-catalog.js";
+export { MODEL_CATALOG, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "./agent/model-catalog.js";
 export type { ImageGenInput, ImageImportHost, ImageGeneratorDeps } from "./agent/image-generator.js";
 export type { OpenAIMessage, ChatRequest, StreamEvent, AiGateway, ImageRequest, ImageResult } from "./agent/wire.js";
 export { toolsToOpenAI, buildChatBody, parseOpenRouterStream } from "./agent/openrouter.js";

@@ -88,12 +88,14 @@ function makeCtx(store: EditorStore): ToolContext {
 
 class FakeGateway implements AiGateway {
   private queue: StreamEvent[][];
+  readonly capturedModels: string[] = [];
 
   constructor(turns: StreamEvent[][]) {
     this.queue = [...turns];
   }
 
-  async *streamChat(_req: ChatRequest): AsyncIterable<StreamEvent> {
+  async *streamChat(req: ChatRequest): AsyncIterable<StreamEvent> {
+    this.capturedModels.push(req.model);
     const events = this.queue.shift();
     if (!events) throw new Error("FakeGateway: no more scripted turns");
     for (const ev of events) {
@@ -380,6 +382,32 @@ describe("AgentSession", () => {
     for (const id of toolCallIds) {
       expect(toolResultIds).toContain(id);
     }
+  });
+
+  test("setModel: live switch — next send uses new model", async () => {
+    const store = new EditorStore(makeTimeline());
+    const simpleStop: StreamEvent[] = [
+      { type: "textDelta", text: "ok" },
+      { type: "done", finishReason: "stop" },
+    ];
+    const fakeGateway = new FakeGateway([simpleStop, simpleStop]);
+    const tools = buildCatalog();
+    const ctx = makeCtx(store);
+    const executor = new ToolExecutor(tools, ctx);
+    const session = new AgentSession({
+      gateway: fakeGateway,
+      executor,
+      tools,
+      model: "m1",
+      newId: () => `msg-${++_idCounter}`,
+    });
+
+    await session.send("first");
+    expect(fakeGateway.capturedModels[0]).toBe("m1");
+
+    session.setModel("m2");
+    await session.send("second");
+    expect(fakeGateway.capturedModels[1]).toBe("m2");
   });
 
   test("loadDoc resets cancelled: cancelled session resumes after loadDoc", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { AiGateway, ImageResult } from "../src/index.js";
+import type { AiGateway, ImageResult, ImageRequest } from "../src/index.js";
 import { ImageGenerator } from "../src/index.js";
 import type { ImageImportHost } from "../src/index.js";
 import type { MediaManifestEntry, GenerationLogEntry } from "@palmier/core";
@@ -9,6 +9,18 @@ function makeGateway(result: ImageResult): AiGateway {
     streamChat: async function* () {},
     generateImage: async () => result,
   } as unknown as AiGateway;
+}
+
+function makeCapturingGateway(result: ImageResult) {
+  const capturedModels: string[] = [];
+  const gateway: AiGateway = {
+    streamChat: async function* () {},
+    generateImage: async (req: ImageRequest) => {
+      capturedModels.push(req.model);
+      return result;
+    },
+  } as unknown as AiGateway;
+  return { gateway, capturedModels };
 }
 
 function makeHost() {
@@ -92,5 +104,19 @@ describe("ImageGenerator.generate", () => {
     const gen = new ImageGenerator({ gateway, host, model: "m", newId: () => "id1", now: () => "2026-01-01T00:00:00Z" });
 
     await expect(gen.generate({ prompt: "a cat" })).rejects.toThrow("no image returned");
+  });
+
+  test("setModel: next generate uses new model", async () => {
+    const imageResult: ImageResult = { images: [{ base64: "QUJD", mediaType: "image/png" }] };
+    const { gateway, capturedModels } = makeCapturingGateway(imageResult);
+    const { host } = makeHost();
+    const gen = new ImageGenerator({ gateway, host, model: "img1", newId: () => "id1", now: () => "2026-01-01T00:00:00Z" });
+
+    await gen.generate({ prompt: "first" });
+    expect(capturedModels[0]).toBe("img1");
+
+    gen.setModel("img2");
+    await gen.generate({ prompt: "second" });
+    expect(capturedModels[1]).toBe("img2");
   });
 });

@@ -41,7 +41,7 @@ export class AgentSession {
   private readonly gateway: AiGateway;
   private readonly executor: ToolExecutor;
   private readonly tools: ToolSpec[];
-  private readonly model: string;
+  private model: string;
   private readonly systemPrompt: string;
   private readonly maxTurns: number;
   private readonly newId: () => string;
@@ -148,6 +148,10 @@ export class AgentSession {
   cancel(): void {
     // cannot abort the in-flight HTTP stream (the gateway has no cancel); stops the agentic loop from continuing
     this.cancelled = true;
+  }
+
+  setModel(model: string): void {
+    this.model = model;
   }
 
   private resolveOrphanedToolCalls(): void {

@@ -32,7 +32,7 @@ function extFromMediaType(mediaType: string): string {
 export class ImageGenerator {
   private readonly gateway: AiGateway;
   private readonly host: ImageImportHost;
-  private readonly model: string;
+  private model: string;
   private readonly newId: () => string;
   private readonly now: () => string;
 
@@ -42,6 +42,10 @@ export class ImageGenerator {
     this.model = deps.model;
     this.newId = deps.newId ?? (() => crypto.randomUUID());
     this.now = deps.now ?? (() => new Date().toISOString());
+  }
+
+  setModel(model: string): void {
+    this.model = model;
   }
 
   async generate(input: ImageGenInput): Promise<MediaManifestEntry> {
