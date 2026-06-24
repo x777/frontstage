@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("desktopAI", {
     ipcRenderer.on("ai:chunk", h);
     return () => ipcRenderer.removeListener("ai:chunk", h);
   },
+  generateImage: (body) => ipcRenderer.invoke("ai:generateImage", body),
 });
 
 contextBridge.exposeInMainWorld("desktopProject", {

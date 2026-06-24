@@ -21,6 +21,17 @@ export type StreamEvent =
   | { type: "done"; finishReason: "stop" | "tool_calls" | "length" | "unknown" }
   | { type: "error"; message: string };
 
+export interface ImageRequest {
+  model: string;
+  prompt: string;
+  referenceImages?: { base64: string; mediaType: string }[];
+}
+
+export interface ImageResult {
+  images: { base64: string; mediaType: string }[];
+}
+
 export interface AiGateway {
   streamChat(req: ChatRequest): AsyncIterable<StreamEvent>;
+  generateImage(req: ImageRequest): Promise<ImageResult>;
 }

@@ -1,5 +1,5 @@
-import { buildChatBody, parseOpenRouterStream } from "@palmier/ai";
-import type { AiGateway, ChatRequest, StreamEvent } from "@palmier/ai";
+import { buildChatBody, parseOpenRouterStream, buildImageBody, parseImageResponse } from "@palmier/ai";
+import type { AiGateway, ChatRequest, StreamEvent, ImageRequest, ImageResult } from "@palmier/ai";
 
 interface DesktopAIBridge {
   setKey(key: string): Promise<void>;
@@ -7,6 +7,7 @@ interface DesktopAIBridge {
   clearKey(): Promise<void>;
   streamChat(id: string, body: object): void;
   onChunk(cb: (msg: { id: string; data?: Uint8Array; done?: boolean; error?: string }) => void): () => void;
+  generateImage(body: object): Promise<unknown>;
 }
 
 declare global {
@@ -16,6 +17,10 @@ declare global {
 }
 
 export class DesktopAiGateway implements AiGateway {
+  async generateImage(req: ImageRequest): Promise<ImageResult> {
+    return parseImageResponse(await window.desktopAI.generateImage(buildImageBody(req)));
+  }
+
   async *streamChat(req: ChatRequest): AsyncIterable<StreamEvent> {
     const body = buildChatBody(req);
     const id = crypto.randomUUID();

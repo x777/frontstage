@@ -5,8 +5,9 @@ export { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, trimClipsT
 export { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./tools/property-tools.js";
 export { removeTracksTool } from "./tools/track-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
-export type { OpenAIMessage, ChatRequest, StreamEvent, AiGateway } from "./agent/wire.js";
+export type { OpenAIMessage, ChatRequest, StreamEvent, AiGateway, ImageRequest, ImageResult } from "./agent/wire.js";
 export { toolsToOpenAI, buildChatBody, parseOpenRouterStream } from "./agent/openrouter.js";
+export { buildImageBody, parseImageResponse } from "./agent/image.js";
 export type { AgentMessage, AgentContentBlock } from "./agent/conversation.js";
 export { toWireMessages, toolResultToText } from "./agent/conversation.js";
 export { DEFAULT_SYSTEM_PROMPT } from "./agent/system-prompt.js";

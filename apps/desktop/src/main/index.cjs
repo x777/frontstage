@@ -595,6 +595,24 @@ ipcMain.handle("ai:clearKey", () => {
   try { fs.unlinkSync(AI_KEY_FILE_PLAIN); } catch { /* ignore */ }
 });
 
+ipcMain.handle("ai:generateImage", async (_e, body) => {
+  const key = loadKey();
+  if (!key) throw new Error("no API key");
+  const base = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+  const res = await fetch(base + "/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + key,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://palmier.pro",
+      "X-Title": "PalmierPro",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return await res.json();
+});
+
 ipcMain.on("ai:streamChat", async (event, { id, body }) => {
   const key = loadKey();
   if (!key) {

@@ -100,6 +100,8 @@ class FakeGateway implements AiGateway {
       yield ev;
     }
   }
+
+  async generateImage() { return { images: [] }; }
 }
 
 function makeDeps(

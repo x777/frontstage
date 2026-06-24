@@ -39,6 +39,7 @@ export default defineConfig({
         export: resolve(__dirname, "src/renderer/export.html"),
         "gateway-test": resolve(__dirname, "src/renderer/gateway-test.html"),
         "ai-gateway-test": resolve(__dirname, "src/renderer/ai-gateway-test.html"),
+        "image-gen-test": resolve(__dirname, "src/renderer/image-gen-test.html"),
       },
     },
   },
