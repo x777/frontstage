@@ -4,7 +4,7 @@ import type { ProjectSession } from "@palmier/core";
 import type { AgentSession, ChatSessionStore, ImageGenerator, ModelEntry } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
-import type { KeyConfig } from "../agent/SettingsPanel.js";
+import type { KeyConfig, McpSettings } from "../agent/SettingsPanel.js";
 import {
   addClipCommand,
   dropTargetAt,
@@ -59,6 +59,7 @@ export interface EditorProps {
       imageModel: string;
       onAgentModelChange: (id: string) => void;
       onImageModelChange: (id: string) => void;
+      mcp?: McpSettings;
     };
   };
 }
@@ -435,6 +436,7 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
           onAgentModelChange={agent.settings.onAgentModelChange}
           onImageModelChange={agent.settings.onImageModelChange}
           onClose={() => setSettingsVisible(false)}
+          mcp={agent.settings.mcp}
         />
       )}
 

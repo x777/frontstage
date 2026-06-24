@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { ModelPicker } from "./ModelPicker.js";
@@ -6,6 +6,12 @@ import { ModelPicker } from "./ModelPicker.js";
 export type KeyConfig =
   | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => Promise<void>; onClearKey: () => Promise<void> }
   | { kind: "proxy"; proxyUrl: string; proxyToken?: string; onSave: (url: string, token?: string) => void };
+
+export interface McpSettings {
+  getStatus: () => Promise<{ enabled: boolean; running: boolean; url: string; token: string }>;
+  setEnabled: (on: boolean) => Promise<{ enabled: boolean }>;
+  regenerateToken: () => Promise<string>;
+}
 
 export interface SettingsPanelProps {
   keyConfig: KeyConfig;
@@ -16,6 +22,7 @@ export interface SettingsPanelProps {
   onAgentModelChange: (id: string) => void;
   onImageModelChange: (id: string) => void;
   onClose?: () => void;
+  mcp?: McpSettings;
 }
 
 function KeychainConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "keychain" }> }) {
@@ -181,6 +188,109 @@ function ProxyConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "proxy" }> }) {
   );
 }
 
+function McpConfig({ cfg }: { cfg: McpSettings }) {
+  const [loaded, setLoaded] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [url, setUrl] = useState("");
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    const s = await cfg.getStatus();
+    setEnabled(s.enabled);
+    setUrl(s.url);
+    setToken(s.token);
+    setLoaded(true);
+  }
+
+  useEffect(() => { refresh().catch(() => {}); }, []);
+
+  async function handleToggle() {
+    if (busy) return;
+    setBusy(true);
+    try { await cfg.setEnabled(!enabled); await refresh(); } finally { setBusy(false); }
+  }
+
+  async function handleRegenerate() {
+    if (busy) return;
+    setBusy(true);
+    try { await cfg.regenerateToken(); await refresh(); } finally { setBusy(false); }
+  }
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(token);
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
+      <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
+        <input
+          type="checkbox"
+          data-testid="settings-mcp-enable"
+          checked={enabled}
+          disabled={busy}
+          onChange={handleToggle}
+          style={{ cursor: busy ? "not-allowed" : "pointer" }}
+        />
+        <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary }}>
+          {enabled ? "Enabled" : "Disabled"}
+        </span>
+      </div>
+      {enabled && (
+        <>
+          <span
+            data-testid="settings-mcp-url"
+            style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, wordBreak: "break-all" }}
+          >
+            {url}
+          </span>
+          <span
+            data-testid="settings-mcp-token"
+            style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, wordBreak: "break-all" }}
+          >
+            {token}
+          </span>
+          <div style={{ display: "flex", gap: theme.spacing.xs }}>
+            <button
+              data-testid="settings-mcp-copy"
+              onClick={handleCopy}
+              style={{
+                background: "none",
+                border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
+                borderRadius: theme.radius.xs,
+                color: theme.text.secondary,
+                cursor: "pointer",
+                fontSize: theme.fontSize.sm,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+              }}
+            >
+              Copy
+            </button>
+            <button
+              data-testid="settings-mcp-regenerate"
+              disabled={busy}
+              onClick={handleRegenerate}
+              style={{
+                background: "none",
+                border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
+                borderRadius: theme.radius.xs,
+                color: theme.text.secondary,
+                cursor: busy ? "not-allowed" : "pointer",
+                fontSize: theme.fontSize.sm,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+              }}
+            >
+              Regenerate
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPanel({
   keyConfig,
   llmModels,
@@ -190,6 +300,7 @@ export function SettingsPanel({
   onAgentModelChange,
   onImageModelChange,
   onClose,
+  mcp,
 }: SettingsPanelProps) {
   return (
     <div
@@ -271,6 +382,24 @@ export function SettingsPanel({
             onChange={onImageModelChange}
           />
         </div>
+
+        {mcp && (
+          <section
+            data-testid="settings-mcp"
+            style={{
+              borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+              paddingTop: theme.spacing.sm,
+              display: "flex",
+              flexDirection: "column",
+              gap: theme.spacing.sm,
+            }}
+          >
+            <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
+              MCP Server
+            </span>
+            <McpConfig cfg={mcp} />
+          </section>
+        )}
       </div>
     </div>
   );

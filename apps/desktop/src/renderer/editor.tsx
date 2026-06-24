@@ -166,6 +166,11 @@ function PalmierDesktopApp() {
           imageModel: imageModelId,
           onAgentModelChange,
           onImageModelChange,
+          mcp: window.desktopMcp ? {
+            getStatus: () => window.desktopMcp!.getStatus(),
+            setEnabled: (on) => window.desktopMcp!.setEnabled(on),
+            regenerateToken: () => window.desktopMcp!.regenerateToken(),
+          } : undefined,
         },
       }}
       onReady={(cmds) => {
