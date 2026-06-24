@@ -7,6 +7,7 @@ import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
 import { WebExportGateway } from "./web-export.js";
+import { WebAiGateway } from "./web-ai-gateway.js";
 import "./web-fs-test-entry.js";
 
 async function bootstrap() {
@@ -22,6 +23,14 @@ async function bootstrap() {
   const gateway = new WebGateway(pickDirectory ? { pickDirectory } : undefined);
   const { host, wrappedGateway } = createEditorHost(store, library, gateway);
   const session = new ProjectSession(host, wrappedGateway);
+
+  // Construct WebAiGateway; proxy URL from test-seam or env.
+  const aiProxyUrl =
+    (window as unknown as Record<string, unknown>).__aiProxyUrl as string | undefined ??
+    (import.meta.env.VITE_AI_PROXY_URL as string | undefined) ??
+    "http://localhost:8787";
+  const webAiGateway = new WebAiGateway(aiProxyUrl);
+  (window as unknown as Record<string, unknown>).__webAiGateway = webAiGateway;
 
   // If __pickSaveFile is injected (e2e seam), use it; otherwise real showSaveFilePicker.
   const pickSaveFile = (window as any).__pickSaveFile as
