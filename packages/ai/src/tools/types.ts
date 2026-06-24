@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
-import type { EditorStore, MediaManifest } from "@palmier/core";
+import type { EditorStore, MediaManifest, MediaManifestEntry } from "@palmier/core";
+import type { ImageGenInput } from "../agent/image-generator.js";
 
 export type ToolBlock =
   | { kind: "text"; text: string }
@@ -14,6 +15,7 @@ export interface ToolContext {
   store: EditorStore;
   getManifest: () => MediaManifest;
   newId: () => string;
+  generateImage?: (input: ImageGenInput) => Promise<MediaManifestEntry>;
 }
 
 export interface ToolSpec {

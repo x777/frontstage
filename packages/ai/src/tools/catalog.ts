@@ -1,11 +1,10 @@
 /**
- * buildCatalog assembles all 13 currently available tools.
+ * buildCatalog assembles all 14 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - import_media        — plan 6.2 (media import pipeline)
  *   - folder ops          — plan 6.2 (media folder CRUD)
  *   - inspect_timeline    — plan 6.3 (deep render analysis)
- *   - generate_image      — plan 6.5 (AI generation engine)
  *   - list_models         — plan 6.6 (model registry)
  *   - add_captions        — plan 6.6 (caption track + ASR)
  */
@@ -15,6 +14,7 @@ import { getTimelineTool, getMediaTool, inspectMediaTool, searchMediaTool } from
 import { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, trimClipsTool } from "./clip-tools.js";
 import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./property-tools.js";
 import { removeTracksTool } from "./track-tools.js";
+import { generateImageTool } from "./generate-image-tool.js";
 
 export function buildCatalog(): ToolSpec[] {
   return [
@@ -34,5 +34,7 @@ export function buildCatalog(): ToolSpec[] {
     setClipPropertiesTool(),
     setKeyframesTool(),
     addTextsTool(),
+    // AI generation tools
+    generateImageTool(),
   ];
 }
