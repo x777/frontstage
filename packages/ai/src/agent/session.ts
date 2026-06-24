@@ -94,6 +94,7 @@ export class AgentSession {
     this.streaming = null;
     this.status = "idle";
     this.error = undefined;
+    this.cancelled = false;
     this.emit();
   }
 
@@ -149,7 +150,38 @@ export class AgentSession {
     this.cancelled = true;
   }
 
+  private resolveOrphanedToolCalls(): void {
+    const resolvedIds = new Set<string>();
+    for (const msg of this.messages) {
+      if (msg.role === "tool") {
+        for (const b of msg.content) {
+          if (b.kind === "toolResult") resolvedIds.add(b.toolCallId);
+        }
+      }
+    }
+    const orphanResults: AgentMessage["content"] = [];
+    for (const msg of this.messages) {
+      if (msg.role === "assistant") {
+        for (const b of msg.content) {
+          if (b.kind === "toolCall" && !resolvedIds.has(b.id)) {
+            orphanResults.push({
+              kind: "toolResult",
+              toolCallId: b.id,
+              blocks: [{ kind: "text", text: "Cancelled by user." }],
+              isError: true,
+            });
+            resolvedIds.add(b.id);
+          }
+        }
+      }
+    }
+    if (orphanResults.length > 0) {
+      this.messages.push({ id: this.newId(), role: "tool", content: orphanResults });
+    }
+  }
+
   private async runLoop(): Promise<void> {
+    this.resolveOrphanedToolCalls();
     let turn = 0;
 
     while (true) {

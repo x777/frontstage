@@ -17,6 +17,7 @@ import {
   type ToolContext,
   AgentSession,
   type AgentSessionDeps,
+  toWireMessages,
 } from "../src/index.js";
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
@@ -310,5 +311,109 @@ describe("AgentSession", () => {
     const state = session.getState();
     expect(state.status).toBe("error");
     expect(state.error).toMatch(/max turns/i);
+  });
+
+  test("orphan resolution: loadDoc with orphaned toolCall gets resolved before next send", async () => {
+    const store = new EditorStore(makeTimeline());
+    // Build a doc whose last message is an assistant with an orphaned toolCall (no following tool result)
+    const orphanDoc = {
+      id: "sess-orphan",
+      title: "Orphan test",
+      createdAt: new Date().toISOString(),
+      messages: [
+        {
+          id: "m1",
+          role: "user" as const,
+          content: [{ kind: "text" as const, text: "do something" }],
+        },
+        {
+          id: "m2",
+          role: "assistant" as const,
+          content: [
+            {
+              kind: "toolCall" as const,
+              id: "orphan-call-1",
+              name: "add_clips",
+              argsJson: "{}",
+            },
+          ],
+        },
+        // no tool result message — this is the orphan
+      ],
+    };
+
+    const deps = makeDeps(
+      [
+        // After resolving the orphan, session sends the new user turn; gateway returns simple stop
+        [
+          { type: "textDelta", text: "done" },
+          { type: "done", finishReason: "stop" },
+        ],
+      ],
+      store,
+    );
+    const session = new AgentSession(deps);
+    session.loadDoc(orphanDoc);
+
+    await session.send("continue");
+
+    const state = session.getState();
+    expect(state.status).toBe("idle");
+
+    // A tool message for the orphan should now exist
+    const toolMsg = state.messages.find((m) => m.role === "tool");
+    expect(toolMsg).toBeDefined();
+    const resultBlock = toolMsg!.content.find(
+      (b) => b.kind === "toolResult" && b.toolCallId === "orphan-call-1",
+    );
+    expect(resultBlock).toBeDefined();
+    expect((resultBlock as { kind: "toolResult"; isError: boolean }).isError).toBe(true);
+
+    // toWireMessages must produce a valid OpenAI sequence: every tool_calls[].id has a matching role:"tool" tool_call_id
+    const wire = toWireMessages(state.messages);
+    const toolCallIds = wire
+      .filter((m) => m.role === "assistant" && m.tool_calls)
+      .flatMap((m) => (m.tool_calls ?? []).map((tc) => tc.id));
+    const toolResultIds = wire.filter((m) => m.role === "tool").map((m) => m.tool_call_id);
+    for (const id of toolCallIds) {
+      expect(toolResultIds).toContain(id);
+    }
+  });
+
+  test("loadDoc resets cancelled: cancelled session resumes after loadDoc", async () => {
+    const store = new EditorStore(makeTimeline());
+    const deps = makeDeps(
+      [
+        // First send (before cancel) — gateway is never consumed because we cancel immediately
+        // Second send after loadDoc — must succeed
+        [
+          { type: "textDelta", text: "hello after reload" },
+          { type: "done", finishReason: "stop" },
+        ],
+      ],
+      store,
+    );
+    const session = new AgentSession(deps);
+
+    // Cancel the session before any send (simulates a cancel that stuck)
+    session.cancel();
+
+    // loadDoc a fresh doc — this should reset cancelled
+    const freshDoc = {
+      id: "sess-fresh",
+      title: "Fresh",
+      createdAt: new Date().toISOString(),
+      messages: [],
+    };
+    session.loadDoc(freshDoc);
+
+    // send should NOT be stuck — the loop should run and produce an assistant reply
+    await session.send("hi");
+    const state = session.getState();
+    expect(state.status).toBe("idle");
+    const assistantMsg = state.messages.find((m) => m.role === "assistant");
+    expect(assistantMsg).toBeDefined();
+    const textBlock = assistantMsg!.content.find((b) => b.kind === "text");
+    expect((textBlock as { kind: "text"; text: string }).text).toBe("hello after reload");
   });
 });
