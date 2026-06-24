@@ -43,6 +43,7 @@ export interface EditorProps {
   media: MediaByteSource;
   library: EditorLibrary;
   session?: ProjectSession;
+  nativeFileMenu?: boolean;
   exportGateway?: ExportGateway;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
   agent?: {
@@ -70,7 +71,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, exportGateway, onReady, agent }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, onReady, agent }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
@@ -331,7 +332,7 @@ export function Editor({ store, media, library, session, exportGateway, onReady,
         topBarSlot={
           (session || agent) ? (
             <>
-              {session && (
+              {session && !nativeFileMenu && (
                 <FileMenu
                   session={session}
                   confirmDiscard={confirmDiscard}

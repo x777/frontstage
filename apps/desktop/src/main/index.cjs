@@ -322,6 +322,7 @@ function createWindow() {
   const win = new BrowserWindow({
     ...bounds,
     show: true,
+    autoHideMenuBar: process.platform !== "darwin",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,

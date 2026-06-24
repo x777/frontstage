@@ -109,6 +109,8 @@ window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
 (window as unknown as Record<string, unknown>).__desktopGateway = gateway;
 (window as unknown as Record<string, unknown>).__agentSession = agentSession;
 
+const isMac = window.desktopProject?.platform === "darwin";
+
 function PalmierDesktopApp() {
   const [agentModelId, setAgentModelId] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModelId, setImageModelId] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
@@ -151,6 +153,7 @@ function PalmierDesktopApp() {
       media={library.byteSource}
       library={library}
       session={session}
+      nativeFileMenu={isMac}
       exportGateway={exportGateway}
       agent={{
         session: agentSession,

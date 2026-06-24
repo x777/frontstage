@@ -59,4 +59,5 @@ contextBridge.exposeInMainWorld("desktopProject", {
   __setNextPick: (p) => ipcRenderer.invoke("project:__setNextPick", p),
   ...(process.env.PALMIER_E2E === "1" ? { __setNextExportPick: (p) => ipcRenderer.invoke("project:__setNextExportPick", p) } : {}),
   onMenuCommand: (cb) => { ipcRenderer.removeAllListeners("menu:command"); ipcRenderer.on("menu:command", (_e, c, arg) => cb(c, arg)); _menuCommandCb = (c) => cb(c, undefined); },
+  platform: process.platform,
 });

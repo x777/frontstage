@@ -17,6 +17,7 @@ interface DesktopProjectBridge {
   __setNextPick(p: string): Promise<void>;
   __setNextExportPick?(p: string): Promise<void>;
   onMenuCommand(cb: (cmd: string, arg?: unknown) => void): void;
+  platform?: string;
 }
 
 declare global {

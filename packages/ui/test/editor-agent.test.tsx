@@ -30,6 +30,7 @@ import {
   type MediaManifest,
   type Track,
   type Timeline,
+  type ProjectSession,
 } from "@palmier/core";
 import {
   ToolExecutor,
@@ -283,4 +284,41 @@ test("Editor: no panel-agent when agent prop omitted (apps/web regression)", () 
   );
 
   expect(screen.queryByTestId("panel-agent")).not.toBeInTheDocument();
+});
+
+// ── nativeFileMenu gating (desktop macOS uses the native global menu) ────────
+
+function makeFakeSession(): ProjectSession {
+  return {
+    getState: () => ({ name: "Untitled" }),
+    subscribe: () => () => {},
+    isDirty: () => false,
+    listRecent: async () => [],
+  } as unknown as ProjectSession;
+}
+
+test("Editor: in-app FileMenu shown with session (web / non-macOS desktop)", () => {
+  const { store, media, library } = makeMinimalEditorProps();
+
+  render(
+    <Editor store={store} media={media} library={library} session={makeFakeSession()} />,
+  );
+
+  expect(screen.getByTestId("file-menu")).toBeInTheDocument();
+});
+
+test("Editor: in-app FileMenu hidden when nativeFileMenu (desktop macOS native menu)", () => {
+  const { store, media, library } = makeMinimalEditorProps();
+
+  render(
+    <Editor
+      store={store}
+      media={media}
+      library={library}
+      session={makeFakeSession()}
+      nativeFileMenu
+    />,
+  );
+
+  expect(screen.queryByTestId("file-menu")).not.toBeInTheDocument();
 });
