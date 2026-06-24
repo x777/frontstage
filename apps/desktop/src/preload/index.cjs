@@ -20,6 +20,18 @@ contextBridge.exposeInMainWorld("desktopExport", {
   finish: () => ipcRenderer.invoke("export:finish"),
 });
 
+contextBridge.exposeInMainWorld("desktopAI", {
+  setKey: (k) => ipcRenderer.invoke("ai:setKey", k),
+  hasKey: () => ipcRenderer.invoke("ai:hasKey"),
+  clearKey: () => ipcRenderer.invoke("ai:clearKey"),
+  streamChat: (id, body) => ipcRenderer.send("ai:streamChat", { id, body }),
+  onChunk: (cb) => {
+    const h = (_e, m) => cb(m);
+    ipcRenderer.on("ai:chunk", h);
+    return () => ipcRenderer.removeListener("ai:chunk", h);
+  },
+});
+
 contextBridge.exposeInMainWorld("desktopProject", {
   pickOpen: () => ipcRenderer.invoke("project:pickOpen"),
   pickSaveAs: (n) => ipcRenderer.invoke("project:pickSaveAs", n),

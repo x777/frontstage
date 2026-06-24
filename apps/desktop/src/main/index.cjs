@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -550,4 +550,78 @@ ipcMain.handle("export:finish", async (_event) => {
   try { fs.unlinkSync(audioPath); } catch { /* ignore */ }
 
   return opts.outPath;
+});
+
+// ── AI IPC (DesktopAiGateway) ────────────────────────────────────────────────
+// The OpenRouter API key is stored exclusively in the main process (never in renderer).
+// In production: safeStorage (OS keychain encryption).
+// In headless CI (PALMIER_E2E=1): plain file fallback when safeStorage unavailable.
+
+const AI_KEY_FILE = path.join(app.getPath("userData"), "openrouter-key.bin");
+const AI_KEY_FILE_PLAIN = path.join(app.getPath("userData"), "openrouter-key-plain.txt");
+
+function loadKey() {
+  try {
+    const isE2E = process.env.PALMIER_E2E === "1";
+    if (isE2E && !safeStorage.isEncryptionAvailable()) {
+      // Headless CI fallback: plain text store
+      if (!fs.existsSync(AI_KEY_FILE_PLAIN)) return null;
+      return fs.readFileSync(AI_KEY_FILE_PLAIN, "utf8");
+    }
+    if (!fs.existsSync(AI_KEY_FILE)) return null;
+    return safeStorage.decryptString(fs.readFileSync(AI_KEY_FILE));
+  } catch {
+    return null;
+  }
+}
+
+ipcMain.handle("ai:setKey", (_e, key) => {
+  const isE2E = process.env.PALMIER_E2E === "1";
+  if (isE2E && !safeStorage.isEncryptionAvailable()) {
+    fs.writeFileSync(AI_KEY_FILE_PLAIN, String(key), "utf8");
+    return;
+  }
+  fs.writeFileSync(AI_KEY_FILE, safeStorage.encryptString(String(key)));
+});
+
+ipcMain.handle("ai:hasKey", () => {
+  const isE2E = process.env.PALMIER_E2E === "1";
+  if (isE2E && !safeStorage.isEncryptionAvailable()) return fs.existsSync(AI_KEY_FILE_PLAIN);
+  return fs.existsSync(AI_KEY_FILE);
+});
+
+ipcMain.handle("ai:clearKey", () => {
+  try { fs.unlinkSync(AI_KEY_FILE); } catch { /* ignore */ }
+  try { fs.unlinkSync(AI_KEY_FILE_PLAIN); } catch { /* ignore */ }
+});
+
+ipcMain.on("ai:streamChat", async (event, { id, body }) => {
+  const key = loadKey();
+  if (!key) {
+    event.sender.send("ai:chunk", { id, error: "no API key" });
+    return;
+  }
+  try {
+    const base = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+    const res = await fetch(base + "/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + key,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://palmier.pro",
+        "X-Title": "PalmierPro",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) {
+      event.sender.send("ai:chunk", { id, error: "HTTP " + res.status });
+      return;
+    }
+    for await (const chunk of res.body) {
+      event.sender.send("ai:chunk", { id, data: new Uint8Array(chunk) });
+    }
+    event.sender.send("ai:chunk", { id, done: true });
+  } catch (err) {
+    event.sender.send("ai:chunk", { id, error: String(err) });
+  }
 });

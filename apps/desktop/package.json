@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@palmier/ai": "workspace:*",
     "@palmier/core": "workspace:*",
     "@palmier/engine": "workspace:*",
     "@palmier/ui": "workspace:*",

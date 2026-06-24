@@ -20,6 +20,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@palmier/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@palmier/core':
         specifier: workspace:*
         version: link:../../packages/core

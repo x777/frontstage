@@ -38,6 +38,7 @@ export default defineConfig({
         editor: resolve(__dirname, "src/renderer/editor.html"),
         export: resolve(__dirname, "src/renderer/export.html"),
         "gateway-test": resolve(__dirname, "src/renderer/gateway-test.html"),
+        "ai-gateway-test": resolve(__dirname, "src/renderer/ai-gateway-test.html"),
       },
     },
   },
