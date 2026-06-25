@@ -21,6 +21,7 @@ export class VideoDecodeManager {
   private keyframes: KeyframeEntry[] = [];
   private err: EngineDecodeError | null = null;
   private collected: VideoFrame[] = [];
+  private scrubTargetUs = 0;
 
   // pump path
   private mode: "scrub" | "pump" = "scrub";
@@ -53,6 +54,9 @@ export class VideoDecodeManager {
           m.buffer.push(f);
         } else {
           m.collected.push(f);
+          // Release superseded frames as we decode toward the target; holding the whole GOP
+          // alive exhausts the hardware decoder's output-surface pool and stalls flush().
+          m.pruneScrub();
         }
       },
       error: (e: Error) => { m.err = { message: e.message }; },
@@ -125,12 +129,34 @@ export class VideoDecodeManager {
 
   bufferedCount(): number { return this.buffer.length; }
 
+  // Keep only the latest frame <= target plus the earliest frame > target (fallback); close the rest.
+  private pruneScrub(): void {
+    let best: VideoFrame | undefined;
+    let fallback: VideoFrame | undefined;
+    for (const f of this.collected) {
+      if (f.timestamp <= this.scrubTargetUs) {
+        if (!best || f.timestamp > best.timestamp) { if (best) { best.close(); this.open--; } best = f; }
+        else { f.close(); this.open--; }
+      } else {
+        if (!fallback || f.timestamp < fallback.timestamp) { if (fallback) { fallback.close(); this.open--; } fallback = f; }
+        else { f.close(); this.open--; }
+      }
+    }
+    this.collected = [];
+    if (best) this.collected.push(best);
+    if (fallback) this.collected.push(fallback);
+  }
+
   async frameAtMicros(targetUs: number): Promise<VideoFrame> {
     this.mode = "scrub";
+    this.scrubTargetUs = targetUs;
     this.err = null;
-    // drop anything buffered from a previous call
+    // drop anything buffered from a previous call — both the scrub `collected` and the pump
+    // look-ahead `buffer`; leftover pump frames hold the decoder's output pool and stall flush().
     for (const f of this.collected) { f.close(); this.open--; }
     this.collected = [];
+    for (const f of this.buffer) { f.close(); this.open--; }
+    this.buffer = [];
     const startIdx = this.keyframeIndexBefore(targetUs);
     for (let i = startIdx; i < this.chunks.length; i++) {
       this.decoder.decode(this.chunks[i]!);
