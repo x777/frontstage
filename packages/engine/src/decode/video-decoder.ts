@@ -81,11 +81,12 @@ export class VideoDecodeManager {
 
   async seekTo(targetUs: number): Promise<void> {
     this.mode = "pump";
-    await this.decoder.flush();
+    // Release held frames BEFORE flush — a saturated decoder output pool makes flush() hang.
     for (const f of this.buffer) { f.close(); this.open--; }
     this.buffer = [];
     for (const f of this.collected) { f.close(); this.open--; }
     this.collected = [];
+    await this.decoder.flush();
     this.cursor = this.keyframeIndexBefore(targetUs);
   }
 
