@@ -117,7 +117,8 @@ ipcMain.handle("mcp:regenerateToken", async () => {
 
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
-app.commandLine.appendSwitch("enable-features", "Vulkan,UseSkiaRenderer");
+// Forcing Vulkan/Skia destabilises the WebGPU device on Windows GPUs (device-lost → blank preview); Dawn uses D3D12/Metal there. Only Linux needs the Vulkan hint.
+if (process.platform === "linux") app.commandLine.appendSwitch("enable-features", "Vulkan,UseSkiaRenderer");
 
 // ── Project IPC (Task 2) ────────────────────────────────────────────────────
 
