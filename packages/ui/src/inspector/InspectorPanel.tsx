@@ -7,6 +7,7 @@ import {
   setClipTransformCommand,
   setClipCropCommand,
   setClipPropertyCommand,
+  setKeyframeCommand,
   setClipTextStyleCommand,
   defaultTextStyle,
   rgbaFromHex,
@@ -87,11 +88,24 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
   const c = isVisual ? cropAt(clip, playhead) : clip.crop;
   const opacity = isVisual ? opacityAt(clip, playhead) : clip.opacity;
 
-  const dispatchTransform = (next: Transform) =>
-    store.dispatch(setClipTransformCommand(clip.id, next, `transform-${clip.id}`));
+  const kfOffset = playhead - clip.startFrame;
+  const kfActive = (track: { keyframes: unknown[] } | undefined) => !!track && track.keyframes.length > 0;
 
-  const dispatchCrop = (next: Crop) =>
-    store.dispatch(setClipCropCommand(clip.id, next, `crop-${clip.id}`));
+  const dispatchTransform = (next: Transform) => {
+    const key = `transform-${clip.id}`;
+    store.dispatch(setClipTransformCommand(clip.id, next, key));
+    // When a transform track is keyframed, transformAt() samples the keyframe and ignores the
+    // base — so also write the keyframe at the playhead, or the edit appears to do nothing.
+    if (kfActive(clip.scaleTrack)) store.dispatch(setKeyframeCommand(clip.id, "scaleTrack", kfOffset, { a: next.width, b: next.height }, "linear", key));
+    if (kfActive(clip.rotationTrack)) store.dispatch(setKeyframeCommand(clip.id, "rotationTrack", kfOffset, next.rotation, "linear", key));
+    if (kfActive(clip.positionTrack)) store.dispatch(setKeyframeCommand(clip.id, "positionTrack", kfOffset, { a: next.centerX - next.width / 2, b: next.centerY - next.height / 2 }, "linear", key));
+  };
+
+  const dispatchCrop = (next: Crop) => {
+    const key = `crop-${clip.id}`;
+    if (kfActive(clip.cropTrack)) store.dispatch(setKeyframeCommand(clip.id, "cropTrack", kfOffset, next, "linear", key));
+    else store.dispatch(setClipCropCommand(clip.id, next, key));
+  };
 
   const style = clip.textStyle ?? defaultTextStyle();
   const hexColor = rgbaToHex(style.color.r, style.color.g, style.color.b);
@@ -215,7 +229,9 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
             max={1}
             step={0.01}
             onChange={(v) =>
-              store.dispatch(setClipPropertyCommand(clip.id, "opacity", v, `opacity-${clip.id}`))
+              kfActive(clip.opacityTrack)
+                ? store.dispatch(setKeyframeCommand(clip.id, "opacityTrack", kfOffset, v, "linear", `opacity-${clip.id}`))
+                : store.dispatch(setClipPropertyCommand(clip.id, "opacity", v, `opacity-${clip.id}`))
             }
           />
         </Section>
