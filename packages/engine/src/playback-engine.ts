@@ -123,6 +123,8 @@ export class PlaybackEngine {
       this.audio?.reset();
       await this.coordinator!.seekAllTo(startFrame);
       if (!this._isPlaying || pseq !== this.playSeq) return;
+      await this.coordinator!.primeAt(startFrame);
+      if (!this._isPlaying || pseq !== this.playSeq) return;
       this.audioMixer?.reset(startFrame, fps);
       if (this.audio) {
         try {
@@ -137,6 +139,10 @@ export class PlaybackEngine {
         this.audio ? () => this.audio!.currentTime * 1000 : undefined,
       );
       this.clock.start(startFrame);
+      // Render the exact start frame now (buffer primed) so the first visible frame matches the
+      // playhead — without this the clock has already advanced ~1 frame by the first raf tick.
+      this._currentFrame = startFrame;
+      await this.renderer.composite(this.coordinator!.layersForPlayback(startFrame), { width: this.timeline!.width, height: this.timeline!.height });
       this.raf = requestAnimationFrame(() => void tick());
     })().catch((e) => {
       console.warn("play error:", e);

@@ -87,7 +87,27 @@ export class VideoDecodeManager {
     for (const f of this.collected) { f.close(); this.open--; }
     this.collected = [];
     await this.decoder.flush();
+    // flush() drains in-flight pre-seek decodes into the buffer — drop them so we start clean at
+    // the seek point (otherwise stale look-ahead frames hide the real seek target).
+    for (const f of this.buffer) { f.close(); this.open--; }
+    this.buffer = [];
+    for (const f of this.collected) { f.close(); this.open--; }
+    this.collected = [];
     this.cursor = this.keyframeIndexBefore(targetUs);
+  }
+
+  // Decode forward until the target frame is buffered, so playback shows it on the first tick
+  // instead of an earlier frame (the resume/seek "jump"). Releases passed frames as it marches so
+  // a long GOP can't stall pump()'s look-ahead cap.
+  async primeTo(targetUs: number): Promise<void> {
+    this.mode = "pump";
+    for (let guard = 0; guard < 1000; guard++) {
+      if (this.cursor >= this.chunks.length) return;
+      if (this.buffer.length && this.buffer[this.buffer.length - 1]!.timestamp >= targetUs) return;
+      this.pump();
+      this.frameForMicros(targetUs);
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
   }
 
   pump(): void {

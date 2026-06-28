@@ -206,6 +206,16 @@ export class SourceCoordinator {
     }
   }
 
+  async primeAt(frame: number): Promise<void> {
+    for (const [clipId, entry] of this.sources) {
+      if (entry.type !== "video") continue;
+      const clip = this.clipById.get(clipId);
+      if (!clip) continue;
+      const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
+      await entry.mgr.primeTo(srcUs);
+    }
+  }
+
   pumpAll(): void {
     for (const entry of this.sources.values()) {
       if (entry.type === "video") entry.mgr.pump();
