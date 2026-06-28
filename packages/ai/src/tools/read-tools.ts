@@ -1,6 +1,17 @@
 import { z } from "zod";
+import type { Clip } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
+
+const KF_TRACKS = ["opacityTrack", "positionTrack", "scaleTrack", "rotationTrack", "cropTrack", "volumeTrack"] as const;
+function keyframeSummary(clip: Clip): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const tk of KF_TRACKS) {
+    const tr = clip[tk];
+    if (tr && tr.keyframes.length > 0) out[tk] = tr.keyframes.map((k) => ({ frame: k.frame, value: k.value, interpolationOut: k.interpolationOut }));
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 export function getTimelineTool(): ToolSpec {
   return {
@@ -25,6 +36,15 @@ export function getTimelineTool(): ToolSpec {
             startFrame: clip.startFrame,
             durationFrames: clip.durationFrames,
             name: entryMap.get(clip.mediaRef)?.name ?? clip.mediaRef,
+            opacity: clip.opacity,
+            speed: clip.speed,
+            volume: clip.volume,
+            transform: clip.transform,
+            crop: clip.crop,
+            ...(clip.fadeInFrames ? { fadeInFrames: clip.fadeInFrames } : {}),
+            ...(clip.fadeOutFrames ? { fadeOutFrames: clip.fadeOutFrames } : {}),
+            ...(clip.textContent !== undefined ? { textContent: clip.textContent } : {}),
+            ...(keyframeSummary(clip) ? { keyframes: keyframeSummary(clip) } : {}),
           })),
         })),
       };

@@ -109,23 +109,28 @@ export function trimClipCommand(
       const clip = track.clips[loc.clipIndex]!;
       const hasNoSource = clip.mediaType === "image" || clip.mediaType === "text";
 
+      // Clamp the trim so the clip never shrinks below 1 frame (over-trim must not go negative).
+      const delta = edge === "left"
+        ? Math.min(deltaFrames, clip.durationFrames - 1)
+        : Math.max(deltaFrames, 1 - clip.durationFrames);
+
       let newClip: Clip;
       if (edge === "left") {
-        const newStart = clip.startFrame + deltaFrames;
-        const newDuration = clip.durationFrames - deltaFrames;
+        const newStart = clip.startFrame + delta;
+        const newDuration = clip.durationFrames - delta;
         const newTrimStart = hasNoSource
           ? clip.trimStartFrame
-          : clip.trimStartFrame + Math.round(deltaFrames * clip.speed);
+          : clip.trimStartFrame + Math.round(delta * clip.speed);
         newClip = {
           ...setDuration(clip, newDuration),
           startFrame: newStart,
           trimStartFrame: newTrimStart,
         };
       } else {
-        const newDuration = clip.durationFrames + deltaFrames;
+        const newDuration = clip.durationFrames + delta;
         const newTrimEnd = hasNoSource
           ? clip.trimEndFrame
-          : clip.trimEndFrame - Math.round(deltaFrames * clip.speed);
+          : clip.trimEndFrame - Math.round(delta * clip.speed);
         newClip = {
           ...setDuration(clip, newDuration),
           trimEndFrame: newTrimEnd,

@@ -695,3 +695,20 @@ describe("addClipCommand — undo round-trip", () => {
     expect(store.canUndo()).toBe(false);
   });
 });
+
+describe("trimClipCommand — duration clamp", () => {
+  it("over-trimming the right edge clamps duration to >= 1 (never negative)", () => {
+    const clip = makeClip({ id: "c1", startFrame: 0, durationFrames: 30 });
+    const tl = makeTimeline([makeTrack({ id: "t1", clips: [clip] })]);
+    const c = trimClipCommand("c1", "right", -99999).apply(tl).tracks[0]!.clips[0]!;
+    expect(c.durationFrames).toBeGreaterThanOrEqual(1);
+  });
+
+  it("over-trimming the left edge clamps duration to >= 1 and keeps startFrame valid", () => {
+    const clip = makeClip({ id: "c1", startFrame: 0, durationFrames: 30 });
+    const tl = makeTimeline([makeTrack({ id: "t1", clips: [clip] })]);
+    const c = trimClipCommand("c1", "left", 99999).apply(tl).tracks[0]!.clips[0]!;
+    expect(c.durationFrames).toBeGreaterThanOrEqual(1);
+    expect(c.startFrame).toBeLessThan(30);
+  });
+});

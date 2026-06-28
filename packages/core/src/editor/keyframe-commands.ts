@@ -36,9 +36,11 @@ export function setKeyframeCommand<K extends KeyframeTrackKey>(
     coalesceKey,
     apply(timeline: Timeline): Timeline {
       return replaceClip(timeline, clipId, (clip) => {
+        // Keep keyframes inside the clip: clamp to [0, durationFrames - 1].
+        const f = Math.max(0, Math.min(Math.round(frame), clip.durationFrames - 1));
         const existing = clip[trackKey] as { keyframes: unknown[] } | undefined;
         const track = existing ?? { keyframes: [] };
-        const updated = upsertKeyframe(track as never, { frame, value, interpolationOut } as never);
+        const updated = upsertKeyframe(track as never, { frame: f, value, interpolationOut } as never);
         return { ...clip, [trackKey]: updated };
       });
     },

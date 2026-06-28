@@ -44,7 +44,7 @@ export function setFade(clip: Clip, edge: "left" | "right", frames: number): Cli
 }
 
 export function setDuration(clip: Clip, newDuration: number): Clip {
-  return clampFadesToDuration(clampKeyframesToDuration({ ...clip, durationFrames: newDuration }));
+  return clampFadesToDuration(clampKeyframesToDuration({ ...clip, durationFrames: Math.max(1, newDuration) }));
 }
 
 export function rescaleKeyframes(clip: Clip, scale: number): Clip {

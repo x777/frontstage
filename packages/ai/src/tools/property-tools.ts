@@ -63,9 +63,9 @@ export function setClipPropertiesTool(): ToolSpec {
     inputSchema: z.object({
       clipId: z.string(),
       properties: z.object({
-        opacity: z.number().optional(),
-        volume: z.number().optional(),
-        speed: z.number().optional(),
+        opacity: z.number().min(0).max(1).optional(),
+        volume: z.number().min(0).max(8).optional(),
+        speed: z.number().min(0.05).max(100).optional(),
         transform: TransformSchema.optional(),
         crop: CropSchema.optional(),
         textStyle: TextStyleSchema.optional(),
@@ -84,7 +84,9 @@ export function setClipPropertiesTool(): ToolSpec {
         };
       };
       const tl = ctx.store.getSnapshot().timeline;
-      if (!findClip(tl, clipId)) return errorResult(`unknown clip: ${clipId}`);
+      const loc = findClip(tl, clipId);
+      if (!loc) return errorResult(`unknown clip: ${clipId}`);
+      const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
 
       const reducers: ((t: ReturnType<typeof ctx.store.getSnapshot>["timeline"]) => ReturnType<typeof ctx.store.getSnapshot>["timeline"])[] = [];
 
@@ -115,8 +117,15 @@ export function setClipPropertiesTool(): ToolSpec {
 
       if (reducers.length === 0) return ok("No properties changed.");
 
+      const kf = (t?: { keyframes: unknown[] }) => !!t && t.keyframes.length > 0;
+      const notes: string[] = [];
+      if (properties.opacity !== undefined && kf(clip.opacityTrack)) notes.push("opacity is keyframed — the base value has no visual effect; use set_keyframes");
+      if (properties.volume !== undefined && kf(clip.volumeTrack)) notes.push("volume is keyframed — use set_keyframes");
+      if (properties.transform !== undefined && (kf(clip.positionTrack) || kf(clip.scaleTrack) || kf(clip.rotationTrack))) notes.push("transform is keyframed — use set_keyframes");
+      if (properties.crop !== undefined && kf(clip.cropTrack)) notes.push("crop is keyframed — use set_keyframes");
+
       asUndoStep(ctx.store, "Set Clip Properties", reducers);
-      return ok(`Updated ${reducers.length} property(ies) on clip ${clipId}.`);
+      return ok(`Updated ${reducers.length} property(ies) on clip ${clipId}.${notes.length ? " Note: " + notes.join("; ") + "." : ""}`);
     },
   };
 }
@@ -194,8 +203,11 @@ export function setKeyframesTool(): ToolSpec {
         return cmd.apply.bind(cmd);
       });
 
+      const removedCount = keyframes.filter((k) => k.remove).length;
+      const setCount = keyframes.length - removedCount;
       asUndoStep(ctx.store, "Set Keyframes", reducers);
-      return ok(`Set ${keyframes.length} keyframe(s) on ${trackKey} of clip ${clipId}.`);
+      const parts = [setCount ? `set ${setCount}` : "", removedCount ? `removed ${removedCount}` : ""].filter(Boolean);
+      return ok(`Keyframes on ${trackKey} of clip ${clipId}: ${parts.join(", ")}.`);
     },
   };
 }

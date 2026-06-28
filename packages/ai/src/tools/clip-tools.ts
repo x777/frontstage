@@ -126,7 +126,12 @@ export function splitClipTool(): ToolSpec {
       const { clipId, atFrame } = args as { clipId: string; atFrame: number };
       const tl = ctx.store.getSnapshot().timeline;
 
-      if (!findClip(tl, clipId)) return errorResult(`unknown clip: ${clipId}`);
+      const loc = findClip(tl, clipId);
+      if (!loc) return errorResult(`unknown clip: ${clipId}`);
+      const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+      const clipEnd = clip.startFrame + clip.durationFrames;
+      if (atFrame <= clip.startFrame || atFrame >= clipEnd)
+        return errorResult(`atFrame ${atFrame} must be strictly inside the clip (frames ${clip.startFrame}..${clipEnd})`);
 
       let newClipId = "";
       const cmd = splitClipCommand(clipId, atFrame, undefined, () => { newClipId = ctx.newId(); return newClipId; });

@@ -64,6 +64,18 @@ describe("setKeyframeCommand — opacityTrack", () => {
     expect(kfs[0]!.value).toBe(0.9);
   });
 
+  it("clamps a frame beyond the clip duration to durationFrames - 1", () => {
+    const tl = makeTimeline([makeClip({ id: "c1", durationFrames: 60 })]);
+    const result = setKeyframeCommand("c1", "opacityTrack", 99999, 0.5).apply(tl);
+    expect(result.tracks[0]!.clips[0]!.opacityTrack!.keyframes[0]!.frame).toBe(59);
+  });
+
+  it("clamps a negative frame to 0", () => {
+    const tl = makeTimeline([makeClip({ id: "c1", durationFrames: 60 })]);
+    const result = setKeyframeCommand("c1", "opacityTrack", -50, 0.5).apply(tl);
+    expect(result.tracks[0]!.clips[0]!.opacityTrack!.keyframes[0]!.frame).toBe(0);
+  });
+
   it("stores frame as given (clip-relative offset)", () => {
     const clip = makeClip({ id: "c1", startFrame: 20 });
     const tl = makeTimeline([clip]);
