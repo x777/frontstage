@@ -18,6 +18,7 @@ import {
   moveClipCommand,
   trimClipCommand,
   splitClipCommand,
+  removeClipCommand,
   addClipCommand,
   clipFromAsset,
   dropTargetAt,
@@ -417,6 +418,25 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
             }
           }
         }
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const snap = store.getSnapshot();
+        const ids = [...snap.selection];
+        if (ids.length === 0) return;
+        e.preventDefault();
+        // Track ids that hold a selected clip — prune those if this delete empties them.
+        const affected = new Set(
+          snap.timeline.tracks.filter((tr) => tr.clips.some((c) => snap.selection.has(c.id))).map((tr) => tr.id),
+        );
+        store.dispatch({
+          label: "Delete",
+          apply: (tl) => {
+            const removed = ids.reduce((t, id) => removeClipCommand(id).apply(t), tl);
+            return { ...removed, tracks: removed.tracks.filter((tr) => !(affected.has(tr.id) && tr.clips.length === 0)) };
+          },
+        });
+        store.select([]);
       }
     }
 
