@@ -1,8 +1,7 @@
 import type { Timeline } from "../timeline.js";
 import type { ClipType } from "../clip-type.js";
 
-// Snapshot of the visual/audio track partition. Visual tracks at [0, firstAudioIndex),
-// audio tracks at [firstAudioIndex, trackCount). Mirrors Swift ZoneLayout.
+// Visual/audio track partition: visual [0,firstAudioIndex), audio [firstAudioIndex,trackCount). Mirrors Swift ZoneLayout.
 export interface ZoneLayout {
   trackCount: number;
   firstAudioIndex: number;
