@@ -24,10 +24,17 @@ const serveEngineFixtures = (): Plugin => {
   };
 };
 
+// The audio engine uses SharedArrayBuffer (AudioWorklet ring buffer), which needs the page to be
+// cross-origin isolated — otherwise audio silently fails to start.
+const crossOriginIsolation = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+};
+
 export default defineConfig({
   root: "src/renderer",
-  server: { port: 5190 },
-  preview: { port: 5190 },
+  server: { port: 5190, headers: crossOriginIsolation },
+  preview: { port: 5190, headers: crossOriginIsolation },
   plugins: [serveEngineFixtures()],
   build: {
     outDir: "../../dist/renderer",

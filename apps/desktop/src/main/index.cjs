@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, session } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -451,6 +451,18 @@ app.whenReady().then(async () => {
       _mcpServer = await mod.startMcpServer({ port: MCP_PORT, token: _mcpToken, bridge: mcpBridge });
     } catch { /* not fatal */ }
   }
+
+  // The audio engine needs SharedArrayBuffer, which requires a cross-origin-isolated renderer.
+  // Inject COOP/COEP on every response so crossOriginIsolated is true (dev + packaged).
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Cross-Origin-Opener-Policy": ["same-origin"],
+        "Cross-Origin-Embedder-Policy": ["require-corp"],
+      },
+    });
+  });
 
   rebuildMenu();
   createWindow();
