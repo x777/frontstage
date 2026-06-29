@@ -244,6 +244,24 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
     dragRef.current = null;
   }, []);
 
+  // Right-click a keyframe diamond to remove it (without having to park the playhead on it).
+  const handleLaneContextMenu = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const lane = laneRef.current;
+      if (!lane) return;
+      const rect = lane.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      for (const kf of keyframes) {
+        if (Math.abs(localX - xForKfFrame(kf.frame, rect.width)) <= DIAMOND_PX) {
+          e.preventDefault();
+          store.dispatch(removeKeyframeCommand(clip.id, def.trackKey, kf.frame, `kf-${clip.id}-${def.prop}`));
+          return;
+        }
+      }
+    },
+    [clip, def, keyframes, store],
+  );
+
   // Playhead position ratio
   const playheadRatio = dur > 0 ? Math.max(0, Math.min(1, offset / dur)) : 0;
 
@@ -305,6 +323,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
         onPointerMove={handleLanePointerMove}
         onPointerUp={handleLanePointerUp}
         onPointerCancel={handleLanePointerUp}
+        onContextMenu={handleLaneContextMenu}
         style={{
           position: "relative",
           flex: 1,
@@ -343,6 +362,7 @@ function KfDiamond({ frame, dur }: { frame: number; dur: number }) {
   const ratio = dur > 0 ? frame / dur : 0;
   return (
     <div
+      title="Drag to move · right-click to remove"
       style={{
         position: "absolute",
         top: "50%",

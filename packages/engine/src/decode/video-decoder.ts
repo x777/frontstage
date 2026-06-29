@@ -136,7 +136,9 @@ export class VideoDecodeManager {
       if (this.buffer[i]!.timestamp <= targetUs) idx = i;
       else break;
     }
-    if (idx < 0) return undefined;
+    // Target is before every buffered frame (e.g. the first frame's cts offset at startup):
+    // show the earliest available frame instead of dropping to a black skip.
+    if (idx < 0) return this.buffer.length > 0 ? this.buffer[0]! : undefined;
     for (let i = 0; i < idx; i++) { this.buffer[i]!.close(); this.open--; }
     this.buffer = this.buffer.slice(idx);
     return this.buffer[0];
