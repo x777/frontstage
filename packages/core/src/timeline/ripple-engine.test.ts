@@ -101,11 +101,11 @@ describe("validateShifts", () => {
 describe("applyShifts", () => {
   it("sets new start frames, re-sorts the track, and is immutable", () => {
     const tl = timeline([track("t", [clip("a", 0, 10), clip("b", 100, 10)])]);
-    const next = applyShifts(tl, [{ clipId: "b", newStartFrame: 5 }]);
+    const next = applyShifts(tl, [{ clipId: "a", newStartFrame: 200 }]); // move a past b
     expect(next).not.toBe(tl); // new object
     expect(tl.tracks[0]!.clips.map((c) => c.id)).toEqual(["a", "b"]); // original untouched
-    expect(next.tracks[0]!.clips.map((c) => c.id)).toEqual(["a", "b"]); // re-sorted by startFrame
-    expect(next.tracks[0]!.clips.find((c) => c.id === "b")!.startFrame).toBe(5);
+    expect(next.tracks[0]!.clips.map((c) => c.id)).toEqual(["b", "a"]); // re-sorted: b(100) < a(200)
+    expect(next.tracks[0]!.clips.find((c) => c.id === "a")!.startFrame).toBe(200);
   });
 
   it("returns the same timeline reference for no shifts", () => {
