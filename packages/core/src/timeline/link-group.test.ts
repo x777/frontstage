@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
-import { linkIndex, expandToLinkGroup, linkedPartnerIds, timingPropagationPartners } from "./link-group.js";
+import { linkIndex, expandToLinkGroup, linkedPartnerIds, timingPropagationPartners, partnerMoves, linkGroupOffsets, canLinkClips, canUnlinkClips } from "./link-group.js";
 
 function clip(id: string, over: Partial<Clip> = {}): Clip {
   return {
@@ -65,5 +65,63 @@ describe("timingPropagationPartners", () => {
   });
   it("excludes partners already selected", () => {
     expect(timingPropagationPartners(tl(), new Set(["v", "a"]))).toEqual(new Set());
+  });
+});
+
+describe("partnerMoves", () => {
+  it("shifts partners by the lead's delta, clamped to >= 0", () => {
+    // v at 0, move to 100 (delta +100) -> partner a (at 0) -> 100
+    expect(partnerMoves(tl(), "v", 100)).toEqual([{ clipId: "a", newStartFrame: 100 }]);
+  });
+  it("clamps a negative partner result to 0", () => {
+    const t = timeline([
+      track("vt", [clip("v", { linkGroupId: "g", startFrame: 50 })]),
+      track("at", [clip("a", { linkGroupId: "g", mediaType: "audio", startFrame: 10 })]),
+    ]);
+    // move v 50 -> 0 (delta -50); a 10 + (-50) = -40 -> clamp 0
+    expect(partnerMoves(t, "v", 0)).toEqual([{ clipId: "a", newStartFrame: 0 }]);
+  });
+  it("returns [] for a zero delta or an unlinked clip", () => {
+    expect(partnerMoves(tl(), "v", 0)).toEqual([]);
+    expect(partnerMoves(tl(), "x", 100)).toEqual([]);
+  });
+});
+
+describe("linkGroupOffsets", () => {
+  it("reports the offset of each out-of-sync clip vs the group minimum", () => {
+    const t = timeline([
+      track("vt", [clip("v", { linkGroupId: "g", startFrame: 0, trimStartFrame: 0 })]),     // start-trim = 0
+      track("at", [clip("a", { linkGroupId: "g", mediaType: "audio", startFrame: 7, trimStartFrame: 0 })]), // = 7
+    ]);
+    expect(linkGroupOffsets(t)).toEqual(new Map([["a", 7]]));
+  });
+  it("omits in-sync and unlinked clips", () => {
+    expect(linkGroupOffsets(tl())).toEqual(new Map()); // v and a both start-trim = 0
+  });
+});
+
+describe("canLinkClips", () => {
+  it("is true for >=2 clips of different media types not already one group", () => {
+    const t = timeline([track("vt", [clip("v"), clip("a", { mediaType: "audio" })])]);
+    expect(canLinkClips(t, new Set(["v", "a"]))).toBe(true);
+  });
+  it("is false for fewer than 2 clips", () => {
+    expect(canLinkClips(tl(), new Set(["v"]))).toBe(false);
+  });
+  it("is false when all selected clips are the same media type", () => {
+    const t = timeline([track("vt", [clip("v1"), clip("v2")])]);
+    expect(canLinkClips(t, new Set(["v1", "v2"]))).toBe(false);
+  });
+  it("is false when the selection is already exactly one group", () => {
+    expect(canLinkClips(tl(), new Set(["v", "a"]))).toBe(false);
+  });
+});
+
+describe("canUnlinkClips", () => {
+  it("is true when any selected clip is linked", () => {
+    expect(canUnlinkClips(tl(), new Set(["v"]))).toBe(true);
+  });
+  it("is false when no selected clip is linked", () => {
+    expect(canUnlinkClips(tl(), new Set(["x"]))).toBe(false);
   });
 });
