@@ -32,3 +32,4 @@ export * from "./timeline/overwrite.js";
 export * from "./timeline/snap.js";
 export * from "./timeline/drag-math.js";
 export * from "./timeline/ripple-types.js";
+export * from "./timeline/ripple-engine.js";
