@@ -712,3 +712,63 @@ describe("trimClipCommand — duration clamp", () => {
     expect(c.startFrame).toBeLessThan(30);
   });
 });
+
+describe("splitClipCommand — splits ALL keyframe tracks (Tier 0)", () => {
+  it("splits opacity and scale tracks at the cut, not just volume", () => {
+    const clip = makeClip({
+      id: "c1",
+      startFrame: 0,
+      durationFrames: 30,
+      opacityTrack: { keyframes: [
+        { frame: 0, value: 0, interpolationOut: "linear" },
+        { frame: 30, value: 1, interpolationOut: "linear" },
+      ] },
+      scaleTrack: { keyframes: [
+        { frame: 0, value: { a: 1, b: 1 }, interpolationOut: "linear" },
+        { frame: 20, value: { a: 2, b: 2 }, interpolationOut: "linear" },
+      ] },
+    });
+    const tl = makeTimeline([makeTrack({ id: "t1", clips: [clip] })]);
+    const result = splitClipCommand("c1", 10, undefined, mkId("right")).apply(tl);
+    const left = result.tracks[0]!.clips.find((c) => c.id === "c1")!;
+    const right = result.tracks[0]!.clips.find((c) => c.id === "right")!;
+
+    // opacity (number track): linear 0->1 over 0..30 => boundary at offset 10 is 1/3
+    const lo = left.opacityTrack!.keyframes;
+    expect(lo[lo.length - 1]!.frame).toBe(10);
+    expect(lo[lo.length - 1]!.value).toBeCloseTo(1 / 3);
+    const ro = right.opacityTrack!.keyframes;
+    expect(ro[0]!.frame).toBe(0);
+    expect(ro[0]!.value).toBeCloseTo(1 / 3);
+    expect(ro[ro.length - 1]!.frame).toBe(20); // 30 - 10
+
+    // scale (AnimPair track) — the regression: this used to be silently dropped at a cut
+    expect(left.scaleTrack!.keyframes.some((k) => k.frame === 10)).toBe(true);
+    const rs = right.scaleTrack!.keyframes;
+    expect(rs[0]!.frame).toBe(0);
+    expect(rs[rs.length - 1]!.frame).toBe(10); // original frame 20 rebased to 20-10
+  });
+});
+
+describe("moveClipCommand — overwrites the destination (Tier 0)", () => {
+  it("removes a clip the moved clip fully lands on (cross-track)", () => {
+    const b = makeClip({ id: "b", startFrame: 50, durationFrames: 10 });
+    const victim = makeClip({ id: "v", startFrame: 20, durationFrames: 10 });
+    const tl = makeTimeline([
+      makeTrack({ id: "t1", clips: [b] }),
+      makeTrack({ id: "t2", clips: [victim] }),
+    ]);
+    const t2 = moveClipCommand("b", 1, 20).apply(tl).tracks[1]!.clips;
+    expect(t2.find((c) => c.id === "b")).toBeTruthy();
+    expect(t2.find((c) => c.id === "v")).toBeUndefined();
+  });
+
+  it("trims a partially-overlapped clip instead of leaving a dirty overlap (same track)", () => {
+    const a = makeClip({ id: "a", startFrame: 0, durationFrames: 10 });
+    const victim = makeClip({ id: "v", startFrame: 5, durationFrames: 20 });
+    const tl = makeTimeline([makeTrack({ id: "t1", clips: [a, victim] })]);
+    const clips = moveClipCommand("a", 0, 5).apply(tl).tracks[0]!.clips;
+    const v = clips.find((c) => c.id === "v")!;
+    expect(v.startFrame).toBeGreaterThanOrEqual(15); // head cleared by a (5..15)
+  });
+});

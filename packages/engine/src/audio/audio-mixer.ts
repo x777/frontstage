@@ -30,7 +30,7 @@ export class AudioMixer {
   static async create(timeline: Timeline, media: MediaByteSource): Promise<AudioMixer | undefined> {
     // Collect clips that carry audio (audio or video mediaType)
     const allClips = timeline.tracks
-      .filter((t) => !t.hidden)
+      .filter((t) => !t.hidden && !t.muted)
       .flatMap((t) => t.clips)
       .filter((c) => c.mediaType === "audio" || c.mediaType === "video");
 

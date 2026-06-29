@@ -14,20 +14,20 @@ import {
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
-const RGBASchema = z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number() });
+const RGBASchema = z.object({ r: z.number().finite(), g: z.number().finite(), b: z.number().finite(), a: z.number().finite() });
 const FillSchema = z.object({ enabled: z.boolean(), color: RGBASchema });
 const ShadowSchema = z.object({
   enabled: z.boolean(),
   color: RGBASchema,
-  offsetX: z.number(),
-  offsetY: z.number(),
-  blur: z.number(),
+  offsetX: z.number().finite(),
+  offsetY: z.number().finite(),
+  blur: z.number().finite(),
 });
 
 const TextStyleSchema = z.object({
   fontName: z.string(),
-  fontSize: z.number(),
-  fontScale: z.number(),
+  fontSize: z.number().finite(),
+  fontScale: z.number().finite(),
   color: RGBASchema,
   alignment: z.enum(["left", "center", "right"]),
   shadow: ShadowSchema,
@@ -36,23 +36,23 @@ const TextStyleSchema = z.object({
 });
 
 const TransformSchema = z.object({
-  centerX: z.number(),
-  centerY: z.number(),
-  width: z.number(),
-  height: z.number(),
-  rotation: z.number(),
+  centerX: z.number().finite(),
+  centerY: z.number().finite(),
+  width: z.number().finite(),
+  height: z.number().finite(),
+  rotation: z.number().finite(),
   flipHorizontal: z.boolean(),
   flipVertical: z.boolean(),
 });
 
 const CropSchema = z.object({
-  top: z.number(),
-  bottom: z.number(),
-  left: z.number(),
-  right: z.number(),
+  top: z.number().finite(),
+  bottom: z.number().finite(),
+  left: z.number().finite(),
+  right: z.number().finite(),
 });
 
-const AnimPairSchema = z.object({ a: z.number(), b: z.number() });
+const AnimPairSchema = z.object({ a: z.number().finite(), b: z.number().finite() });
 
 const KEYFRAME_TRACK_KEYS = ["opacityTrack", "positionTrack", "scaleTrack", "rotationTrack", "cropTrack", "volumeTrack"] as const;
 
@@ -63,9 +63,9 @@ export function setClipPropertiesTool(): ToolSpec {
     inputSchema: z.object({
       clipId: z.string(),
       properties: z.object({
-        opacity: z.number().min(0).max(1).optional(),
-        volume: z.number().min(0).max(8).optional(),
-        speed: z.number().min(0.05).max(100).optional(),
+        opacity: z.number().finite().min(0).max(1).optional(),
+        volume: z.number().finite().min(0).max(8).optional(),
+        speed: z.number().finite().min(0.05).max(100).optional(),
         transform: TransformSchema.optional(),
         crop: CropSchema.optional(),
         textStyle: TextStyleSchema.optional(),
@@ -131,7 +131,7 @@ export function setClipPropertiesTool(): ToolSpec {
 }
 
 const KeyframeValueSchema = z.union([
-  z.number(),
+  z.number().finite(),
   AnimPairSchema,
   CropSchema,
 ]);
@@ -170,7 +170,7 @@ export function setKeyframesTool(): ToolSpec {
       clipId: z.string(),
       trackKey: z.enum(KEYFRAME_TRACK_KEYS),
       keyframes: z.array(z.object({
-        frame: z.number().int(),
+        frame: z.number().finite().int(),
         value: KeyframeValueSchema.optional(),
         interpolationOut: z.enum(["linear", "smooth"]).optional(),
         remove: z.boolean().optional(),
@@ -219,9 +219,9 @@ export function addTextsTool(): ToolSpec {
     inputSchema: z.object({
       texts: z.array(z.object({
         content: z.string(),
-        startFrame: z.number().int(),
-        durationFrames: z.number().int().optional(),
-        trackIndex: z.number().int().optional(),
+        startFrame: z.number().finite().int(),
+        durationFrames: z.number().finite().int().optional(),
+        trackIndex: z.number().finite().int().optional(),
         style: TextStyleSchema.optional(),
       })).min(1),
     }),

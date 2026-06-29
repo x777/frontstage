@@ -2,8 +2,9 @@ import { clipEndFrame } from "../clip.js";
 import type { Clip } from "../clip.js";
 import { clampFadesToDuration, setDuration } from "../clip-mutations.js";
 import { clipTypesCompatible } from "../clip-type.js";
-import { sampleTrack, lerpNumber } from "../keyframe.js";
+import { sampleTrack, lerpNumber, lerpAnimPair } from "../keyframe.js";
 import type { KeyframeTrack, Keyframe } from "../keyframe.js";
+import { lerpCrop } from "../transform.js";
 import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { Command } from "./editor-store.js";
@@ -73,11 +74,11 @@ export function moveClipCommand(
         return t;
       });
 
-      // Insert into destination track (may be same as source)
-      const destClips =
-        toTrackIndex === loc.trackIndex
-          ? sortedByStart([...srcClips, movedClip])
-          : sortedByStart([...(newTracks[toTrackIndex]!.clips), movedClip]);
+      // Insert into destination track (may be same as source), overwriting any clips it lands on.
+      const existingDest = toTrackIndex === loc.trackIndex ? srcClips : newTracks[toTrackIndex]!.clips;
+      const regionEnd = clampedStart + movedClip.durationFrames;
+      const cleared = applyOverwriteToClips(existingDest, computeOverwrite(existingDest, clampedStart, regionEnd));
+      const destClips = sortedByStart([...cleared, movedClip]);
 
       newTracks = newTracks.map((t, i) => {
         if (i === toTrackIndex) return { ...t, clips: destClips };
@@ -148,8 +149,25 @@ export function trimClipCommand(
 
 // --- splitClipCommand ---
 
-function sampleVolumeTrack(track: KeyframeTrack<number>, frame: number): number {
-  return sampleTrack(track, frame, 0, lerpNumber);
+// Split one keyframe track at a clip-relative offset: left keeps kfs ≤ offset + a boundary kf;
+// right keeps kfs ≥ offset rebased to frame 0 + a boundary kf. Works for any value type via `lerp`.
+function splitKeyframeTrackAt<V>(
+  track: KeyframeTrack<V>,
+  splitOffset: number,
+  lerp: (a: V, b: V, t: number) => V,
+): { left: KeyframeTrack<V>; right: KeyframeTrack<V> } {
+  const boundary = sampleTrack(track, splitOffset, track.keyframes[0]!.value, lerp);
+  let leftKfs: Keyframe<V>[] = track.keyframes.filter((k) => k.frame <= splitOffset);
+  if (leftKfs.length === 0 || leftKfs[leftKfs.length - 1]!.frame !== splitOffset) {
+    leftKfs = [...leftKfs, { frame: splitOffset, value: boundary, interpolationOut: "linear" }];
+  }
+  let rightKfs: Keyframe<V>[] = track.keyframes
+    .filter((k) => k.frame >= splitOffset)
+    .map((k) => ({ ...k, frame: k.frame - splitOffset }));
+  if (rightKfs.length === 0 || rightKfs[0]!.frame !== 0) {
+    rightKfs = [{ frame: 0, value: boundary, interpolationOut: "linear" }, ...rightKfs];
+  }
+  return { left: { keyframes: leftKfs }, right: { keyframes: rightKfs } };
 }
 
 export function splitClipCommand(
@@ -193,26 +211,22 @@ export function splitClipCommand(
         clip.durationFrames - splitOffset,
       );
 
-      // Volume-track boundary keyframe continuity
-      const volTrack = clip.volumeTrack;
-      if (volTrack && volTrack.keyframes.length > 0) {
-        const boundaryDb = sampleVolumeTrack(volTrack, splitOffset);
-
-        // Left keeps kfs at frame <= splitOffset, plus boundary kf
-        let leftKfs: Keyframe<number>[] = volTrack.keyframes.filter((k) => k.frame <= splitOffset);
-        if (leftKfs.length === 0 || leftKfs[leftKfs.length - 1]!.frame !== splitOffset) {
-          leftKfs = [...leftKfs, { frame: splitOffset, value: boundaryDb, interpolationOut: "linear" }];
+      // Boundary keyframe continuity for EVERY active track (not just volume): split each at the cut.
+      const KF_SPLITS: { key: keyof Clip; lerp: (a: never, b: never, t: number) => never }[] = [
+        { key: "opacityTrack", lerp: lerpNumber as never },
+        { key: "rotationTrack", lerp: lerpNumber as never },
+        { key: "volumeTrack", lerp: lerpNumber as never },
+        { key: "positionTrack", lerp: lerpAnimPair as never },
+        { key: "scaleTrack", lerp: lerpAnimPair as never },
+        { key: "cropTrack", lerp: lerpCrop as never },
+      ];
+      for (const { key, lerp } of KF_SPLITS) {
+        const tr = clip[key] as KeyframeTrack<never> | undefined;
+        if (tr && tr.keyframes.length > 0) {
+          const { left: lt, right: rt } = splitKeyframeTrackAt(tr, splitOffset, lerp);
+          left = { ...left, [key]: lt };
+          right = { ...right, [key]: rt };
         }
-        left = { ...left, volumeTrack: { keyframes: leftKfs } };
-
-        // Right keeps kfs >= splitOffset, rebased to frame 0, plus frame-0 boundary kf
-        let rightKfs: Keyframe<number>[] = volTrack.keyframes
-          .filter((k) => k.frame >= splitOffset)
-          .map((k) => ({ ...k, frame: k.frame - splitOffset }));
-        if (rightKfs.length === 0 || rightKfs[0]!.frame !== 0) {
-          rightKfs = [{ frame: 0, value: boundaryDb, interpolationOut: "linear" }, ...rightKfs];
-        }
-        right = { ...right, volumeTrack: { keyframes: rightKfs } };
       }
 
       const newClips = sortedByStart([
