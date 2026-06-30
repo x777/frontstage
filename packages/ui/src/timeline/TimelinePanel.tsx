@@ -23,12 +23,15 @@ import {
   dropTargetAt,
   insertionLineY,
   clipRect,
+  marqueeSelect,
+  timelineRangeEdgeHit,
+  rangeEdgeAnchorFrame,
 } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { TrackHeaders, TRACK_HEADER_WIDTH } from "./TrackHeaders.js";
 import { drawTimeline } from "./draw-timeline.js";
-import type { TimelinePalette, DropIndicator } from "./draw-timeline.js";
+import type { TimelinePalette, DropIndicator, TimelineOverlays } from "./draw-timeline.js";
 import { hitTest } from "./pointer.js";
 import type { MediaDragController } from "../media/media-drag.js";
 import { ClipContextMenu, type ClipContextMenuState } from "./ClipContextMenu.js";
@@ -70,6 +73,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const snapLineXRef = useRef<number | null>(null);
   const dropIndicatorRef = useRef<DropIndicator | null>(null);
+  const marqueeRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const [menu, setMenu] = useState<ClipContextMenuState | null>(null);
 
   useEffect(() => {
@@ -105,7 +109,21 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         trackHeights: timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current);
+      // Build overlays: marquee + range band
+      const overlays: TimelineOverlays = {};
+      if (marqueeRectRef.current) {
+        overlays.marquee = marqueeRectRef.current;
+      }
+      const snapRange = snap.selectedTimelineRange;
+      if (snapRange) {
+        const lo = Math.min(snapRange.startFrame, snapRange.endFrame);
+        const hi = Math.max(snapRange.startFrame, snapRange.endFrame);
+        if (lo !== hi) {
+          overlays.rangeBand = { startX: xForFrame(geom, lo), endX: xForFrame(geom, hi) };
+        }
+      }
+
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays);
     }
 
     function scheduleDraw() {
@@ -149,6 +167,14 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
 
     // pointer: scrub + drag gestures (move, trim)
     let scrubbing = false;
+
+    // Marquee drag state
+    type MarqueeState = { originX: number; originY: number; base: ReadonlySet<string> };
+    let marquee: MarqueeState | null = null;
+
+    // Range drag state (shift+ruler)
+    type RangeDragState = { anchorFrame: number };
+    let rangeDrag: RangeDragState | null = null;
 
     // Drag state (move or trim)
     type DragKind = "move" | "trim-left" | "trim-right";
@@ -201,9 +227,25 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       const hit = hitTest(snap, geom, x, y);
 
       if (hit.kind === "ruler") {
-        scrubbing = true;
-        cv.setPointerCapture(e.pointerId);
-        store.setPlayhead(frameAtX(geom, x));
+        if (e.shiftKey) {
+          // Shift+ruler: begin range drag
+          const currentRange = snap.selectedTimelineRange;
+          let anchorFrame: number;
+          if (currentRange) {
+            const edge = timelineRangeEdgeHit(geom, x, currentRange);
+            anchorFrame = edge ? rangeEdgeAnchorFrame(currentRange, edge) : frameAtX(geom, x);
+          } else {
+            anchorFrame = frameAtX(geom, x);
+          }
+          store.setSelectedTimelineRange({ startFrame: anchorFrame, endFrame: anchorFrame });
+          store.select([]);
+          rangeDrag = { anchorFrame };
+          cv.setPointerCapture(e.pointerId);
+        } else {
+          scrubbing = true;
+          cv.setPointerCapture(e.pointerId);
+          store.setPlayhead(frameAtX(geom, x));
+        }
       } else if (hit.kind === "clip") {
         // Always select on pointerdown
         store.select([hit.clipId]);
@@ -260,7 +302,10 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
           };
         }
       } else {
-        store.select([]);
+        // Empty area — begin marquee
+        const base: ReadonlySet<string> = e.shiftKey ? new Set(snap.selection) : new Set<string>();
+        marquee = { originX: x, originY: y, base };
+        cv.setPointerCapture(e.pointerId);
       }
     }
 
@@ -270,6 +315,31 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         if (!coords) return;
         const { geom, x } = coords;
         store.setPlayhead(frameAtX(geom, x));
+        return;
+      }
+
+      if (rangeDrag) {
+        const coords = getGeomAndCoords(e);
+        if (!coords) return;
+        const { geom, x } = coords;
+        store.setSelectedTimelineRange({ startFrame: rangeDrag.anchorFrame, endFrame: frameAtX(geom, x) });
+        scheduleDraw();
+        return;
+      }
+
+      if (marquee) {
+        const coords = getGeomAndCoords(e);
+        if (!coords) return;
+        const { geom, x, y } = coords;
+        // Normalized marquee rect (always positive width/height)
+        const rx = Math.min(marquee.originX, x);
+        const ry = Math.min(marquee.originY, y);
+        const rw = Math.abs(x - marquee.originX);
+        const rh = Math.abs(y - marquee.originY);
+        marqueeRectRef.current = { x: rx, y: ry, width: rw, height: rh };
+        const snap2 = store.getSnapshot();
+        store.select(marqueeSelect(snap2.timeline, geom, { x: rx, y: ry, width: rw, height: rh }, marquee.base, !e.altKey));
+        scheduleDraw();
         return;
       }
 
@@ -397,6 +467,24 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         scrubbing = false;
         const cv = canvasRef.current;
         if (cv) cv.releasePointerCapture(e.pointerId);
+        return;
+      }
+
+      if (rangeDrag) {
+        rangeDrag = null;
+        store.keepValidTimelineRangeOrClear();
+        const cv = canvasRef.current;
+        if (cv) cv.releasePointerCapture(e.pointerId);
+        scheduleDraw();
+        return;
+      }
+
+      if (marquee) {
+        marquee = null;
+        marqueeRectRef.current = null;
+        const cv = canvasRef.current;
+        if (cv) cv.releasePointerCapture(e.pointerId);
+        scheduleDraw();
         return;
       }
 

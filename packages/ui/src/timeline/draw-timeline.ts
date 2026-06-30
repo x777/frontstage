@@ -93,11 +93,17 @@ export type DropIndicator =
   | { kind: "insertion-line"; y: number }
   | { kind: "ghost-clip"; x: number; y: number; width: number; height: number };
 
+export interface TimelineOverlays {
+  marquee?: { x: number; y: number; width: number; height: number };
+  rangeBand?: { startX: number; endX: number };
+}
+
 /**
  * Pure canvas draw — no store, DOM, or var() access.
  * All colors come from `palette` (pre-resolved from getComputedStyle).
  * snapLineX: optional screen-px x for a snap indicator vertical line.
  * dropIndicator: optional media-drag drop indicator.
+ * overlays: optional marquee rect + ruler range band.
  */
 export function drawTimeline(
   ctx: CanvasRenderingContext2D,
@@ -106,7 +112,8 @@ export function drawTimeline(
   size: { width: number; height: number; dpr: number },
   palette: TimelinePalette,
   snapLineX: number | null = null,
-  dropIndicator: DropIndicator | null = null
+  dropIndicator: DropIndicator | null = null,
+  overlays?: TimelineOverlays
 ): void {
   const { width, height, dpr } = size;
 
@@ -300,6 +307,37 @@ export function drawTimeline(
       roundRect(ctx, dropIndicator.x, dropIndicator.y, dropIndicator.width, dropIndicator.height, 3);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // ── Range band (ruler in/out selection) ──────────────────────────────────────
+  if (overlays?.rangeBand) {
+    const { startX, endX } = overlays.rangeBand;
+    const bandLeft = Math.min(startX, endX);
+    const bandRight = Math.max(startX, endX);
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = palette.accentTimecode;
+    ctx.fillRect(bandLeft, RULER_HEIGHT, bandRight - bandLeft, height - RULER_HEIGHT);
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = palette.accentTimecode;
+    ctx.fillRect(bandLeft, RULER_HEIGHT, 1, height - RULER_HEIGHT);
+    ctx.fillRect(bandRight, RULER_HEIGHT, 1, height - RULER_HEIGHT);
+    ctx.restore();
+  }
+
+  // ── Marquee selection rect ───────────────────────────────────────────────────
+  if (overlays?.marquee) {
+    const { x, y, width, height: mh } = overlays.marquee;
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = palette.accentPrimary;
+    ctx.fillRect(x, y, width, mh);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = palette.accentPrimary;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(x + 0.5, y + 0.5, width, mh);
     ctx.restore();
   }
 }
