@@ -462,7 +462,7 @@ describe("split_clips (batch)", () => {
     const res = await splitClipsTool().run({ splits: [{ clipId: "c1", atFrame: 0 }] }, ctx);
     expect(res.isError).toBe(true);
     const block = res.blocks[0]!;
-    expect(block.kind === "text" && block.text).toContain("strictly inside");
+    expect(block.kind === "text" ? block.text : "").toContain("strictly inside");
   });
   test("rejects an unknown clip", async () => {
     const ctx = ctxWith(makeTimeline());

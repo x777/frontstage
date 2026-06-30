@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, type FrameRange, type RippleInsertSpec } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
-import { ok, errorResult } from "./executor.js";
+import { ok, errorResult, asUndoStep } from "./executor.js";
 
 export function rippleDeleteRangesTool(): ToolSpec {
   return {
@@ -42,13 +42,13 @@ export function rippleDeleteRangesTool(): ToolSpec {
       if (out.kind === "refused") return errorResult(`ripple delete refused: ${out.reason}`);
 
       const ti = trackIndex;
-      ctx.store.dispatch({
-        label: "Ripple Delete Ranges",
-        apply: (t) => {
-          const o = rippleDeleteRangesOnTrack(t, ti, ranges, ignore);
-          return o.kind === "ok" ? o.timeline : t;
-        },
-      });
+      asUndoStep(ctx.store, "Ripple Delete Ranges", [(t) => {
+        const ig = a.ignoreSyncLockedTracks
+          ? new Set(t.tracks.map((tr, i) => (tr.syncLocked ? i : -1)).filter((i) => i >= 0))
+          : new Set<number>();
+        const o = rippleDeleteRangesOnTrack(t, ti, ranges, ig);
+        return o.kind === "ok" ? o.timeline : t;
+      }]);
 
       const r = out.report;
       return ok(
@@ -95,14 +95,11 @@ export function insertClipsTool(): ToolSpec {
       const base = ctx.newId();
       const ti = a.trackIndex;
       const at = a.atFrame;
-      ctx.store.dispatch({
-        label: "Insert Clips",
-        apply: (t) => {
-          let n = 0;
-          const detId = () => `${base}-${n++}`;
-          return rippleInsertClipsSpecs(t, specs, ti, at, fps, detId).timeline;
-        },
-      });
+      asUndoStep(ctx.store, "Insert Clips", [(t) => {
+        let n = 0;
+        const detId = () => `${base}-${n++}`;
+        return rippleInsertClipsSpecs(t, specs, ti, at, fps, detId).timeline;
+      }]);
 
       return ok(`Inserted ${specs.length} clip(s) at frame ${at} on track ${ti} (ripple).`);
     },
