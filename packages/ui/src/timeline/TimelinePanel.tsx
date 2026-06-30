@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_TRACK_HEIGHT,
   RULER_HEIGHT,
@@ -31,6 +31,7 @@ import { drawTimeline } from "./draw-timeline.js";
 import type { TimelinePalette, DropIndicator } from "./draw-timeline.js";
 import { hitTest } from "./pointer.js";
 import type { MediaDragController } from "../media/media-drag.js";
+import { ClipContextMenu, type ClipContextMenuState } from "./ClipContextMenu.js";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 40;
@@ -69,6 +70,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const snapLineXRef = useRef<number | null>(null);
   const dropIndicatorRef = useRef<DropIndicator | null>(null);
+  const [menu, setMenu] = useState<ClipContextMenuState | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -463,6 +465,35 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       }
     }
 
+    function onContextMenu(e: MouseEvent) {
+      e.preventDefault();
+      const cv = canvasRef.current;
+      if (!cv) return;
+      const rect = cv.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const snap = store.getSnapshot();
+      const geom = makeGeometry({
+        pixelsPerFrame: snap.view.zoom,
+        scrollX: snap.view.scrollX,
+        headerWidth: TRACK_HEADER_WIDTH,
+        trackHeights: snap.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
+      });
+      const hit = hitTest(snap, geom, x, y);
+      if (hit.kind === "clip") {
+        if (!snap.selection.has(hit.clipId)) {
+          store.select([hit.clipId]);
+        }
+        setMenu({ x: e.clientX, y: e.clientY });
+      } else {
+        setMenu(null);
+      }
+    }
+
+    function onDocClick() {
+      setMenu(null);
+    }
+
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUpOrCancel);
@@ -470,6 +501,8 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.setAttribute("tabindex", "0");
     canvas.addEventListener("keydown", onKeyDown);
+    canvas.addEventListener("contextmenu", onContextMenu);
+    document.addEventListener("click", onDocClick);
 
     // Media drag drop indicator + drop handler
     let unsubDrag: (() => void) | null = null;
@@ -528,6 +561,8 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       canvas.removeEventListener("pointercancel", onPointerUpOrCancel);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("keydown", onKeyDown);
+      canvas.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("click", onDocClick);
     };
   }, [store, dragController]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -548,6 +583,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         data-testid="timeline-canvas"
         style={{ display: "block" }}
       />
+      <ClipContextMenu store={store} menu={menu} onClose={() => setMenu(null)} />
     </div>
   );
 }
