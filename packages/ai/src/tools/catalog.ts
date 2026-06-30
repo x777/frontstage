@@ -15,6 +15,7 @@ import { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClips
 import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./property-tools.js";
 import { removeTracksTool } from "./track-tools.js";
 import { generateImageTool } from "./generate-image-tool.js";
+import { rippleDeleteRangesTool } from "./ripple-tools.js";
 
 export function buildCatalog(): ToolSpec[] {
   return [
@@ -31,6 +32,7 @@ export function buildCatalog(): ToolSpec[] {
     splitClipTool(),
     splitClipsTool(),
     trimClipsTool(),
+    rippleDeleteRangesTool(),
     // Property / keyframe / text tools
     setClipPropertiesTool(),
     setKeyframesTool(),
