@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
-import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap } from "./ripple-commands.js";
+import type { MediaManifestEntry } from "../media.js";
+import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap, trimValues, rippleTrimDurationDelta, syncLockedLeftRoom, planRippleTrim, rippleTrimClip, rippleInsertClips, rippleInsertClipsSpecs } from "./ripple-commands.js";
 
 export function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {
   return {
@@ -168,8 +169,6 @@ describe("rippleDeleteGap", () => {
   });
 });
 
-import { trimValues, rippleTrimDurationDelta, syncLockedLeftRoom } from "./ripple-commands.js";
-
 describe("trimValues", () => {
   it("right-edge growth consumes tail source, clamped at 0 for sourced clips", () => {
     const c = clip("a", 0, 30, { trimStartFrame: 0, trimEndFrame: 5, speed: 1 });
@@ -206,9 +205,6 @@ describe("syncLockedLeftRoom", () => {
     expect(syncLockedLeftRoom(t, 50)).toBeNull();
   });
 });
-
-import { planRippleTrim, rippleTrimClip, rippleInsertClips } from "./ripple-commands.js";
-import type { MediaManifestEntry } from "../media.js";
 
 function entry(id: string, durationSec: number): MediaManifestEntry {
   return { id, name: id, type: "video", source: { kind: "project", relativePath: `media/${id}.mp4` }, duration: durationSec };
@@ -269,8 +265,6 @@ describe("planRippleTrim + rippleTrimClip", () => {
     expect(rippleTrimClip(tl, "a", "right", 0, false)).toBe(tl);
   });
 });
-
-import { rippleInsertClipsSpecs } from "./ripple-commands.js";
 
 describe("rippleInsertClipsSpecs (specs)", () => {
   const ids = () => { let i = 0; return () => `id${i++}`; };

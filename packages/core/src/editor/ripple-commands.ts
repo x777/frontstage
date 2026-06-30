@@ -1,10 +1,11 @@
 import type { Clip } from "../clip.js";
+import type { MediaManifestEntry } from "../media.js";
 import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { ClipShift, FrameRange, GapSelection } from "../timeline/ripple-types.js";
 import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges, computeRipplePush } from "../timeline/ripple-engine.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
-import { replaceTrackClips, clipFromAsset, splitClipCommand } from "./timeline-commands.js";
+import { replaceTrackClips, clipFromAsset, splitClipCommand, addClipCommand } from "./timeline-commands.js";
 import { linkedPartnerIds } from "../timeline/link-group.js";
 import { setDuration } from "../clip-mutations.js";
 
@@ -286,9 +287,6 @@ export function rippleTrimClip(
   return plan ? applyRippleTrim(timeline, plan) : timeline;
 }
 
-import type { MediaManifestEntry } from "../media.js";
-import { addClipCommand } from "./timeline-commands.js";
-
 function entryDurationFrames(entry: MediaManifestEntry, fps: number): number {
   return Math.max(1, Math.round(entry.duration * fps));
 }
@@ -395,10 +393,11 @@ export function rippleInsertClipsSpecs(
     }
   }
 
-  const pushTracks: number[] = [];
+  const pushTracksSet = new Set<number>();
   for (let ti = 0; ti < next.tracks.length; ti++) {
-    if (ti === trackIndex || ti === linkedAudioTrackIndex || next.tracks[ti]!.syncLocked) pushTracks.push(ti);
+    if (ti === trackIndex || ti === linkedAudioTrackIndex || next.tracks[ti]!.syncLocked) pushTracksSet.add(ti);
   }
+  const pushTracks = [...pushTracksSet];
 
   // Split any clip straddling atFrame on each push-track so its right half rides the ripple.
   for (const ti of pushTracks) {
