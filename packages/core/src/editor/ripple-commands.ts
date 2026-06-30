@@ -2,10 +2,11 @@ import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { ClipShift, FrameRange, GapSelection } from "../timeline/ripple-types.js";
-import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges } from "../timeline/ripple-engine.js";
+import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges, computeRipplePush } from "../timeline/ripple-engine.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
 import { replaceTrackClips } from "./timeline-commands.js";
 import { linkedPartnerIds } from "../timeline/link-group.js";
+import { setDuration } from "../clip-mutations.js";
 
 export type RippleOutcome = { timeline: Timeline } | { refused: string };
 
@@ -196,4 +197,91 @@ export function syncLockedLeftRoom(track: Track, insertFrame: number): { room: n
   const before = track.clips.filter((c) => c.startFrame < insertFrame).map((c) => c.startFrame + c.durationFrames);
   const prevEnd = before.length ? Math.max(...before) : 0;
   return { room: Math.max(0, first - prevEnd), obstacle: prevEnd };
+}
+
+export interface RippleTrimResize { clipId: string; trimStart: number; trimEnd: number; duration: number }
+export interface RippleTrimPlan { durationDelta: number; resizes: RippleTrimResize[]; shifts: ClipShift[]; blockedAtFrame: number | null }
+
+export function planRippleTrim(
+  timeline: Timeline,
+  clipId: string,
+  edge: "left" | "right",
+  deltaFrames: number,
+  propagateToLinked: boolean,
+): RippleTrimPlan | null {
+  if (deltaFrames === 0) return null;
+  const leadLoc = findClip(timeline, clipId);
+  if (!leadLoc) return null;
+  const leadClip = timeline.tracks[leadLoc.trackIndex]!.clips[leadLoc.clipIndex]!;
+  const leadEnd = leadClip.startFrame + leadClip.durationFrames;
+
+  const targets = [clipId, ...(propagateToLinked ? linkedPartnerIds(timeline, clipId) : [])];
+  const targetIds = new Set(targets);
+  const targetClips: Clip[] = [];
+  for (const id of targets) {
+    const loc = findClip(timeline, id);
+    if (loc) targetClips.push(timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!);
+  }
+
+  const deltas = targetClips.map((c) => rippleTrimDurationDelta(c, edge, deltaFrames));
+  const sourceDelta = deltas.length === 0 ? 0 : deltas.reduce((m, d) => (Math.abs(d) < Math.abs(m) ? d : m));
+
+  let durationDelta = sourceDelta;
+  let blockedAtFrame: number | null = null;
+  if (sourceDelta < 0) {
+    const limits: { room: number; obstacle: number }[] = [];
+    for (const track of timeline.tracks) {
+      if (!track.syncLocked || track.clips.some((c) => targetIds.has(c.id))) continue;
+      const r = syncLockedLeftRoom(track, leadEnd);
+      if (r) limits.push(r);
+    }
+    if (limits.length) {
+      const tightest = limits.reduce((a, b) => (b.room < a.room ? b : a));
+      if (sourceDelta < -tightest.room) {
+        durationDelta = -tightest.room;
+        blockedAtFrame = tightest.obstacle;
+      }
+    }
+  }
+  if (durationDelta === 0 && blockedAtFrame === null) return null;
+
+  const resizes: RippleTrimResize[] = targetClips.map((c) => {
+    const f = trimValues(c, edge, edge === "right" ? durationDelta : -durationDelta);
+    return { clipId: c.id, trimStart: f.trimStart, trimEnd: f.trimEnd, duration: Math.max(1, c.durationFrames + durationDelta) };
+  });
+
+  const shifts: ClipShift[] = [];
+  for (const track of timeline.tracks) {
+    const targetClip = track.clips.find((c) => targetIds.has(c.id));
+    const targetEnd = targetClip ? targetClip.startFrame + targetClip.durationFrames : null;
+    if (targetEnd === null && !track.syncLocked) continue;
+    shifts.push(...computeRipplePush(track.clips, targetEnd ?? leadEnd, durationDelta, targetIds));
+  }
+  return { durationDelta, resizes, shifts, blockedAtFrame };
+}
+
+export function applyRippleTrim(timeline: Timeline, plan: RippleTrimPlan): Timeline {
+  const byId = new Map(plan.resizes.map((r) => [r.clipId, r]));
+  const resized: Timeline = {
+    ...timeline,
+    tracks: timeline.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) => {
+        const r = byId.get(c.id);
+        return r ? setDuration({ ...c, trimStartFrame: r.trimStart, trimEndFrame: r.trimEnd }, r.duration) : c;
+      }),
+    })),
+  };
+  return applyShifts(resized, plan.shifts);
+}
+
+export function rippleTrimClip(
+  timeline: Timeline,
+  clipId: string,
+  edge: "left" | "right",
+  deltaFrames: number,
+  propagateToLinked: boolean,
+): Timeline {
+  const plan = planRippleTrim(timeline, clipId, edge, deltaFrames, propagateToLinked);
+  return plan ? applyRippleTrim(timeline, plan) : timeline;
 }

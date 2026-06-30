@@ -206,3 +206,35 @@ describe("syncLockedLeftRoom", () => {
     expect(syncLockedLeftRoom(t, 50)).toBeNull();
   });
 });
+
+import { planRippleTrim, rippleTrimClip } from "./ripple-commands.js";
+
+describe("planRippleTrim + rippleTrimClip", () => {
+  it("right-trim shrinks the clip and ripples later clips left", () => {
+    // a [0,30) trimStart 0 trimEnd 10 (10 frames of tail source), b [30,10)
+    const tl = timeline([track("t", [clip("a", 0, 30, { trimEndFrame: 10 }), clip("b", 30, 10)])]);
+    const next = rippleTrimClip(tl, "a", "right", -10, false); // shrink right by 10
+    const a = next.tracks[0]!.clips.find((c) => c.id === "a")!;
+    const b = next.tracks[0]!.clips.find((c) => c.id === "b")!;
+    expect(a.durationFrames).toBe(20); // 30 - 10
+    expect(b.startFrame).toBe(20);     // rippled left by 10
+  });
+
+  it("clamps a shrink to a sync-locked follower's available room", () => {
+    // a's right edge (insertFrame) is 30; follower has x [0,10) and y [40,10).
+    const tl = timeline([
+      track("v", [clip("a", 0, 30, { trimEndFrame: 30 })]),
+      track("audio", [clip("x", 0, 10), clip("y", 40, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    const plan = planRippleTrim(tl, "a", "right", -100, false); // try to shrink by 100
+    expect(plan).not.toBeNull();
+    // follower room at insertFrame 30: first clip >= 30 is y(40), prevEnd = x end 10 -> room 30
+    expect(plan!.durationDelta).toBe(-30); // clamped to -room
+    expect(plan!.blockedAtFrame).toBe(10);
+  });
+
+  it("returns the timeline unchanged for a zero delta", () => {
+    const tl = timeline([track("t", [clip("a", 0, 30)])]);
+    expect(rippleTrimClip(tl, "a", "right", 0, false)).toBe(tl);
+  });
+});
