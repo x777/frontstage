@@ -1,14 +1,10 @@
 import type { Timeline, Track } from "../timeline.js";
-import type { ClipShift } from "../timeline/ripple-types.js";
-import type { FrameRange } from "../timeline/ripple-types.js";
-import type { GapSelection } from "../timeline/ripple-types.js";
-import { validateShifts } from "../timeline/ripple-engine.js";
-import { computeRippleShifts, computeRippleShiftsForRanges, applyShifts } from "../timeline/ripple-engine.js";
+import { findClip } from "../timeline.js";
+import type { ClipShift, FrameRange, GapSelection } from "../timeline/ripple-types.js";
+import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges } from "../timeline/ripple-engine.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
 import { replaceTrackClips } from "./timeline-commands.js";
-import { mergeRanges } from "../timeline/ripple-engine.js";
 import { linkedPartnerIds } from "../timeline/link-group.js";
-import { findClip } from "../timeline.js";
 
 export type RippleOutcome = { timeline: Timeline } | { refused: string };
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
-import { clearRegion, validateShiftsForTrack } from "./ripple-commands.js";
+import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap } from "./ripple-commands.js";
 
 export function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {
   return {
@@ -42,8 +42,6 @@ describe("validateShiftsForTrack", () => {
   });
 });
 
-import { rippleDeleteSelectedClips } from "./ripple-commands.js";
-
 describe("rippleDeleteSelectedClips", () => {
   it("removes a selected clip and ripples later clips left on its track", () => {
     const tl = timeline([track("t", [clip("a", 0, 40), clip("b", 40, 10)])]);
@@ -79,8 +77,6 @@ describe("rippleDeleteSelectedClips", () => {
     expect((rippleDeleteSelectedClips(tl, new Set()) as { timeline: Timeline }).timeline).toBe(tl);
   });
 });
-
-import { rippleDeleteRangesOnTrack, rippleDeleteRanges } from "./ripple-commands.js";
 
 describe("rippleDeleteRangesOnTrack", () => {
   it("clears a mid-clip range and ripples the tail left, returning a report", () => {
@@ -145,8 +141,6 @@ describe("rippleDeleteRanges", () => {
     expect(rippleDeleteRanges(tl, "missing", [{ start: 0, end: 10 }]).kind).toBe("refused");
   });
 });
-
-import { rippleDeleteGap } from "./ripple-commands.js";
 
 describe("rippleDeleteGap", () => {
   it("closes an empty gap on its track", () => {
