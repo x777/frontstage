@@ -3,6 +3,8 @@ import { type Crop, type Transform, lerpCrop } from "./transform.js";
 import { linearFromDb } from "./volume-scale.js";
 import type { ClipType } from "./clip-type.js";
 import type { TextStyle } from "./text-style.js";
+import type { Effect } from "./color/effect.js";
+import type { BlendMode } from "./color/blend-mode.js";
 
 export interface Clip {
   id: string;
@@ -26,6 +28,8 @@ export interface Clip {
   captionGroupId?: string;
   textContent?: string;
   textStyle?: TextStyle;
+  effects?: Effect[];
+  blendMode?: BlendMode;
   opacityTrack?: KeyframeTrack<number>;
   positionTrack?: KeyframeTrack<AnimPair>;
   scaleTrack?: KeyframeTrack<AnimPair>;

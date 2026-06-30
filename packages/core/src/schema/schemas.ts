@@ -147,6 +147,25 @@ export const GenerationLogSchema = z.object({
   entries: z.array(GenerationLogEntrySchema).default([]),
 });
 
+export const BlendModeSchema = z.enum([
+  "normal", "darken", "multiply", "colorBurn", "lighten", "screen", "colorDodge",
+  "overlay", "softLight", "hardLight", "difference", "exclusion",
+  "hue", "saturation", "color", "luminosity",
+]);
+
+export const EffectParamSchema = z.object({
+  value: z.number().optional(),
+  string: z.string().optional(),
+  track: KeyframeNumberTrackSchema.optional(),
+});
+
+export const EffectSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  enabled: z.boolean(),
+  params: z.record(EffectParamSchema),
+});
+
 export const ClipSchema = z.object({
   id: z.string().default(uuid),
   mediaRef: z.string(),
@@ -169,6 +188,8 @@ export const ClipSchema = z.object({
   captionGroupId: z.string().optional(),
   textContent: z.string().optional(),
   textStyle: TextStyleSchema.optional(),
+  effects: z.array(EffectSchema).optional(),
+  blendMode: BlendModeSchema.optional(),
   opacityTrack: KeyframeNumberTrackSchema.optional(),
   positionTrack: KeyframeAnimPairTrackSchema.optional(),
   scaleTrack: KeyframeAnimPairTrackSchema.optional(),
