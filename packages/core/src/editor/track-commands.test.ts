@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
-import { timelineTrackDisplayLabel, toggleTrackMuteCommand, toggleTrackHiddenCommand, toggleTrackSyncLockCommand, setTrackHeightCommand, pruneEmptyTracks, insertTrackCommand } from "./track-commands.js";
+import { timelineTrackDisplayLabel, toggleTrackMuteCommand, toggleTrackHiddenCommand, toggleTrackSyncLockCommand, setTrackHeightCommand, pruneEmptyTracks, insertTrackCommand, reorderTrackLive, reorderTrackCommand } from "./track-commands.js";
 
 function track(id: string, type: Track["type"], clips: Clip[] = [], over: Partial<Track> = {}): Track {
   return { id, type, muted: false, hidden: false, syncLocked: false, clips, displayHeight: 120, ...over };
@@ -86,5 +86,35 @@ describe("insertTrackCommand", () => {
     const tl = timeline([track("v", "video"), track("a", "audio")]);
     const next = insertTrackCommand(5, "video", () => "NEW").apply(tl);
     expect(next.tracks.map((t) => t.id)).toEqual(["v", "NEW", "a"]); // clamped to firstAudioIndex = 1
+  });
+});
+
+describe("reorderTrackLive", () => {
+  // [v0, v1, v2, a0] — firstAudioIndex = 3
+  const base = () => timeline([track("v0", "video"), track("v1", "video"), track("v2", "video"), track("a0", "audio")]);
+  it("moves a visual track within the visual zone", () => {
+    const next = reorderTrackLive(base(), "v0", 2);
+    expect(next.tracks.map((t) => t.id)).toEqual(["v1", "v2", "v0", "a0"]);
+  });
+  it("clamps a visual track to above the audio divider", () => {
+    const next = reorderTrackLive(base(), "v0", 9); // upper = firstAudioIndex-1 = 2
+    expect(next.tracks.map((t) => t.id)).toEqual(["v1", "v2", "v0", "a0"]);
+  });
+  it("clamps an audio track to at/after the divider (cannot cross into video)", () => {
+    const tl = base();
+    const next = reorderTrackLive(tl, "a0", 0); // lower = firstAudioIndex = 3 -> dest = 3 = from -> no move
+    expect(next).toBe(tl); // unchanged: audio cannot cross the divider
+  });
+  it("returns the same ref for an unknown id", () => {
+    const tl = base();
+    expect(reorderTrackLive(tl, "missing", 1)).toBe(tl);
+  });
+});
+
+describe("reorderTrackCommand", () => {
+  it("applies the same move as one undo step", () => {
+    const tl = timeline([track("v0", "video"), track("v1", "video"), track("a0", "audio")]);
+    const next = reorderTrackCommand("v0", 1).apply(tl);
+    expect(next.tracks.map((t) => t.id)).toEqual(["v1", "v0", "a0"]);
   });
 });

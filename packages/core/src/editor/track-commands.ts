@@ -78,3 +78,27 @@ export function insertTrackCommand(at: number, type: ClipType, newId: () => stri
     },
   };
 }
+
+export function reorderTrackLive(timeline: Timeline, id: string, targetIndex: number): Timeline {
+  const from = timeline.tracks.findIndex((t) => t.id === id);
+  if (from === -1) return timeline;
+  const z = computeZones(timeline);
+  const isAudio = timeline.tracks[from]!.type === "audio";
+  const lower = isAudio ? z.firstAudioIndex : 0;
+  const upper = isAudio ? z.trackCount - 1 : z.firstAudioIndex - 1;
+  const dest = Math.max(lower, Math.min(upper, targetIndex));
+  if (dest === from) return timeline;
+  const tracks = [...timeline.tracks];
+  const [track] = tracks.splice(from, 1);
+  tracks.splice(dest, 0, track!);
+  return { ...timeline, tracks };
+}
+
+export function reorderTrackCommand(id: string, targetIndex: number): Command {
+  return {
+    label: "Reorder Track",
+    apply(timeline: Timeline): Timeline {
+      return reorderTrackLive(timeline, id, targetIndex);
+    },
+  };
+}
