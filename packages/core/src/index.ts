@@ -49,3 +49,4 @@ export * from "./color/effect.js";
 export * from "./color/blend-mode.js";
 export * from "./color/effect-registry.js";
 export * from "./color/grade-curve.js";
+export * from "./color/color-math.js";
