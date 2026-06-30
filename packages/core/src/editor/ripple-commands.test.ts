@@ -79,3 +79,69 @@ describe("rippleDeleteSelectedClips", () => {
     expect((rippleDeleteSelectedClips(tl, new Set()) as { timeline: Timeline }).timeline).toBe(tl);
   });
 });
+
+import { rippleDeleteRangesOnTrack, rippleDeleteRanges } from "./ripple-commands.js";
+
+describe("rippleDeleteRangesOnTrack", () => {
+  it("clears a mid-clip range and ripples the tail left, returning a report", () => {
+    const tl = timeline([track("t", [clip("a", 0, 100)])]); // remove [40,60)
+    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 40, end: 60 }]);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.report.removedFrames).toBe(20);
+    expect(out.report.anchorTrackIndex).toBe(0);
+    // a split into [0,40) + a tail that shifted left by 20 to start at 40
+    const fragments = out.report.resultingFragments;
+    expect(fragments.length).toBe(2);
+    expect(fragments[0]!.startFrame).toBe(0);
+    expect(fragments[1]!.startFrame).toBe(40);
+  });
+
+  it("follows a linked partner onto its track and clears+shifts it too", () => {
+    const tl = timeline([
+      track("v", [clip("a", 0, 100, { linkGroupId: "g" })]),
+      track("a", [clip("b", 0, 100, { linkGroupId: "g" })], { type: "audio" }),
+    ]);
+    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 40, end: 60 }]);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.report.clearedTracks).toBe(2); // anchor + linked audio
+    // both tracks have a [0,40) head and a tail starting at 40
+    expect(out.timeline.tracks[1]!.clips.map((c) => c.startFrame).sort((x, y) => x - y)).toEqual([0, 40]);
+  });
+
+  it("refuses when a non-ignored sync-locked track would collide", () => {
+    const tl = timeline([
+      track("v", [clip("a", 0, 100)]),
+      track("a", [clip("x", 0, 50), clip("y", 70, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    // clearing [40,60) on v shifts y (70) left 20 -> 50, which touches x end (50) — adjacent is OK,
+    // so use a bigger removal to force overlap:
+    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 30, end: 70 }]); // 40 removed -> y 70->30 overlaps x [0,50)
+    expect(out.kind).toBe("refused");
+  });
+
+  it("ignoreSyncLockTrackIndices skips that track entirely", () => {
+    const tl = timeline([
+      track("v", [clip("a", 0, 100)]),
+      track("a", [clip("x", 0, 50), clip("y", 70, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 30, end: 70 }], new Set([1]));
+    expect(out.kind).toBe("ok"); // track 1 ignored -> no refusal, and it is not shifted
+    if (out.kind !== "ok") return;
+    expect(out.timeline.tracks[1]!.clips.map((c) => c.startFrame)).toEqual([0, 70]); // unchanged
+  });
+});
+
+describe("rippleDeleteRanges", () => {
+  it("resolves the anchor clip's track", () => {
+    const tl = timeline([track("t1", []), track("t2", [clip("a", 0, 100)])]);
+    const out = rippleDeleteRanges(tl, "a", [{ start: 40, end: 60 }]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") expect(out.report.anchorTrackIndex).toBe(1);
+  });
+  it("refuses for an unknown anchor clip", () => {
+    const tl = timeline([track("t", [clip("a", 0, 100)])]);
+    expect(rippleDeleteRanges(tl, "missing", [{ start: 0, end: 10 }]).kind).toBe("refused");
+  });
+});
