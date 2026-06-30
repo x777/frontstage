@@ -285,3 +285,36 @@ export function rippleTrimClip(
   const plan = planRippleTrim(timeline, clipId, edge, deltaFrames, propagateToLinked);
   return plan ? applyRippleTrim(timeline, plan) : timeline;
 }
+
+import type { MediaManifestEntry } from "../media.js";
+import { addClipCommand } from "./timeline-commands.js";
+
+function entryDurationFrames(entry: MediaManifestEntry, fps: number): number {
+  return Math.max(1, Math.round(entry.duration * fps));
+}
+
+export function rippleInsertClips(
+  timeline: Timeline,
+  entries: MediaManifestEntry[],
+  trackIndex: number,
+  atFrame: number,
+  fps: number,
+  newId: () => string = () => crypto.randomUUID(),
+): { timeline: Timeline } {
+  if (trackIndex < 0 || trackIndex >= timeline.tracks.length || entries.length === 0) return { timeline };
+  const totalPush = entries.reduce((s, e) => s + entryDurationFrames(e, fps), 0);
+
+  const shifts: ClipShift[] = [];
+  for (let ti = 0; ti < timeline.tracks.length; ti++) {
+    const t = timeline.tracks[ti]!;
+    if (ti === trackIndex || t.syncLocked) shifts.push(...computeRipplePush(t.clips, atFrame, totalPush));
+  }
+  let next = applyShifts(timeline, shifts);
+
+  let cursor = atFrame;
+  for (const e of entries) {
+    next = addClipCommand(e, { kind: "existing", index: trackIndex }, cursor, fps, undefined, newId).apply(next);
+    cursor += entryDurationFrames(e, fps);
+  }
+  return { timeline: next };
+}

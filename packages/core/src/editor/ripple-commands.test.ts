@@ -207,7 +207,38 @@ describe("syncLockedLeftRoom", () => {
   });
 });
 
-import { planRippleTrim, rippleTrimClip } from "./ripple-commands.js";
+import { planRippleTrim, rippleTrimClip, rippleInsertClips } from "./ripple-commands.js";
+import type { MediaManifestEntry } from "../media.js";
+
+function entry(id: string, durationSec: number): MediaManifestEntry {
+  return { id, name: id, type: "video", source: { kind: "project", relativePath: `media/${id}.mp4` }, duration: durationSec };
+}
+
+describe("rippleInsertClips (assets)", () => {
+  it("pushes the target track right and drops the new clip into the gap", () => {
+    // existing clip at frame 0, dur 30; insert a 30-frame (1s @30fps) clip at frame 0
+    const tl = timeline([track("t", [clip("old", 0, 30)])]);
+    const out = rippleInsertClips(tl, [entry("new", 1)], 0, 0, 30, (() => { let i = 0; return () => `id${i++}`; })());
+    const clips = out.timeline.tracks[0]!.clips.slice().sort((a, b) => a.startFrame - b.startFrame);
+    // old pushed from 0 -> 30; new clip occupies [0,30)
+    expect(clips.find((c) => c.id === "old")!.startFrame).toBe(30);
+    expect(clips.some((c) => c.startFrame === 0 && c.mediaType === "video")).toBe(true);
+  });
+
+  it("pushes a sync-locked track too", () => {
+    const tl = timeline([
+      track("v", [clip("old", 0, 30)]),
+      track("audio", [clip("x", 0, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    const out = rippleInsertClips(tl, [entry("new", 1)], 0, 0, 30, (() => { let i = 0; return () => `id${i++}`; })());
+    expect(out.timeline.tracks[1]!.clips.find((c) => c.id === "x")!.startFrame).toBe(30); // synced push
+  });
+
+  it("no-op for an out-of-range track index", () => {
+    const tl = timeline([track("t", [clip("a", 0, 10)])]);
+    expect(rippleInsertClips(tl, [entry("new", 1)], 9, 0, 30).timeline).toBe(tl);
+  });
+});
 
 describe("planRippleTrim + rippleTrimClip", () => {
   it("right-trim shrinks the clip and ripples later clips left", () => {
