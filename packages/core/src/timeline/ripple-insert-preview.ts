@@ -38,7 +38,8 @@ export function planRippleInsertPreview(timeline: Timeline, plan: DropPlan, atFr
     if (target.kind === "new") {
       newTrackGapLengthsByTarget.set(targetKey(target), (newTrackGapLengthsByTarget.get(targetKey(target)) ?? 0) + pushAmount);
     }
-    for (const trackIndex of affectedTrackIndexes(target, visualTarget)) {
+    const indexes = affectedTrackIndexes(target, visualTarget);
+    for (const trackIndex of indexes) {
       const clips = timeline.tracks[trackIndex]!.clips;
       const startById = new Map(clips.map((c) => [c.id, c.startFrame]));
       for (const shift of computeRipplePush(clips, atFrame, pushAmount)) {
@@ -51,6 +52,7 @@ export function planRippleInsertPreview(timeline: Timeline, plan: DropPlan, atFr
   };
 
   addPush(plan.visualTarget, null, plan.visualDurationFrames);
+  // plan.audioTarget is already post-visual-insert-shifted by resolveDropPlan; currentTrackIndex's -1 recovers the current-timeline index.
   addPush(plan.audioTarget, plan.visualTarget, plan.audioOnlyDurationFrames);
 
   if (gapLengthsByTrackIndex.size === 0 && newTrackGapLengthsByTarget.size === 0 && shiftDeltasByClipId.size === 0) return null;

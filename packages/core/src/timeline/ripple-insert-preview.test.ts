@@ -52,4 +52,24 @@ describe("planRippleInsertPreview", () => {
     const plan: DropPlan = { visualTarget: null, audioTarget: null, visualDurationFrames: 0, audioOnlyDurationFrames: 0 };
     expect(planRippleInsertPreview(tl, plan, 0)).toBeNull();
   });
+
+  it("maps a post-visual-insert audio target back to the current track and pushes it", () => {
+    // timeline: video V0 (a@0,60), audio A1 (x@40,10). firstAudioIndex=1.
+    const tl = timeline([
+      track("v", [clip("a", 0, 60)]),
+      track("audio", [clip("x", 40, 10)], { type: "audio" }),
+    ]);
+    // visual inserts a NEW track at index 0; audioTarget is ALREADY shifted to existing index 2 (post-insert space).
+    const plan: DropPlan = {
+      visualTarget: { kind: "new", index: 0 },
+      audioTarget: { kind: "existing", index: 2 },
+      visualDurationFrames: 20,
+      audioOnlyDurationFrames: 15,
+    };
+    const out = planRippleInsertPreview(tl, plan, 30)!;
+    expect(out.newTrackGapRangesByTarget.get("new:0")).toEqual({ start: 30, end: 50 }); // visual new-track gap
+    // currentTrackIndex maps existing:2 -> current track 1; x@40 (>=30) pushed by 15
+    expect(out.shiftDeltasByClipId.get("x")).toBe(15);
+    expect(out.gapRangesByTrackIndex.get(1)).toEqual({ start: 30, end: 45 });
+  });
 });
