@@ -169,7 +169,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
     let scrubbing = false;
 
     // Marquee drag state
-    type MarqueeState = { originX: number; originY: number; base: ReadonlySet<string> };
+    type MarqueeState = { originX: number; originY: number; base: ReadonlySet<string>; moved: boolean };
     let marquee: MarqueeState | null = null;
 
     // Range drag state (shift+ruler)
@@ -304,7 +304,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       } else {
         // Empty area — begin marquee
         const base: ReadonlySet<string> = e.shiftKey ? new Set(snap.selection) : new Set<string>();
-        marquee = { originX: x, originY: y, base };
+        marquee = { originX: x, originY: y, base, moved: false };
         cv.setPointerCapture(e.pointerId);
       }
     }
@@ -328,6 +328,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       }
 
       if (marquee) {
+        marquee.moved = true;
         const coords = getGeomAndCoords(e);
         if (!coords) return;
         const { geom, x, y } = coords;
@@ -480,6 +481,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       }
 
       if (marquee) {
+        if (!marquee.moved) store.select([]);
         marquee = null;
         marqueeRectRef.current = null;
         const cv = canvasRef.current;
