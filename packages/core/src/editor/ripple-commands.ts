@@ -1,3 +1,4 @@
+import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { ClipShift, FrameRange, GapSelection } from "../timeline/ripple-types.js";
@@ -169,4 +170,30 @@ export function rippleDeleteGap(timeline: Timeline, gap: GapSelection): RippleGa
     }
   }
   return { timeline: applyShifts(timeline, shifts) };
+}
+
+export function trimValues(clip: Clip, edge: "left" | "right", delta: number): { trimStart: number; trimEnd: number } {
+  const sourceDelta = Math.round(delta * clip.speed);
+  const unbounded = clip.mediaType === "image" || clip.mediaType === "text";
+  if (edge === "left") {
+    const newStart = clip.trimStartFrame + sourceDelta;
+    return { trimStart: unbounded ? newStart : Math.max(0, newStart), trimEnd: clip.trimEndFrame };
+  }
+  const newEnd = clip.trimEndFrame - sourceDelta;
+  return { trimStart: clip.trimStartFrame, trimEnd: unbounded ? newEnd : Math.max(0, newEnd) };
+}
+
+export function rippleTrimDurationDelta(clip: Clip, edge: "left" | "right", delta: number): number {
+  const f = trimValues(clip, edge, delta);
+  const sourceShift = (f.trimStart - clip.trimStartFrame) + (f.trimEnd - clip.trimEndFrame);
+  return -Math.round(sourceShift / clip.speed);
+}
+
+export function syncLockedLeftRoom(track: Track, insertFrame: number): { room: number; obstacle: number } | null {
+  const after = track.clips.filter((c) => c.startFrame >= insertFrame).map((c) => c.startFrame);
+  if (after.length === 0) return null;
+  const first = Math.min(...after);
+  const before = track.clips.filter((c) => c.startFrame < insertFrame).map((c) => c.startFrame + c.durationFrames);
+  const prevEnd = before.length ? Math.max(...before) : 0;
+  return { room: Math.max(0, first - prevEnd), obstacle: prevEnd };
 }

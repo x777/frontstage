@@ -167,3 +167,42 @@ describe("rippleDeleteGap", () => {
     expect("refused" in rippleDeleteGap(tl, { trackIndex: 0, range: { start: 10, end: 30 } })).toBe(true);
   });
 });
+
+import { trimValues, rippleTrimDurationDelta, syncLockedLeftRoom } from "./ripple-commands.js";
+
+describe("trimValues", () => {
+  it("right-edge growth consumes tail source, clamped at 0 for sourced clips", () => {
+    const c = clip("a", 0, 30, { trimStartFrame: 0, trimEndFrame: 5, speed: 1 });
+    // grow right by +5 -> newEnd = 5 - 5 = 0
+    expect(trimValues(c, "right", 5)).toEqual({ trimStart: 0, trimEnd: 0 });
+    // grow right by +10 -> newEnd = 5 - 10 = -5 -> clamp 0 (no more source)
+    expect(trimValues(c, "right", 10)).toEqual({ trimStart: 0, trimEnd: 0 });
+  });
+  it("left-edge trim advances source start; image is unbounded", () => {
+    const v = clip("v", 10, 30, { trimStartFrame: 0, mediaType: "video" });
+    expect(trimValues(v, "left", 5).trimStart).toBe(5); // 0 + round(5*1)
+    const v2 = clip("v", 10, 30, { trimStartFrame: 0, mediaType: "video" });
+    expect(trimValues(v2, "left", -3).trimStart).toBe(0); // -3 clamped to 0
+    const img = clip("i", 10, 30, { trimStartFrame: 0, mediaType: "image" });
+    expect(trimValues(img, "left", -3).trimStart).toBe(-3); // unbounded
+  });
+});
+
+describe("rippleTrimDurationDelta", () => {
+  it("returns the realised timeline-duration delta after the source clamp", () => {
+    const c = clip("a", 0, 30, { trimStartFrame: 0, trimEndFrame: 5, speed: 1 });
+    expect(rippleTrimDurationDelta(c, "right", 5)).toBe(5);  // full +5 available
+    expect(rippleTrimDurationDelta(c, "right", 10)).toBe(5); // clamped to the 5 frames of tail source
+  });
+});
+
+describe("syncLockedLeftRoom", () => {
+  it("room is the gap between the previous clip end and the first clip at/after insertFrame", () => {
+    const t = track("t", [clip("a", 0, 20), clip("b", 50, 10)]);
+    expect(syncLockedLeftRoom(t, 50)).toEqual({ room: 30, obstacle: 20 }); // b at 50, prev end 20
+  });
+  it("returns null when no clip is at/after insertFrame", () => {
+    const t = track("t", [clip("a", 0, 20)]);
+    expect(syncLockedLeftRoom(t, 50)).toBeNull();
+  });
+});
