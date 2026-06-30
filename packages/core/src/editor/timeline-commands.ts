@@ -7,6 +7,7 @@ import type { KeyframeTrack, Keyframe } from "../keyframe.js";
 import { lerpCrop } from "../transform.js";
 import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
+import { availableAudioTrackIndex } from "../timeline/zones.js";
 import type { Command } from "./editor-store.js";
 import type { MediaManifestEntry } from "../media.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
@@ -332,4 +333,19 @@ export function addClipCommand(
       }
     },
   };
+}
+
+// --- resolveOrCreateAudioTrack ---
+
+// First audio track free over [startFrame, startFrame+duration), else a fresh audio track appended at the end.
+export function resolveOrCreateAudioTrack(
+  timeline: Timeline,
+  startFrame: number,
+  duration: number,
+  newId: () => string,
+): { timeline: Timeline; trackIndex: number } {
+  const existing = availableAudioTrackIndex(timeline, startFrame, duration);
+  if (existing !== null) return { timeline, trackIndex: existing };
+  const audioTrack: Track = { id: newId(), type: "audio", muted: false, hidden: false, syncLocked: false, clips: [] };
+  return { timeline: { ...timeline, tracks: [...timeline.tracks, audioTrack] }, trackIndex: timeline.tracks.length };
 }

@@ -9,6 +9,7 @@ import {
   moveClipCommand,
   trimClipCommand,
   splitClipCommand,
+  resolveOrCreateAudioTrack,
 } from "./timeline-commands.js";
 
 // --- Test fixture helpers ---
@@ -770,5 +771,37 @@ describe("moveClipCommand — overwrites the destination (Tier 0)", () => {
     const clips = moveClipCommand("a", 0, 5).apply(tl).tracks[0]!.clips;
     const v = clips.find((c) => c.id === "v")!;
     expect(v.startFrame).toBeGreaterThanOrEqual(15); // head cleared by a (5..15)
+  });
+});
+
+describe("resolveOrCreateAudioTrack (M8.3)", () => {
+  it("returns an existing free audio track without changing the timeline", () => {
+    const tl = makeTimeline([
+      makeTrack({ id: "v", type: "video", clips: [] }),
+      makeTrack({ id: "a", type: "audio", clips: [] }),
+    ]);
+    const r = resolveOrCreateAudioTrack(tl, 0, 30, () => "NEW");
+    expect(r.trackIndex).toBe(1);
+    expect(r.timeline).toBe(tl); // unchanged
+  });
+
+  it("appends a new audio track at the end when none is free", () => {
+    const busy = makeClip({ id: "x", startFrame: 0, durationFrames: 100 });
+    const tl = makeTimeline([
+      makeTrack({ id: "v", type: "video", clips: [] }),
+      makeTrack({ id: "a", type: "audio", clips: [busy] }),
+    ]);
+    const r = resolveOrCreateAudioTrack(tl, 10, 20, () => "NEW"); // a1 is busy over [10,30)
+    expect(r.trackIndex).toBe(2); // appended at end
+    expect(r.timeline.tracks).toHaveLength(3);
+    expect(r.timeline.tracks[2]).toMatchObject({ id: "NEW", type: "audio", clips: [] });
+    expect(r.timeline).not.toBe(tl);
+  });
+
+  it("creates an audio track when there are no audio tracks at all", () => {
+    const tl = makeTimeline([makeTrack({ id: "v", type: "video", clips: [] })]);
+    const r = resolveOrCreateAudioTrack(tl, 0, 30, () => "NEW");
+    expect(r.trackIndex).toBe(1);
+    expect(r.timeline.tracks[1]).toMatchObject({ id: "NEW", type: "audio" });
   });
 });
