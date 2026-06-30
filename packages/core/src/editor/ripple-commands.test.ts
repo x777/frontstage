@@ -145,3 +145,31 @@ describe("rippleDeleteRanges", () => {
     expect(rippleDeleteRanges(tl, "missing", [{ start: 0, end: 10 }]).kind).toBe("refused");
   });
 });
+
+import { rippleDeleteGap } from "./ripple-commands.js";
+
+describe("rippleDeleteGap", () => {
+  it("closes an empty gap on its track", () => {
+    // clip a [0,10), gap [10,30), clip b [30,10)
+    const tl = timeline([track("t", [clip("a", 0, 10), clip("b", 30, 10)])]);
+    const out = rippleDeleteGap(tl, { trackIndex: 0, range: { start: 10, end: 30 } });
+    expect("timeline" in out).toBe(true);
+    const clips = (out as { timeline: Timeline }).timeline.tracks[0]!.clips;
+    expect(clips.find((c) => c.id === "b")!.startFrame).toBe(10); // b 30 -> 10
+  });
+
+  it("returns { stale: true } when a clip now overlaps the gap", () => {
+    const tl = timeline([track("t", [clip("a", 0, 40)])]); // a covers [0,40)
+    const out = rippleDeleteGap(tl, { trackIndex: 0, range: { start: 10, end: 30 } });
+    expect(out).toEqual({ stale: true });
+  });
+
+  it("refuses when a sync-locked follower would collide", () => {
+    const tl = timeline([
+      track("v", [clip("a", 0, 10), clip("b", 30, 10)]),
+      track("audio", [clip("x", 0, 25), clip("y", 30, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    // closing gap [10,30) shifts y (30) left 20 -> 10, overlapping x [0,25) -> refuse
+    expect("refused" in rippleDeleteGap(tl, { trackIndex: 0, range: { start: 10, end: 30 } })).toBe(true);
+  });
+});

@@ -1,6 +1,7 @@
 import type { Timeline, Track } from "../timeline.js";
 import type { ClipShift } from "../timeline/ripple-types.js";
 import type { FrameRange } from "../timeline/ripple-types.js";
+import type { GapSelection } from "../timeline/ripple-types.js";
 import { validateShifts } from "../timeline/ripple-engine.js";
 import { computeRippleShifts, computeRippleShiftsForRanges, applyShifts } from "../timeline/ripple-engine.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
@@ -150,4 +151,26 @@ export function rippleDeleteRanges(timeline: Timeline, anchorClipId: string, ran
   const loc = findClip(timeline, anchorClipId);
   if (!loc) return { kind: "refused", reason: `unknown clip: ${anchorClipId}` };
   return rippleDeleteRangesOnTrack(timeline, loc.trackIndex, ranges);
+}
+
+export function rippleDeleteGap(timeline: Timeline, gap: GapSelection): RippleGapOutcome {
+  const gapTrack = timeline.tracks[gap.trackIndex];
+  if (!gapTrack || gap.range.end - gap.range.start <= 0) return { timeline };
+
+  const filled = gapTrack.clips.some((c) => c.startFrame < gap.range.end && c.startFrame + c.durationFrames > gap.range.start);
+  if (filled) return { stale: true };
+
+  const shifts: ClipShift[] = [];
+  for (let ti = 0; ti < timeline.tracks.length; ti++) {
+    const t = timeline.tracks[ti]!;
+    if (ti === gap.trackIndex) {
+      shifts.push(...computeRippleShiftsForRanges(t.clips, [gap.range]));
+    } else if (t.syncLocked) {
+      const s = computeRippleShiftsForRanges(t.clips, [gap.range]);
+      const err = validateShiftsForTrack(t, s);
+      if (err) return { refused: err };
+      shifts.push(...s);
+    }
+  }
+  return { timeline: applyShifts(timeline, shifts) };
 }
