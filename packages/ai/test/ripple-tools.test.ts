@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type MediaManifest, type Track, type Timeline } from "@palmier/core";
-import { rippleDeleteRangesTool, type ToolContext } from "../src/index.js";
+import { rippleDeleteRangesTool, insertClipsTool, type ToolContext } from "../src/index.js";
 
 function makeClip(id: string, startFrame: number, durationFrames = 60) {
   return {
@@ -62,5 +62,38 @@ describe("ripple_delete_ranges", () => {
     const c = ctx(tl([track("t", [makeClip("a", 0, 100)])]));
     expect((await rippleDeleteRangesTool().run({ trackIndex: 9, ranges: [{ start: 0, end: 10 }] }, c)).isError).toBe(true);
     expect((await rippleDeleteRangesTool().run({ ranges: [{ start: 0, end: 10 }] }, c)).isError).toBe(true);
+  });
+});
+
+describe("insert_clips", () => {
+  function ctxWithMedia(timeline: Timeline): ToolContext {
+    let n = 0;
+    return {
+      store: new EditorStore(timeline),
+      getManifest: () => ({ version: 2, entries: [{ id: "m1", name: "v.mp4", type: "video", source: { kind: "external", absolutePath: "/v.mp4" }, duration: 2 }], folders: [] }),
+      newId: () => `id-${n++}`,
+    };
+  }
+  test("ripple-inserts a clip, pushing the existing clip right", async () => {
+    const c = ctxWithMedia(tl([track("t", [makeClip("old", 0, 30)])]));
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", durationFrames: 20 }] }, c);
+    expect(res.isError).toBe(false);
+    const clips = c.store.getSnapshot().timeline.tracks[0]!.clips.slice().sort((x, y) => x.startFrame - y.startFrame);
+    expect(clips.find((x) => x.id === "old")!.startFrame).toBe(20); // pushed by the 20-frame insert
+    expect(clips.some((x) => x.startFrame === 0)).toBe(true);
+    expect(c.store.canUndo()).toBe(true);
+  });
+  test("redo reproduces the same clip ids (deterministic)", async () => {
+    const c = ctxWithMedia(tl([track("t", [])]));
+    await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", durationFrames: 20 }] }, c);
+    const idsAfter = c.store.getSnapshot().timeline.tracks[0]!.clips.map((x) => x.id);
+    c.store.undo();
+    c.store.redo();
+    expect(c.store.getSnapshot().timeline.tracks[0]!.clips.map((x) => x.id)).toEqual(idsAfter);
+  });
+  test("rejects unknown media / out-of-range track", async () => {
+    const c = ctxWithMedia(tl([track("t", [])]));
+    expect((await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "nope" }] }, c)).isError).toBe(true);
+    expect((await insertClipsTool().run({ trackIndex: 9, atFrame: 0, clips: [{ mediaId: "m1" }] }, c)).isError).toBe(true);
   });
 });

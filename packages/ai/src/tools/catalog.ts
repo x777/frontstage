@@ -1,5 +1,5 @@
 /**
- * buildCatalog assembles all 15 currently available tools.
+ * buildCatalog assembles all 17 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - import_media        — plan 6.2 (media import pipeline)
@@ -15,7 +15,7 @@ import { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClips
 import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./property-tools.js";
 import { removeTracksTool } from "./track-tools.js";
 import { generateImageTool } from "./generate-image-tool.js";
-import { rippleDeleteRangesTool } from "./ripple-tools.js";
+import { rippleDeleteRangesTool, insertClipsTool } from "./ripple-tools.js";
 
 export function buildCatalog(): ToolSpec[] {
   return [
@@ -33,6 +33,7 @@ export function buildCatalog(): ToolSpec[] {
     splitClipsTool(),
     trimClipsTool(),
     rippleDeleteRangesTool(),
+    insertClipsTool(),
     // Property / keyframe / text tools
     setClipPropertiesTool(),
     setKeyframesTool(),
