@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import {
   DEFAULT_TRACK_HEIGHT,
   RULER_HEIGHT,
-  TIMELINE_HEADER_WIDTH,
   makeGeometry,
   frameAtX,
   xForFrame,
@@ -27,6 +26,7 @@ import {
 } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { TrackHeaders, TRACK_HEADER_WIDTH } from "./TrackHeaders.js";
 import { drawTimeline } from "./draw-timeline.js";
 import type { TimelinePalette, DropIndicator } from "./draw-timeline.js";
 import { hitTest } from "./pointer.js";
@@ -99,7 +99,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       const geom = makeGeometry({
         pixelsPerFrame: view.zoom,
         scrollX: view.scrollX,
-        headerWidth: TIMELINE_HEADER_WIDTH,
+        headerWidth: TRACK_HEADER_WIDTH,
         trackHeights: timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
 
@@ -183,7 +183,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       const geom = makeGeometry({
         pixelsPerFrame: snap.view.zoom,
         scrollX: snap.view.scrollX,
-        headerWidth: TIMELINE_HEADER_WIDTH,
+        headerWidth: TRACK_HEADER_WIDTH,
         trackHeights: snap.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
       return { geom, x, y };
@@ -451,7 +451,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         // zoom, anchor at cursor frame
         const frameUnderCursor = frameAtX(geom, x);
         const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, snap.view.zoom * Math.exp(-e.deltaY * 0.001)));
-        const newScrollX = Math.max(0, frameUnderCursor * newZoom - (x - TIMELINE_HEADER_WIDTH));
+        const newScrollX = Math.max(0, frameUnderCursor * newZoom - (x - TRACK_HEADER_WIDTH));
         store.setZoom(newZoom);
         store.setScroll(newScrollX);
       } else {
@@ -492,7 +492,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
           const geomDrop = makeGeometry({
             pixelsPerFrame: snap2.view.zoom,
             scrollX: snap2.view.scrollX,
-            headerWidth: TIMELINE_HEADER_WIDTH,
+            headerWidth: TRACK_HEADER_WIDTH,
             trackHeights: snap2.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
           });
           const target = dropTargetAt(geomDrop, ly);
@@ -542,6 +542,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         position: "relative",
       }}
     >
+      <TrackHeaders store={store} />
       <canvas
         ref={canvasRef}
         data-testid="timeline-canvas"
