@@ -1,4 +1,6 @@
 export const CORE_VERSION = "0.0.0";
+// Explicit re-export resolves the RGBA ambiguity between text-style and color/blend-mode.
+export type { RGBA } from "./text-style.js";
 export * from "./time.js";
 export * from "./keyframe.js";
 export * from "./transform.js";
