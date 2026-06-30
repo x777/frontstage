@@ -21,9 +21,10 @@ describe("evalCurve", () => {
 describe("evalHueCurve", () => {
   it("neutral 0.5 when empty", () => expect(close(evalHueCurve([], 0.7), 0.5)).toBe(true));
   it("cyclic interpolation wraps across the hue seam", () => {
-    const pts = [{ x: 0, y: 0.2 }, { x: 1, y: 0.8 }];
-    // at x just past 1 it wraps back toward x=0
-    expect(evalHueCurve(pts, 0.0)).toBeGreaterThan(0);
+    // points cover [0.3,0.7]; hue 0.0 falls in the wrap segment (0.7 -> 0.3+1)
+    const pts = [{ x: 0.3, y: 0.2 }, { x: 0.7, y: 0.8 }];
+    // at hue 0.0: t = (1.0 - 0.7) / (1.3 - 0.7) = 0.5 -> 0.8 + (0.2-0.8)*0.5 = 0.5
+    expect(close(evalHueCurve(pts, 0.0), 0.5)).toBe(true);
   });
 });
 

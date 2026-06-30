@@ -26,7 +26,7 @@ export function evalCurve(points: CurvePoint[], x: number): number {
 const HUE_DEFAULTS: CurvePoint[] = Array.from({ length: 6 }, (_, i) => ({ x: i / 6, y: 0.5 }));
 
 export function evalHueCurve(points: CurvePoint[], hue: number): number {
-  const pts = (points.length === 0 ? HUE_DEFAULTS : [...points]).sort((a, b) => a.x - b.x);
+  const pts = (points.length === 0 ? [...HUE_DEFAULTS] : [...points]).sort((a, b) => a.x - b.x);
   const h = ((hue % 1) + 1) % 1;
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i]!;
