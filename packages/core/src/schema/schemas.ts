@@ -183,6 +183,7 @@ export const TrackSchema = z.object({
   muted: z.boolean().default(false),
   hidden: z.boolean().default(false),
   syncLocked: z.boolean().default(true),
+  displayHeight: z.number().optional(),
   clips: z.array(ClipSchema).default([]),
 });
 

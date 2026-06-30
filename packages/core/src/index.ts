@@ -28,6 +28,7 @@ export * from "./editor/commands.js";
 export * from "./editor/timeline-commands.js";
 export * from "./editor/keyframe-commands.js";
 export * from "./editor/link-commands.js";
+export * from "./editor/track-commands.js";
 export * from "./timeline/geometry.js";
 export * from "./timeline/overwrite.js";
 export * from "./timeline/snap.js";

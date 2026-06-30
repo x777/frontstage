@@ -7,6 +7,7 @@ export interface Track {
   muted: boolean;
   hidden: boolean;
   syncLocked: boolean;
+  displayHeight?: number;
   clips: Clip[];
 }
 

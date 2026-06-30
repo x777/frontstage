@@ -2,6 +2,8 @@ import type { Clip } from "../clip.js";
 
 export const RULER_HEIGHT = 24;
 export const DEFAULT_TRACK_HEIGHT = 50;
+export const TRACK_MIN_HEIGHT = 36;
+export const TRACK_MAX_HEIGHT = 240;
 export const TRIM_HANDLE_WIDTH = 4;
 export const INSERT_THRESHOLD = 10;
 export const TIMELINE_HEADER_WIDTH = 0;
