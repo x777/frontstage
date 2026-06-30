@@ -269,3 +269,41 @@ describe("planRippleTrim + rippleTrimClip", () => {
     expect(rippleTrimClip(tl, "a", "right", 0, false)).toBe(tl);
   });
 });
+
+import { rippleInsertClipsSpecs } from "./ripple-commands.js";
+
+describe("rippleInsertClipsSpecs (specs)", () => {
+  const ids = () => { let i = 0; return () => `id${i++}`; };
+
+  it("splits a straddling clip at atFrame, pushes, and places the spec clip in the gap", () => {
+    const tl = timeline([track("t", [clip("a", 0, 100)])]); // straddles atFrame=40
+    const out = rippleInsertClipsSpecs(tl, [{ entry: entry("new", 1), durationFrames: 20 }], 0, 40, 30, ids());
+    const clips = out.timeline.tracks[0]!.clips.slice().sort((a, b) => a.startFrame - b.startFrame);
+    // a split into [0,40); a 20-frame inserted clip at [40,60); the right half rides the push to [60, ...)
+    expect(clips[0]!.startFrame).toBe(0);
+    expect(clips.some((c) => c.startFrame === 40 && c.durationFrames === 20)).toBe(true);
+    expect(clips[clips.length - 1]!.startFrame).toBe(60);
+  });
+
+  it("places a video-with-audio spec as a linked A/V pair on a pinned audio track", () => {
+    const tl = timeline([track("v", [], { type: "video" })]);
+    const out = rippleInsertClipsSpecs(
+      tl,
+      [{ entry: { ...entry("clipx", 1), hasAudio: true }, durationFrames: 30 }],
+      0, 0, 30, ids(),
+    );
+    const all = out.timeline.tracks.flatMap((t) => t.clips);
+    const visual = all.find((c) => c.mediaType === "video")!;
+    const audio = all.find((c) => c.mediaType === "audio")!;
+    expect(visual.linkGroupId).toBe(audio.linkGroupId);
+    expect(audio.sourceClipType).toBe("video");
+    // audio landed on an audio-type track (pinned/created)
+    expect(out.timeline.tracks.find((t) => t.clips.some((c) => c.id === audio.id))!.type).toBe("audio");
+  });
+
+  it("no-op for empty specs or out-of-range track", () => {
+    const tl = timeline([track("t", [clip("a", 0, 10)])]);
+    expect(rippleInsertClipsSpecs(tl, [], 0, 0, 30).timeline).toBe(tl);
+    expect(rippleInsertClipsSpecs(tl, [{ entry: entry("n", 1), durationFrames: 10 }], 9, 0, 30).timeline).toBe(tl);
+  });
+});

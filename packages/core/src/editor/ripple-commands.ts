@@ -4,7 +4,7 @@ import { findClip } from "../timeline.js";
 import type { ClipShift, FrameRange, GapSelection } from "../timeline/ripple-types.js";
 import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges, computeRipplePush } from "../timeline/ripple-engine.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
-import { replaceTrackClips } from "./timeline-commands.js";
+import { replaceTrackClips, clipFromAsset, splitClipCommand } from "./timeline-commands.js";
 import { linkedPartnerIds } from "../timeline/link-group.js";
 import { setDuration } from "../clip-mutations.js";
 
@@ -315,6 +315,105 @@ export function rippleInsertClips(
   for (const e of entries) {
     next = addClipCommand(e, { kind: "existing", index: trackIndex }, cursor, fps, undefined, newId).apply(next);
     cursor += entryDurationFrames(e, fps);
+  }
+  return { timeline: next };
+}
+
+export interface RippleInsertSpec {
+  entry: MediaManifestEntry;
+  durationFrames: number;
+  trimStartFrame?: number;
+  trimEndFrame?: number;
+}
+
+// Overwrite-place a single clip on a track (clears its [start,end) region first).
+function overwritePlaceClip(timeline: Timeline, trackIndex: number, clip: Clip): Timeline {
+  const track = timeline.tracks[trackIndex]!;
+  const end = clip.startFrame + clip.durationFrames;
+  const cleared = applyOverwriteToClips(track.clips, computeOverwrite(track.clips, clip.startFrame, end));
+  return replaceTrackClips(timeline, trackIndex, [...cleared, clip].sort((a, b) => a.startFrame - b.startFrame));
+}
+
+function placeSpec(
+  timeline: Timeline,
+  spec: RippleInsertSpec,
+  trackIndex: number,
+  startFrame: number,
+  linkedAudioTrackIndex: number | null,
+  fps: number,
+  newId: () => string,
+): Timeline {
+  const shouldLink = linkedAudioTrackIndex != null && spec.entry.type === "video" && spec.entry.hasAudio === true;
+  const linkGroupId = shouldLink ? newId() : undefined;
+  const visual: Clip = {
+    ...clipFromAsset(spec.entry, fps, startFrame, newId),
+    durationFrames: spec.durationFrames,
+    trimStartFrame: spec.trimStartFrame ?? 0,
+    trimEndFrame: spec.trimEndFrame ?? 0,
+    linkGroupId,
+  };
+  let next = overwritePlaceClip(timeline, trackIndex, visual);
+  if (linkGroupId != null && linkedAudioTrackIndex != null) {
+    const audio: Clip = {
+      ...clipFromAsset(spec.entry, fps, startFrame, newId),
+      mediaType: "audio",
+      sourceClipType: spec.entry.type,
+      durationFrames: spec.durationFrames,
+      trimStartFrame: spec.trimStartFrame ?? 0,
+      trimEndFrame: spec.trimEndFrame ?? 0,
+      linkGroupId,
+    };
+    next = overwritePlaceClip(next, linkedAudioTrackIndex, audio);
+  }
+  return next;
+}
+
+export function rippleInsertClipsSpecs(
+  timeline: Timeline,
+  specs: RippleInsertSpec[],
+  trackIndex: number,
+  atFrame: number,
+  fps: number,
+  newId: () => string = () => crypto.randomUUID(),
+): { timeline: Timeline } {
+  if (trackIndex < 0 || trackIndex >= timeline.tracks.length || specs.length === 0) return { timeline };
+  const totalPush = specs.reduce((s, sp) => s + sp.durationFrames, 0);
+
+  let next = timeline;
+  // Pin the linked-audio destination before pushing so it ripples too.
+  const targetIsVideo = next.tracks[trackIndex]!.type === "video";
+  const needsLinkedAudio = targetIsVideo && specs.some((sp) => sp.entry.type === "video" && sp.entry.hasAudio === true);
+  let linkedAudioTrackIndex: number | null = null;
+  if (needsLinkedAudio) {
+    const existing = next.tracks.findIndex((t) => t.type === "audio");
+    if (existing !== -1) {
+      linkedAudioTrackIndex = existing;
+    } else {
+      const audioTrack: Track = { id: newId(), type: "audio", muted: false, hidden: false, syncLocked: false, clips: [] };
+      next = { ...next, tracks: [...next.tracks, audioTrack] };
+      linkedAudioTrackIndex = next.tracks.length - 1;
+    }
+  }
+
+  const pushTracks: number[] = [];
+  for (let ti = 0; ti < next.tracks.length; ti++) {
+    if (ti === trackIndex || ti === linkedAudioTrackIndex || next.tracks[ti]!.syncLocked) pushTracks.push(ti);
+  }
+
+  // Split any clip straddling atFrame on each push-track so its right half rides the ripple.
+  for (const ti of pushTracks) {
+    const straddler = next.tracks[ti]!.clips.find((c) => c.startFrame < atFrame && atFrame < c.startFrame + c.durationFrames);
+    if (straddler) next = splitClipCommand(straddler.id, atFrame, undefined, newId).apply(next);
+  }
+
+  const shifts: ClipShift[] = [];
+  for (const ti of pushTracks) shifts.push(...computeRipplePush(next.tracks[ti]!.clips, atFrame, totalPush));
+  next = applyShifts(next, shifts);
+
+  let cursor = atFrame;
+  for (const sp of specs) {
+    next = placeSpec(next, sp, trackIndex, cursor, linkedAudioTrackIndex, fps, newId);
+    cursor += sp.durationFrames;
   }
   return { timeline: next };
 }
