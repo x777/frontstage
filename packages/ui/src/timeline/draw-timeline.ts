@@ -7,7 +7,7 @@ import {
   trackTopY,
   xForFrame,
 } from "@palmier/core";
-import type { TimelineGeometry } from "@palmier/core";
+import type { TimelineGeometry, FrameRange } from "@palmier/core";
 
 export interface TimelinePalette {
   bgBase: string;
@@ -96,6 +96,10 @@ export type DropIndicator =
 export interface TimelineOverlays {
   marquee?: { x: number; y: number; width: number; height: number };
   rangeBand?: { startX: number; endX: number };
+  ghostInsert?: {
+    gapRangesByTrackIndex: Map<number, FrameRange>;
+    shiftDeltasByClipId: Map<string, number>;
+  };
 }
 
 /**
@@ -323,6 +327,46 @@ export function drawTimeline(
     ctx.fillStyle = palette.accentTimecode;
     ctx.fillRect(bandLeft, RULER_HEIGHT, 1, height - RULER_HEIGHT);
     ctx.fillRect(bandRight, RULER_HEIGHT, 1, height - RULER_HEIGHT);
+    ctx.restore();
+  }
+
+  // ── Ghost-insert preview (ripple mode drag) ───────────────────────────────────
+  if (overlays?.ghostInsert) {
+    const { gapRangesByTrackIndex, shiftDeltasByClipId } = overlays.ghostInsert;
+    ctx.save();
+
+    // Draw gap regions on affected tracks
+    for (const [ti, range] of gapRangesByTrackIndex) {
+      if (ti < 0 || ti >= tracks.length) continue;
+      const ty = trackTopY(geom, ti);
+      const th = trackHeightAt(geom, ti);
+      const x1 = xForFrame(geom, range.start);
+      const x2 = xForFrame(geom, range.end);
+      const gapW = x2 - x1;
+      if (gapW <= 0) continue;
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = palette.accentPrimary;
+      ctx.fillRect(x1, ty, gapW, th);
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = palette.accentPrimary;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(x1 + 0.5, ty + 0.5, gapW - 1, th - 1);
+    }
+
+    // Draw shifted clips as faint outlines at their new positions
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = palette.accentPrimary;
+    for (let ti = 0; ti < tracks.length; ti++) {
+      for (const clip of tracks[ti]!.clips) {
+        const delta = shiftDeltasByClipId.get(clip.id);
+        if (!delta) continue;
+        const orig = clipRect(geom, clip, ti);
+        ctx.strokeRect(orig.x + delta * geom.pixelsPerFrame + 0.5, orig.y + 0.5, orig.width - 1, orig.height - 1);
+      }
+    }
     ctx.restore();
   }
 

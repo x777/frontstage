@@ -12,7 +12,10 @@ import {
   frameAtX,
   DEFAULT_TRACK_HEIGHT,
   TIMELINE_HEADER_WIDTH,
+  resolveDropPlan,
+  rippleInsertClipsSpecs,
 } from "@palmier/core";
+import type { RippleInsertSpec } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
 import { theme } from "../theme/theme.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
@@ -227,7 +230,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
     let listenersAttached = false;
 
     const onPointerMove = (e: PointerEvent) => {
-      dragController.update(e.clientX, e.clientY);
+      dragController.update(e.clientX, e.clientY, e.metaKey || e.ctrlKey);
     };
 
     const onPointerUp = (e: PointerEvent) => {
@@ -248,7 +251,38 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             });
             const target = dropTargetAt(geom, ly);
             const dropFrame = frameAtX(geom, lx);
-            store.dispatch(addClipCommand(result.entry, target, dropFrame, storeSnap.timeline.fps));
+            const isRipple = result.ripple || e.metaKey || e.ctrlKey;
+            if (isRipple) {
+              const { entry } = result;
+              const fps = storeSnap.timeline.fps;
+              const plan = resolveDropPlan(
+                storeSnap.timeline,
+                target,
+                entry.type,
+                entry.hasAudio === true,
+                Math.max(1, Math.round((entry.duration ?? 0) * fps)),
+              );
+              const visualTrackIndex = plan.visualTarget?.kind === "existing" ? plan.visualTarget.index : null;
+              if (visualTrackIndex !== null) {
+                const durationFrames = Math.max(1, Math.round((entry.duration ?? 0) * fps));
+                const specs: RippleInsertSpec[] = [{ entry, durationFrames }];
+                const base = crypto.randomUUID();
+                let n = 0;
+                const detId = () => `${base}-${n++}`;
+                store.dispatch({
+                  label: "Ripple Insert",
+                  apply: (t) => {
+                    n = 0;
+                    return rippleInsertClipsSpecs(t, specs, visualTrackIndex, dropFrame, fps, detId).timeline;
+                  },
+                });
+              } else {
+                // Audio-only or new-track ripple: fall back to overwrite insert
+                store.dispatch(addClipCommand(result.entry, target, dropFrame, storeSnap.timeline.fps));
+              }
+            } else {
+              store.dispatch(addClipCommand(result.entry, target, dropFrame, storeSnap.timeline.fps));
+            }
           }
         }
       }
@@ -405,7 +439,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             library={library}
             onItemPointerDown={(entry, e) => {
               e.preventDefault();
-              dragController.start(entry, e.clientX, e.clientY);
+              dragController.start(entry, e.clientX, e.clientY, e.metaKey || e.ctrlKey);
             }}
           />
         }

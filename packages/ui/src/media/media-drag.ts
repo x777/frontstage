@@ -4,6 +4,7 @@ export interface MediaDragSnapshot {
   entry: MediaManifestEntry;
   x: number;
   y: number;
+  ripple: boolean;
 }
 
 export class MediaDragController {
@@ -23,23 +24,23 @@ export class MediaDragController {
     return () => this._listeners.delete(cb);
   }
 
-  start(entry: MediaManifestEntry, clientX: number, clientY: number): void {
-    this._snapshot = { entry, x: clientX, y: clientY };
+  start(entry: MediaManifestEntry, clientX: number, clientY: number, ripple = false): void {
+    this._snapshot = { entry, x: clientX, y: clientY, ripple };
     this._emit();
   }
 
-  update(clientX: number, clientY: number): void {
+  update(clientX: number, clientY: number, ripple?: boolean): void {
     if (!this._snapshot) return;
-    this._snapshot = { ...this._snapshot, x: clientX, y: clientY };
+    this._snapshot = { ...this._snapshot, x: clientX, y: clientY, ripple: ripple ?? this._snapshot.ripple };
     this._emit();
   }
 
-  end(): { entry: MediaManifestEntry; clientX: number; clientY: number } | null {
+  end(): { entry: MediaManifestEntry; clientX: number; clientY: number; ripple: boolean } | null {
     const snap = this._snapshot;
     if (!snap) return null;
     this._snapshot = null;
     this._emit();
-    return { entry: snap.entry, clientX: snap.x, clientY: snap.y };
+    return { entry: snap.entry, clientX: snap.x, clientY: snap.y, ripple: snap.ripple };
   }
 
   cancel(): void {

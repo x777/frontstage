@@ -26,7 +26,10 @@ import {
   marqueeSelect,
   timelineRangeEdgeHit,
   rangeEdgeAnchorFrame,
+  resolveDropPlan,
+  planRippleInsertPreview,
 } from "@palmier/core";
+import type { RippleInsertPreviewPlan } from "@palmier/core";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { TrackHeaders, TRACK_HEADER_WIDTH } from "./TrackHeaders.js";
@@ -73,6 +76,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const snapLineXRef = useRef<number | null>(null);
   const dropIndicatorRef = useRef<DropIndicator | null>(null);
+  const ghostPreviewRef = useRef<RippleInsertPreviewPlan | null>(null);
   const marqueeRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const [menu, setMenu] = useState<ClipContextMenuState | null>(null);
 
@@ -109,7 +113,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         trackHeights: timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
 
-      // Build overlays: marquee + range band
+      // Build overlays: marquee + range band + ghost-insert preview
       const overlays: TimelineOverlays = {};
       if (marqueeRectRef.current) {
         overlays.marquee = marqueeRectRef.current;
@@ -121,6 +125,9 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         if (lo !== hi) {
           overlays.rangeBand = { startX: xForFrame(geom, lo), endX: xForFrame(geom, hi) };
         }
+      }
+      if (ghostPreviewRef.current) {
+        overlays.ghostInsert = ghostPreviewRef.current;
       }
 
       drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays);
@@ -603,6 +610,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         const cv = canvasRef.current;
         if (!cv || !dragSnap) {
           dropIndicatorRef.current = null;
+          ghostPreviewRef.current = null;
           scheduleDraw();
           return;
         }
@@ -611,6 +619,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         const ly = dragSnap.y - rect.top;
         if (lx < 0 || lx > rect.width || ly < 0 || ly > rect.height) {
           dropIndicatorRef.current = null;
+          ghostPreviewRef.current = null;
         } else {
           const snap2 = store.getSnapshot();
           const geomDrop = makeGeometry({
@@ -621,15 +630,27 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
           });
           const target = dropTargetAt(geomDrop, ly);
           const dropFrame = frameAtX(geomDrop, lx);
-          if (target.kind === "new") {
-            const lineY = insertionLineY(geomDrop, target);
-            dropIndicatorRef.current = lineY !== null
-              ? { kind: "insertion-line", y: lineY }
-              : null;
+          if (dragSnap.ripple) {
+            // Ripple mode: show ghost-insert preview (gaps + shifts)
+            dropIndicatorRef.current = null;
+            const entry = dragSnap.entry;
+            const fps = snap2.timeline.fps;
+            const durationFrames = Math.max(1, Math.round((entry.duration ?? 0) * fps));
+            const plan = resolveDropPlan(snap2.timeline, target, entry.type, entry.hasAudio === true, durationFrames);
+            ghostPreviewRef.current = planRippleInsertPreview(snap2.timeline, plan, dropFrame);
           } else {
-            const ghostClip = clipFromAsset(dragSnap.entry, snap2.timeline.fps, dropFrame);
-            const r = clipRect(geomDrop, ghostClip, target.index);
-            dropIndicatorRef.current = { kind: "ghost-clip", x: r.x, y: r.y, width: r.width, height: r.height };
+            // Non-ripple: show existing single ghost-clip / insertion-line indicator
+            ghostPreviewRef.current = null;
+            if (target.kind === "new") {
+              const lineY = insertionLineY(geomDrop, target);
+              dropIndicatorRef.current = lineY !== null
+                ? { kind: "insertion-line", y: lineY }
+                : null;
+            } else {
+              const ghostClip = clipFromAsset(dragSnap.entry, snap2.timeline.fps, dropFrame);
+              const r = clipRect(geomDrop, ghostClip, target.index);
+              dropIndicatorRef.current = { kind: "ghost-clip", x: r.x, y: r.y, width: r.width, height: r.height };
+            }
           }
         }
         scheduleDraw();
