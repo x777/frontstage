@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 type Doc = Record<string, unknown>;
 type Migration = (doc: Doc) => Doc;
@@ -7,8 +7,10 @@ type Migration = (doc: Doc) => Doc;
 // (pre-versioning macOS) document to v1 we rely on field-level tolerance in
 // the schemas (defaults + the Transform x/y preprocess), so this is a
 // structural no-op that exists to anchor the framework for future bumps.
+// v1→v2: effects/blendMode fields added (optional), no structural change needed.
 const MIGRATIONS: Record<number, Migration> = {
   0: (doc) => doc,
+  1: (doc) => doc,
 };
 
 export function migrateProjectJson(raw: unknown): Doc {
