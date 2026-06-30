@@ -25,7 +25,7 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
         width: TRACK_HEADER_WIDTH,
         bottom: 0,
         background: theme.bg.surface,
-        borderRight: `1px solid ${theme.border.divider}`,
+        borderRight: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
         zIndex: 2,
         overflow: "hidden",
       }}
@@ -45,7 +45,7 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
               alignItems: "center",
               gap: theme.spacing.xs,
               padding: `0 ${theme.spacing.sm}`,
-              borderBottom: `1px solid ${theme.border.divider}`,
+              borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
               boxSizing: "border-box",
             }}
           >

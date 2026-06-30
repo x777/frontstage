@@ -381,7 +381,7 @@ export function drawTimeline(
     ctx.strokeStyle = palette.accentPrimary;
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 3]);
-    ctx.strokeRect(x + 0.5, y + 0.5, width, mh);
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, mh - 1);
     ctx.restore();
   }
 }

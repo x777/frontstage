@@ -11,10 +11,10 @@ import {
   makeGeometry,
   frameAtX,
   DEFAULT_TRACK_HEIGHT,
-  TIMELINE_HEADER_WIDTH,
   resolveDropPlan,
   rippleInsertClipsSpecs,
 } from "@palmier/core";
+import { TRACK_HEADER_WIDTH } from "../timeline/TrackHeaders.js";
 import type { RippleInsertSpec } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
 import { theme } from "../theme/theme.js";
@@ -246,7 +246,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             const geom = makeGeometry({
               pixelsPerFrame: storeSnap.view.zoom,
               scrollX: storeSnap.view.scrollX,
-              headerWidth: TIMELINE_HEADER_WIDTH,
+              headerWidth: TRACK_HEADER_WIDTH,
               trackHeights: storeSnap.timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
             });
             const target = dropTargetAt(geom, ly);
