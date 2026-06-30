@@ -1,4 +1,6 @@
 import type { Timeline } from "../timeline.js";
+import type { GapSelection, TimelineRangeSelection } from "../timeline/ripple-types.js";
+import { normalizeRange, isValidRange } from "../timeline/ripple-types.js";
 
 export interface EditorView {
   zoom: number;
@@ -22,6 +24,8 @@ export interface PanelLayout {
 export interface EditorState {
   timeline: Timeline;
   selection: ReadonlySet<string>;
+  selectedGap: GapSelection | null;
+  selectedTimelineRange: TimelineRangeSelection | null;
   playhead: number;
   view: EditorView;
   layout: PanelLayout;
@@ -44,6 +48,8 @@ export class EditorStore {
     this.state = {
       timeline: initial,
       selection: new Set(),
+      selectedGap: null,
+      selectedTimelineRange: null,
       playhead: 0,
       view: { zoom: 1, scrollX: 0 },
       layout: { focused: "timeline", maximized: null, hidden: [] },
@@ -66,8 +72,30 @@ export class EditorStore {
   select(ids: Iterable<string>): void {
     const next = new Set(ids);
     const cur = this.state.selection;
-    if (next.size === cur.size && [...next].every((id) => cur.has(id))) return;
-    this.state = { ...this.state, selection: next };
+    const sameSel = next.size === cur.size && [...next].every((id) => cur.has(id));
+    if (sameSel && this.state.selectedGap === null) return;
+    this.state = { ...this.state, selection: next, selectedGap: null };
+    this.lastCoalesceKey = null;
+    this.emit();
+  }
+
+  setSelectedGap(gap: GapSelection | null): void {
+    this.state = { ...this.state, selectedGap: gap, selection: gap ? new Set() : this.state.selection };
+    this.lastCoalesceKey = null;
+    this.emit();
+  }
+
+  setSelectedTimelineRange(range: TimelineRangeSelection | null): void {
+    const clamped = range ? { startFrame: Math.max(0, range.startFrame), endFrame: Math.max(0, range.endFrame) } : null;
+    this.state = { ...this.state, selectedTimelineRange: clamped };
+    this.lastCoalesceKey = null;
+    this.emit();
+  }
+
+  keepValidTimelineRangeOrClear(): void {
+    const r = this.state.selectedTimelineRange;
+    const next = r && isValidRange(r) ? normalizeRange(r) : null;
+    this.state = { ...this.state, selectedTimelineRange: next };
     this.lastCoalesceKey = null;
     this.emit();
   }
@@ -170,6 +198,8 @@ export class EditorStore {
     this.state = {
       timeline,
       selection: new Set(),
+      selectedGap: null,
+      selectedTimelineRange: null,
       playhead: 0,
       view: { zoom: 1, scrollX: 0 },
       layout: this.state.layout,
