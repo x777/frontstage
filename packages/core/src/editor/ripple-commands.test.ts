@@ -41,3 +41,41 @@ describe("validateShiftsForTrack", () => {
     expect(err).toContain("vt");
   });
 });
+
+import { rippleDeleteSelectedClips } from "./ripple-commands.js";
+
+describe("rippleDeleteSelectedClips", () => {
+  it("removes a selected clip and ripples later clips left on its track", () => {
+    const tl = timeline([track("t", [clip("a", 0, 40), clip("b", 40, 10)])]);
+    const out = rippleDeleteSelectedClips(tl, new Set(["a"]));
+    expect("timeline" in out).toBe(true);
+    const clips = (out as { timeline: Timeline }).timeline.tracks[0]!.clips;
+    expect(clips.map((c) => c.id)).toEqual(["b"]);
+    expect(clips[0]!.startFrame).toBe(0); // b shifted from 40 -> 0 (closed the 40-frame gap)
+  });
+
+  it("shifts a sync-locked follower track by the removed gap", () => {
+    const tl = timeline([
+      track("v", [clip("a", 0, 40), clip("keep", 40, 10)]),
+      track("a", [clip("x", 60, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    const out = rippleDeleteSelectedClips(tl, new Set(["a"])) as { timeline: Timeline };
+    // audio clip x (start 60) is after the removed range [0,40) -> shifts left 40 -> 20
+    expect(out.timeline.tracks[1]!.clips[0]!.startFrame).toBe(20);
+  });
+
+  it("refuses when a sync-locked follower would collide", () => {
+    const tl = timeline([
+      track("v", [clip("a", 0, 40), clip("keep", 40, 10)]),
+      track("a", [clip("x", 0, 30), clip("y", 60, 10)], { type: "audio", syncLocked: true }),
+    ]);
+    // shifting y left 40 -> 20 would overlap x ([0,30)) -> refuse
+    const out = rippleDeleteSelectedClips(tl, new Set(["a"]));
+    expect("refused" in out).toBe(true);
+  });
+
+  it("no-op (same timeline) for an empty selection", () => {
+    const tl = timeline([track("t", [clip("a", 0, 10)])]);
+    expect((rippleDeleteSelectedClips(tl, new Set()) as { timeline: Timeline }).timeline).toBe(tl);
+  });
+});
