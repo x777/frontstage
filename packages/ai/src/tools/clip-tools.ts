@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible } from "@palmier/core";
+import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -170,6 +170,35 @@ export function trimClipsTool(): ToolSpec {
       );
 
       return ok(`Trimmed ${trims.length} clip(s).`);
+    },
+  };
+}
+
+export function splitClipsTool(): ToolSpec {
+  return {
+    name: "split_clips",
+    description: "Splits one or more clips, each at a given frame. Each split keeps the left half's id and creates a new right-half clip. All splits are a single undo step.",
+    inputSchema: z.object({
+      splits: z.array(z.object({ clipId: z.string(), atFrame: z.number().int() })).min(1),
+    }),
+    run(args, ctx) {
+      const { splits } = args as { splits: { clipId: string; atFrame: number }[] };
+      const tl = ctx.store.getSnapshot().timeline;
+      for (const s of splits) {
+        const loc = findClip(tl, s.clipId);
+        if (!loc) return errorResult(`unknown clip: ${s.clipId}`);
+        const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+        const end = clipEndFrame(clip);
+        if (s.atFrame <= clip.startFrame || s.atFrame >= end)
+          return errorResult(`atFrame ${s.atFrame} must be strictly inside clip ${s.clipId} (frames ${clip.startFrame}..${end})`);
+      }
+      const newIds = splits.map(() => ctx.newId());
+      const reducers = splits.map((s, i) => {
+        const cmd = splitClipCommand(s.clipId, s.atFrame, undefined, () => newIds[i]!);
+        return cmd.apply.bind(cmd);
+      });
+      asUndoStep(ctx.store, "Split Clips", reducers);
+      return ok(`Split ${splits.length} clip(s). New ids: ${newIds.join(", ")}`);
     },
   };
 }

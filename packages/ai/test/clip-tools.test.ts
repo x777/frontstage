@@ -15,6 +15,7 @@ import {
   moveClipsTool,
   splitClipTool,
   trimClipsTool,
+  splitClipsTool,
   type ToolContext,
   type ToolBlock,
 } from "../src/index.js";
@@ -435,5 +436,37 @@ describe("trim_clips", () => {
     expect(result.isError).toBe(true);
     expect(store.getSnapshot().timeline).toBe(before);
     expect(store.canUndo()).toBe(false);
+  });
+});
+
+// ── split_clips (batch) ───────────────────────────────────────────────────────
+
+describe("split_clips (batch)", () => {
+  function ctxWith(tl: Timeline) {
+    let n = 0;
+    return { store: new EditorStore(tl), getManifest: makeManifest, newId: () => `new-${n++}` } as ToolContext;
+  }
+  test("splits multiple clips as one undo step", async () => {
+    const tl: Timeline = { ...makeTimeline(), tracks: [makeTrack("t", [makeClip("a", 0, 60), makeClip("b", 60, 60)])] };
+    const ctx = ctxWith(tl);
+    const res = await splitClipsTool().run({ splits: [{ clipId: "a", atFrame: 30 }, { clipId: "b", atFrame: 90 }] }, ctx);
+    expect(res.isError).toBe(false);
+    const clips = ctx.store.getSnapshot().timeline.tracks[0]!.clips;
+    expect(clips.length).toBe(4); // a -> a+new0, b -> b+new1
+    expect(ctx.store.canUndo()).toBe(true);
+    ctx.store.undo();
+    expect(ctx.store.getSnapshot().timeline.tracks[0]!.clips.length).toBe(2);
+  });
+  test("rejects a split at a clip boundary", async () => {
+    const ctx = ctxWith(makeTimeline());
+    const res = await splitClipsTool().run({ splits: [{ clipId: "c1", atFrame: 0 }] }, ctx);
+    expect(res.isError).toBe(true);
+    const block = res.blocks[0]!;
+    expect(block.kind === "text" && block.text).toContain("strictly inside");
+  });
+  test("rejects an unknown clip", async () => {
+    const ctx = ctxWith(makeTimeline());
+    const res = await splitClipsTool().run({ splits: [{ clipId: "missing", atFrame: 10 }] }, ctx);
+    expect(res.isError).toBe(true);
   });
 });

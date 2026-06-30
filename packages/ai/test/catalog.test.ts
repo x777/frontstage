@@ -20,6 +20,7 @@ const EXPECTED_NAMES = [
   "remove_tracks",
   "move_clips",
   "split_clip",
+  "split_clips",
   "trim_clips",
   "set_clip_properties",
   "set_keyframes",
@@ -85,13 +86,13 @@ function makeCtx(store: EditorStore): ToolContext {
 describe("buildCatalog", () => {
   test("returns exactly 14 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(14);
+    expect(catalog).toHaveLength(15);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(14);
+    expect(new Set(names).size).toBe(15);
   });
 
   test("names match the expected list exactly", () => {
