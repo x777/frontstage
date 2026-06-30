@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
-import { timelineTrackDisplayLabel, toggleTrackMuteCommand, toggleTrackHiddenCommand, toggleTrackSyncLockCommand, setTrackHeightCommand } from "./track-commands.js";
+import { timelineTrackDisplayLabel, toggleTrackMuteCommand, toggleTrackHiddenCommand, toggleTrackSyncLockCommand, setTrackHeightCommand, pruneEmptyTracks, insertTrackCommand } from "./track-commands.js";
 
 function track(id: string, type: Track["type"], clips: Clip[] = [], over: Partial<Track> = {}): Track {
   return { id, type, muted: false, hidden: false, syncLocked: false, clips, displayHeight: 120, ...over };
@@ -58,5 +58,33 @@ describe("setTrackHeightCommand", () => {
     expect(trackById(setTrackHeightCommand("v", 80).apply(tl), "v").displayHeight).toBe(80);
     expect(trackById(setTrackHeightCommand("v", 5).apply(tl), "v").displayHeight).toBe(36);   // TRACK_MIN_HEIGHT
     expect(trackById(setTrackHeightCommand("v", 9999).apply(tl), "v").displayHeight).toBe(240); // TRACK_MAX_HEIGHT
+  });
+});
+
+describe("pruneEmptyTracks", () => {
+  it("removes empty tracks and keeps non-empty ones", () => {
+    const c = { id: "c1" } as unknown as Clip;
+    const tl = timeline([track("v", "video", [c]), track("empty", "video", [])]);
+    const next = pruneEmptyTracks(tl);
+    expect(next.tracks.map((t) => t.id)).toEqual(["v"]);
+  });
+  it("returns the same ref when nothing is empty", () => {
+    const c = { id: "c1" } as unknown as Clip;
+    const tl = timeline([track("v", "video", [c])]);
+    expect(pruneEmptyTracks(tl)).toBe(tl);
+  });
+});
+
+describe("insertTrackCommand", () => {
+  it("clamps an audio insert to at/after the first audio track", () => {
+    const tl = timeline([track("v", "video"), track("a", "audio")]); // firstAudioIndex = 1
+    const next = insertTrackCommand(0, "audio", () => "NEW").apply(tl);
+    expect(next.tracks.map((t) => t.id)).toEqual(["v", "NEW", "a"]); // clamped to index 1
+    expect(next.tracks[1]).toMatchObject({ id: "NEW", type: "audio", clips: [] });
+  });
+  it("clamps a visual insert to at/before the first audio track", () => {
+    const tl = timeline([track("v", "video"), track("a", "audio")]);
+    const next = insertTrackCommand(5, "video", () => "NEW").apply(tl);
+    expect(next.tracks.map((t) => t.id)).toEqual(["v", "NEW", "a"]); // clamped to firstAudioIndex = 1
   });
 });

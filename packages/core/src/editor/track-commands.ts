@@ -1,6 +1,6 @@
-import type { Timeline } from "../timeline.js";
+import type { Timeline, Track } from "../timeline.js";
 import type { ClipType } from "../clip-type.js";
-import { computeZones } from "../timeline/zones.js";
+import { computeZones, partitionedInsertionIndex } from "../timeline/zones.js";
 import type { Command } from "./editor-store.js";
 import { TRACK_MIN_HEIGHT, TRACK_MAX_HEIGHT } from "../timeline/geometry.js";
 
@@ -59,6 +59,22 @@ export function setTrackHeightCommand(trackId: string, height: number): Command 
         return { ...t, displayHeight: clamped };
       });
       return changed ? { ...timeline, tracks } : timeline;
+    },
+  };
+}
+
+export function pruneEmptyTracks(timeline: Timeline): Timeline {
+  const tracks = timeline.tracks.filter((t) => t.clips.length > 0);
+  return tracks.length === timeline.tracks.length ? timeline : { ...timeline, tracks };
+}
+
+export function insertTrackCommand(at: number, type: ClipType, newId: () => string = () => crypto.randomUUID()): Command {
+  return {
+    label: "Add Track",
+    apply(timeline: Timeline): Timeline {
+      const clamped = partitionedInsertionIndex(computeZones(timeline), type, at);
+      const track: Track = { id: newId(), type, muted: false, hidden: false, syncLocked: false, clips: [] };
+      return { ...timeline, tracks: [...timeline.tracks.slice(0, clamped), track, ...timeline.tracks.slice(clamped)] };
     },
   };
 }
