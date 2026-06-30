@@ -805,3 +805,48 @@ describe("resolveOrCreateAudioTrack (M8.3)", () => {
     expect(r.timeline.tracks[1]).toMatchObject({ id: "NEW", type: "audio" });
   });
 });
+
+function videoEntry(over: Partial<MediaManifestEntry> = {}): MediaManifestEntry {
+  return { id: "asset-1", name: "v.mp4", type: "video", source: { kind: "project", relativePath: "media/v.mp4" }, duration: 1, ...over };
+}
+// deterministic id generator: V (visual clip), G (linkGroupId), A (audio clip), T (new track) in call order
+function seqIds(seq: string[]): () => string {
+  let i = 0;
+  return () => seq[i++] ?? `x${i}`;
+}
+
+describe("addClipCommand — A/V pair (M8.3)", () => {
+  it("places a linked audio clip when the entry is a video with audio", () => {
+    const tl = makeTimeline([makeTrack({ id: "vt", type: "video", clips: [] })]);
+    // clipFromAsset consumes one id (visual), then linkGroupId, then audio clip id, then new audio track id
+    const next = addClipCommand(videoEntry({ hasAudio: true }), { kind: "existing", index: 0 }, 0, 30, undefined, seqIds(["V", "G", "A", "T"])).apply(tl);
+    const all = next.tracks.flatMap((t) => t.clips);
+    const visual = all.find((c) => c.mediaType === "video")!;
+    const audio = all.find((c) => c.mediaType === "audio")!;
+    expect(visual.linkGroupId).toBe(audio.linkGroupId); // shared group
+    expect(visual.linkGroupId).toBeDefined();
+    expect(audio.mediaRef).toBe("asset-1"); // same file
+    expect(audio.sourceClipType).toBe("video"); // demuxer reads the video's audio track
+    expect(audio.startFrame).toBe(visual.startFrame);
+    expect(audio.durationFrames).toBe(visual.durationFrames);
+    // audio clip landed on an audio-type track
+    const audioTrack = next.tracks.find((t) => t.clips.some((c) => c.id === audio.id))!;
+    expect(audioTrack.type).toBe("audio");
+  });
+
+  it("places a single clip with no link when the video has no audio", () => {
+    const tl = makeTimeline([makeTrack({ id: "vt", type: "video", clips: [] })]);
+    const next = addClipCommand(videoEntry({ hasAudio: false }), { kind: "existing", index: 0 }, 0, 30).apply(tl);
+    const all = next.tracks.flatMap((t) => t.clips);
+    expect(all).toHaveLength(1);
+    expect(all[0]!.mediaType).toBe("video");
+    expect(all[0]!.linkGroupId).toBeUndefined();
+  });
+
+  it("leaves non-video placement unchanged (no pairing)", () => {
+    const tl = makeTimeline([makeTrack({ id: "at", type: "audio", clips: [] })]);
+    const audioEntry: MediaManifestEntry = { id: "a1", name: "a.mp3", type: "audio", source: { kind: "project", relativePath: "media/a.mp3" }, duration: 1, hasAudio: true };
+    const next = addClipCommand(audioEntry, { kind: "existing", index: 0 }, 0, 30).apply(tl);
+    expect(next.tracks.flatMap((t) => t.clips)).toHaveLength(1);
+  });
+});

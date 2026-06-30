@@ -299,38 +299,43 @@ export function addClipCommand(
     coalesceKey,
     apply(timeline: Timeline): Timeline {
       const clampedStart = Math.max(0, startFrame);
-      const clip = clipFromAsset(entry, fps, clampedStart, newId);
+      const shouldLink = entry.type === "video" && entry.hasAudio === true;
+      const base = clipFromAsset(entry, fps, clampedStart, newId); // newId() #1 = visual clip id
+      const linkGroupId = shouldLink ? newId() : undefined;        // newId() #2 = linkGroupId
+      const clip: Clip = { ...base, linkGroupId };
 
+      // Place the visual clip (existing-track overwrite, or new track).
+      let next: Timeline;
       if (target.kind === "existing") {
         const index = target.index;
         if (index < 0 || index >= timeline.tracks.length) return timeline;
         const track = timeline.tracks[index]!;
         if (!clipTypesCompatible(track.type, clip.mediaType)) return timeline;
-
         const regionEnd = clampedStart + clip.durationFrames;
-        const actions = computeOverwrite(track.clips, clampedStart, regionEnd);
-        const cleared = applyOverwriteToClips(track.clips, actions);
-        const newClips = sortedByStart([...cleared, clip]);
-        return replaceTrackClips(timeline, index, newClips);
+        const cleared = applyOverwriteToClips(track.clips, computeOverwrite(track.clips, clampedStart, regionEnd));
+        next = replaceTrackClips(timeline, index, sortedByStart([...cleared, clip]));
       } else {
-        // new track
         const trackCount = timeline.tracks.length;
         const clampedIndex = Math.max(0, Math.min(target.index, trackCount));
-        const newTrack: Track = {
-          id: newId(),
-          type: clip.mediaType,
-          muted: false,
-          hidden: false,
-          syncLocked: false,
-          clips: [clip],
-        };
-        const newTracks = [
-          ...timeline.tracks.slice(0, clampedIndex),
-          newTrack,
-          ...timeline.tracks.slice(clampedIndex),
-        ];
-        return { ...timeline, tracks: newTracks };
+        const newTrack: Track = { id: newId(), type: clip.mediaType, muted: false, hidden: false, syncLocked: false, clips: [clip] };
+        next = { ...timeline, tracks: [...timeline.tracks.slice(0, clampedIndex), newTrack, ...timeline.tracks.slice(clampedIndex)] };
       }
+
+      if (linkGroupId === undefined) return next;
+
+      // Place the linked audio half on a resolved-or-created audio track.
+      const audioClip: Clip = {
+        ...clipFromAsset(entry, fps, clampedStart, newId),
+        mediaType: "audio",
+        sourceClipType: entry.type,
+        durationFrames: clip.durationFrames,
+        linkGroupId,
+      };
+      const resolved = resolveOrCreateAudioTrack(next, clampedStart, audioClip.durationFrames, newId);
+      const at = resolved.timeline.tracks[resolved.trackIndex]!;
+      const aRegionEnd = clampedStart + audioClip.durationFrames;
+      const aCleared = applyOverwriteToClips(at.clips, computeOverwrite(at.clips, clampedStart, aRegionEnd));
+      return replaceTrackClips(resolved.timeline, resolved.trackIndex, sortedByStart([...aCleared, audioClip]));
     },
   };
 }
