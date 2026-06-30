@@ -33,9 +33,9 @@ export function ClipContextMenu({ store, menu, onClose }: { store: EditorStore; 
       data-testid="clip-context-menu"
       role="menu"
       style={{
-        position: "absolute", left: menu.x, top: menu.y, zIndex: 10,
-        background: theme.bg.raised, border: `1px solid ${theme.border.divider}`,
-        borderRadius: theme.radius.sm, padding: theme.spacing.xxs, minWidth: 120,
+        position: "absolute", left: menu.x, top: menu.y, zIndex: theme.z.menu,
+        background: theme.bg.raised, border: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+        borderRadius: theme.radius.sm, padding: theme.spacing.xxs, minWidth: theme.size.menuMin,
         boxShadow: theme.shadow.lg,
       }}
     >

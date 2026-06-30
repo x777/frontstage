@@ -484,7 +484,8 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         if (!snap.selection.has(hit.clipId)) {
           store.select([hit.clipId]);
         }
-        setMenu({ x: e.clientX, y: e.clientY });
+        const containerRect = containerRef.current!.getBoundingClientRect();
+        setMenu({ x: e.clientX - containerRect.left, y: e.clientY - containerRect.top });
       } else {
         setMenu(null);
       }
