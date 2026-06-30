@@ -11,7 +11,7 @@ export function parseCubeLUT(text: string): CubeLUT | null {
     const line = raw.trim();
     if (line === "" || line.startsWith("#") || line.startsWith("TITLE")) continue;
     if (line.startsWith("LUT_1D_SIZE")) return null;
-    if (line.startsWith("LUT_3D_SIZE")) { dimension = parseInt(line.split(/\s+/)[1]!, 10); continue; }
+    if (line.startsWith("LUT_3D_SIZE")) { dimension = parseInt(line.split(/\s+/)[1]!, 10); if (!(dimension > 1 && dimension <= 64)) return null; continue; }
     if (line.startsWith("DOMAIN_MIN")) { const p = line.split(/\s+/); for (let i = 0; i < 3; i++) domainMin[i] = parseFloat(p[i + 1]!); continue; }
     if (line.startsWith("DOMAIN_MAX")) { const p = line.split(/\s+/); for (let i = 0; i < 3; i++) domainMax[i] = parseFloat(p[i + 1]!); continue; }
     const parts = line.split(/\s+/).map(Number);
@@ -42,8 +42,6 @@ export function sampleLUT(lut: CubeLUT, rgb: RGB): RGB {
   const r1 = Math.min(r0 + 1, n - 1), g1 = Math.min(g0 + 1, n - 1), b1 = Math.min(b0 + 1, n - 1);
   const fr = px - r0, fg = py - g0, fb = pz - b0;
   const c000 = node(r0, g0, b0), c111 = node(r1, g1, b1);
-  const lerp = (a: RGB, c: RGB, t: number): RGB => ({ r: a.r + (c.r - a.r) * t, g: a.g + (c.g - a.g) * t, b: a.b + (c.b - a.b) * t });
-  const add = (a: RGB, c: RGB, w: number): RGB => ({ r: a.r + c.r * w, g: a.g + c.g * w, b: a.b + c.b * w });
   // Tetrahedral: pick the tetra by ordering of fr,fg,fb.
   let out: RGB;
   if (fr >= fg && fg >= fb) out = combine(c000, node(r1, g0, b0), node(r1, g1, b0), c111, fr, fg, fb);
@@ -52,7 +50,6 @@ export function sampleLUT(lut: CubeLUT, rgb: RGB): RGB {
   else if (fg >= fr && fr >= fb) out = combine(c000, node(r0, g1, b0), node(r1, g1, b0), c111, fg, fr, fb);
   else if (fg >= fb && fb >= fr) out = combine(c000, node(r0, g1, b0), node(r0, g1, b1), c111, fg, fb, fr);
   else out = combine(c000, node(r0, g0, b1), node(r0, g1, b1), c111, fb, fg, fr);
-  void lerp; void add;
   return out;
 }
 

@@ -1,3 +1,6 @@
+import type { RGBA } from "../text-style.js";
+export type { RGBA };
+
 export type BlendMode =
   | "normal" | "darken" | "multiply" | "colorBurn" | "lighten" | "screen" | "colorDodge"
   | "overlay" | "softLight" | "hardLight" | "difference" | "exclusion"
@@ -8,9 +11,6 @@ export const BLEND_MODES: readonly BlendMode[] = [
   "overlay", "softLight", "hardLight", "difference", "exclusion",
   "hue", "saturation", "color", "luminosity",
 ];
-
-import type { RGBA } from "../text-style.js";
-export type { RGBA };
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 

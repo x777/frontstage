@@ -76,3 +76,40 @@ describe("applyChromaKey", () => {
     expect(grey.a).toBeGreaterThan(0.9);
   });
 });
+
+describe("golden pins", () => {
+  it("chromaOffset(1, 0) exact r/g/b", () => {
+    const o = chromaOffset(1, 0);
+    expect(o.r).toBeCloseTo(2 / 3, 5);
+    expect(o.g).toBeCloseTo(-1 / 3, 5);
+    expect(o.b).toBeCloseTo(-1 / 3, 5);
+  });
+
+  it("applyColorWheels lift-only on rgb(0.4,0.5,0.6)", () => {
+    const out = applyColorWheels(rgb(0.4, 0.5, 0.6), { x: 0, y: 0, m: 0.1 }, { x: 0, y: 0, m: 1 }, { x: 0, y: 0, m: 1 });
+    expect(out.r).toBeCloseTo(0.46, 5);
+    expect(out.g).toBeCloseTo(0.55, 5);
+    expect(out.b).toBeCloseTo(0.64, 5);
+  });
+
+  it("applyCurves master [{0,0},{0.5,0.75},{1,1}] on rgb(0.4,0.5,0.6)", () => {
+    const curve = { master: [{ x: 0, y: 0 }, { x: 0.5, y: 0.75 }, { x: 1, y: 1 }], red: [], green: [], blue: [] };
+    const out = applyCurves(rgb(0.4, 0.5, 0.6), curve);
+    expect(out.r).toBeCloseTo(0.6, 5);
+    expect(out.g).toBeCloseTo(0.75, 5);
+    expect(out.b).toBeCloseTo(0.9, 5);
+  });
+
+  it("applyHueCurves hueVsHue uniform shift on pure red", () => {
+    const curves = { hueVsHue: [{ x: 0, y: 0.75 }, { x: 1, y: 0.75 }], hueVsSat: [], hueVsLum: [] };
+    const out = applyHueCurves(rgb(1, 0, 0), curves);
+    expect(out.r).toBeCloseTo(1, 5);
+    expect(out.g).toBeCloseTo(0.25, 5);
+    expect(out.b).toBeCloseTo(0, 5);
+  });
+
+  it("applyChromaKey exact alpha on green pixel (0.1,0.9,0.1)", () => {
+    const green = applyChromaKey({ r: 0.1, g: 0.9, b: 0.1, a: 1 }, 0.333, 0.5, 0.5, 0.5);
+    expect(green.a).toBeCloseTo(0, 5);
+  });
+});

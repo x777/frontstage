@@ -17,14 +17,16 @@ function percentile(sorted: number[], p: number): number {
 
 export function computeScopes(rgba: Uint8Array, width: number, height: number): Scopes {
   const fc = width * height;
+  if (fc === 0) return { lumaMean: 0, lumaBlack: 0, lumaWhite: 0, clipLow: 0, clipHigh: 0, lumaHistogram: new Array(16).fill(0), meanRGB: [0,0,0], blackRGB: [0,0,0], whiteRGB: [0,0,0], shadowRGB: [0,0,0], midRGB: [0,0,0], highRGB: [0,0,0], saturationMean: 0, warmCoolBias: 0, greenMagentaBias: 0, hueHistogram: new Array(12).fill(0), colorfulPct: 0 };
   const lumaHistogram = new Array(16).fill(0);
   const hueHistogram = new Array(12).fill(0);
   const lumas: number[] = []; const rs: number[] = []; const gs: number[] = []; const bs: number[] = [];
-  let sumR = 0, sumG = 0, sumB = 0, sumSat = 0, clipLow = 0, clipHigh = 0, hueWeight = 0, colorful = 0;
+  let sumR = 0, sumG = 0, sumB = 0, sumSat = 0, sumLuma = 0, clipLow = 0, clipHigh = 0, hueWeight = 0, colorful = 0;
   const zone = { shadow: [0, 0, 0, 0], mid: [0, 0, 0, 0], high: [0, 0, 0, 0] };
   for (let i = 0; i < fc; i++) {
     const r = rgba[i * 4]! / 255, g = rgba[i * 4 + 1]! / 255, b = rgba[i * 4 + 2]! / 255;
     const y = REC(r, g, b);
+    sumLuma += y;
     lumas.push(y); rs.push(r); gs.push(g); bs.push(b);
     sumR += r; sumG += g; sumB += b;
     if (y < 0.02) clipLow++; if (y > 0.98) clipHigh++;
@@ -44,7 +46,7 @@ export function computeScopes(rgba: Uint8Array, width: number, height: number): 
   const zoneRGB = (z: number[]): [number, number, number] => z[3]! > 0 ? [z[0]! / z[3]!, z[1]! / z[3]!, z[2]! / z[3]!] : [0, 0, 0];
   const meanR = sumR / fc, meanG = sumG / fc, meanB = sumB / fc;
   return {
-    lumaMean: lumas.reduce((a, b) => a + b, 0) / fc,
+    lumaMean: sumLuma / fc,
     lumaBlack: percentile(lumas, 0.02), lumaWhite: percentile(lumas, 0.98),
     clipLow: clipLow / fc, clipHigh: clipHigh / fc,
     lumaHistogram: lumaHistogram.map((v) => v / fc),
