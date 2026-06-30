@@ -56,8 +56,8 @@ describe("setTrackHeightCommand", () => {
   it("sets displayHeight clamped to the min/max bounds", () => {
     const tl = timeline([track("v", "video")]);
     expect(trackById(setTrackHeightCommand("v", 80).apply(tl), "v").displayHeight).toBe(80);
-    expect(trackById(setTrackHeightCommand("v", 5).apply(tl), "v").displayHeight).toBe(36);   // TRACK_MIN_HEIGHT
-    expect(trackById(setTrackHeightCommand("v", 9999).apply(tl), "v").displayHeight).toBe(240); // TRACK_MAX_HEIGHT
+    expect(trackById(setTrackHeightCommand("v", 5).apply(tl), "v").displayHeight).toBe(32);   // TRACK_MIN_HEIGHT
+    expect(trackById(setTrackHeightCommand("v", 9999).apply(tl), "v").displayHeight).toBe(200); // TRACK_MAX_HEIGHT
   });
 });
 
