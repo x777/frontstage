@@ -167,12 +167,12 @@ export class SourceCoordinator {
           const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
           const vf = await entry.mgr.frameAtMicros(srcUs);
           owned.push({ mgr: entry.mgr, vf });
-          tagged.push({ layer: { frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
+          tagged.push({ layer: { frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop, effects: layer.effects, blendMode: layer.blendMode }, zIndex: layer.zIndex });
         } catch (e) {
           console.warn(`compositor: skipping clip ${layer.clipId} (decode failed):`, e);
         }
       } else {
-        tagged.push({ layer: { frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
+        tagged.push({ layer: { frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop, effects: layer.effects, blendMode: layer.blendMode }, zIndex: layer.zIndex });
       }
     }
 
@@ -238,9 +238,9 @@ export class SourceCoordinator {
         const srcUs = clipSourceMicros(clip, frame, this.timeline.fps);
         const vf = entry.mgr.frameForMicros(srcUs);
         if (vf === undefined) continue; // skip if not buffered yet
-        tagged.push({ layer: { frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
+        tagged.push({ layer: { frame: vf, transform: layer.transform, opacity: layer.opacity, crop: layer.crop, effects: layer.effects, blendMode: layer.blendMode }, zIndex: layer.zIndex });
       } else {
-        tagged.push({ layer: { frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop }, zIndex: layer.zIndex });
+        tagged.push({ layer: { frame: entry.src.frame(), transform: layer.transform, opacity: layer.opacity, crop: layer.crop, effects: layer.effects, blendMode: layer.blendMode }, zIndex: layer.zIndex });
       }
     }
 

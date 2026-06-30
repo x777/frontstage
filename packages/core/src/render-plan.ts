@@ -4,6 +4,8 @@ import type { Timeline } from "./timeline.js";
 import { clipTypeIsVisual } from "./clip-type.js";
 import { clipContains, cropAt, opacityAt, transformAt } from "./clip.js";
 import { type TextStyle, defaultTextStyle } from "./text-style.js";
+import type { Effect } from "./color/effect.js";
+import type { BlendMode } from "./color/blend-mode.js";
 
 export interface RenderLayer {
   clipId: string;
@@ -12,6 +14,8 @@ export interface RenderLayer {
   opacity: number;
   crop: Crop;
   zIndex: number;
+  effects?: Effect[];
+  blendMode?: BlendMode;
 }
 
 export interface TextLayer {
@@ -60,6 +64,8 @@ export function buildRenderPlan(timeline: Timeline, frame: number, sourceSizes: 
         opacity: opacityAt(clip, frame),
         crop: cropAt(clip, frame),
         zIndex: ti,
+        effects: clip.effects,
+        blendMode: clip.blendMode,
       });
     }
   }

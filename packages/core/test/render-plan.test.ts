@@ -4,6 +4,8 @@ import { buildRenderPlan } from "../src/render-plan.js";
 import { defaultTimeline, type Track } from "../src/timeline.js";
 import { defaultCrop, defaultTransform } from "../src/transform.js";
 import { defaultTextStyle } from "../src/text-style.js";
+import type { Effect } from "../src/color/effect.js";
+import type { BlendMode } from "../src/color/blend-mode.js";
 
 function clip(over: Partial<Clip> = {}): Clip {
   return {
@@ -83,5 +85,29 @@ describe("buildRenderPlan", () => {
     const tl = { ...defaultTimeline(), tracks: [track([textClip])] };
     const plan = buildRenderPlan(tl, 10, sizes);
     expect(plan.textLayers).toHaveLength(0);
+  });
+});
+
+describe("buildRenderPlan effects/blendMode propagation (M9B-1)", () => {
+  function makeTimelineWithClip(opts: { startFrame: number; durationFrames: number; effects?: Effect[]; blendMode?: BlendMode }) {
+    const c = clip({ startFrame: opts.startFrame, durationFrames: opts.durationFrames, effects: opts.effects, blendMode: opts.blendMode });
+    return { ...defaultTimeline(), tracks: [track([c])] };
+  }
+  const sm = new Map([["m", { width: 100, height: 100 }]]);
+
+  test("carries a clip's effects and blendMode onto its RenderLayer", () => {
+    const effects = [{ id: "e", type: "color.saturation", enabled: true, params: { amount: { value: 0 } } }];
+    const tl = makeTimelineWithClip({ startFrame: 0, durationFrames: 30, effects, blendMode: "multiply" });
+    const { layers } = buildRenderPlan(tl, 5, sm);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]!.blendMode).toBe("multiply");
+    expect(layers[0]!.effects).toEqual(effects);
+  });
+
+  test("leaves effects/blendMode undefined for a clip without them", () => {
+    const tl = makeTimelineWithClip({ startFrame: 0, durationFrames: 30 });
+    const { layers } = buildRenderPlan(tl, 5, sm);
+    expect(layers[0]!.effects).toBeUndefined();
+    expect(layers[0]!.blendMode).toBeUndefined();
   });
 });
