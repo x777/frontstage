@@ -41,3 +41,4 @@ export * from "./timeline/ripple-engine.js";
 export * from "./timeline/zones.js";
 export * from "./timeline/gesture-hit.js";
 export * from "./timeline/link-group.js";
+export * from "./timeline/drop-routing.js";
