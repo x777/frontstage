@@ -1,10 +1,17 @@
 import { buildAudioPlan, timelineTotalFrames, type AudioPlan } from "@palmier/core";
-import type { Timeline } from "@palmier/core";
+import type { Clip, Timeline } from "@palmier/core";
 import type { MediaByteSource } from "../media/media-source.js";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
 import { buildAudioChunks, AudioDecodeManager } from "../decode/audio-decoder.js";
 import type { AudioGraph } from "./audio-graph.js";
 import { mixWindow, type MixSource } from "./mix.js";
+
+export function audioMixClips(timeline: Timeline): Clip[] {
+  return timeline.tracks
+    .filter((t) => !t.hidden && !t.muted)
+    .flatMap((t) => t.clips)
+    .filter((c) => c.mediaType === "audio");
+}
 
 const CHUNK = 2048;
 
@@ -28,11 +35,7 @@ export class AudioMixer {
   }
 
   static async create(timeline: Timeline, media: MediaByteSource): Promise<AudioMixer | undefined> {
-    // Collect clips that carry audio (audio or video mediaType)
-    const allClips = timeline.tracks
-      .filter((t) => !t.hidden && !t.muted)
-      .flatMap((t) => t.clips)
-      .filter((c) => c.mediaType === "audio" || c.mediaType === "video");
+    const allClips = audioMixClips(timeline);
 
     if (allClips.length === 0) return undefined;
 
