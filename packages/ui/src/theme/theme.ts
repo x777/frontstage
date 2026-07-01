@@ -123,6 +123,16 @@ export const theme = {
     sessionListMax: "var(--size-session-list-max)",
     generationPanelMin: "var(--size-generation-panel-min)",
     settingsPanelMin: "var(--size-settings-panel-min)",
+    adjustTrack: "var(--size-adjust-track)",
+    adjustThumb: "var(--size-adjust-thumb)",
+  },
+  adjust: {
+    tempCool: "var(--color-adjust-temp-cool)",
+    tempWarm: "var(--color-adjust-temp-warm)",
+    tintGreen: "var(--color-adjust-tint-green)",
+    tintMagenta: "var(--color-adjust-tint-magenta)",
+    lumaDark: "var(--color-adjust-luma-dark)",
+    lumaLight: "var(--color-adjust-luma-light)",
   },
   z: {
     menu: "var(--z-menu)",

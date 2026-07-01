@@ -143,6 +143,18 @@
   --size-kf-toggle: 18px;
   --size-kf-label: 52px;
 
+  /* Adjust inspector slider */
+  --size-adjust-track: 4px;
+  --size-adjust-thumb: 12px;
+
+  /* Adjust gradient endpoints */
+  --color-adjust-temp-cool: rgb(87, 168, 255);
+  --color-adjust-temp-warm: rgb(255, 167, 72);
+  --color-adjust-tint-green: rgb(64, 191, 64);
+  --color-adjust-tint-magenta: rgb(211, 64, 211);
+  --color-adjust-luma-dark: rgb(0, 0, 0);
+  --color-adjust-luma-light: rgb(255, 255, 255);
+
   /* Overlay tokens */
   --size-overlay-handle: 10px;
   --color-overlay-transform-border: rgba(255, 255, 255, 0.9);

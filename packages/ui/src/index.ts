@@ -46,3 +46,5 @@ export type { SettingsPanelProps, KeyConfig } from "./agent/SettingsPanel.js";
 export { ModelPicker } from "./agent/ModelPicker.js";
 export type { ModelPickerProps } from "./agent/ModelPicker.js";
 export { localProjectStore } from "./storage/local-project-store.js";
+export { AdjustSlider, ScrubbableNumberField, AdjustSection, AdjustmentRow, adjustmentRow } from "./inspector/adjust/index.js";
+export type { AdjustSliderProps, ScrubbableNumberFieldProps, AdjustSectionProps, AdjustmentRowProps } from "./inspector/adjust/index.js";
