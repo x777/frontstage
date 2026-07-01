@@ -12,6 +12,7 @@ import { useStore } from "../store/use-store.js";
 export interface PreviewPanelProps {
   store: EditorStore;
   media: MediaByteSource;
+  engineRef?: { current: PlaybackEngine | null };
 }
 
 function snapshotSignature(tl: Timeline): string {
@@ -21,7 +22,7 @@ function snapshotSignature(tl: Timeline): string {
   return `${tl.tracks.length}|${clipIds}`;
 }
 
-export function PreviewPanel({ store, media }: PreviewPanelProps) {
+export function PreviewPanel({ store, media, engineRef: engineRefProp }: PreviewPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayContainerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
@@ -60,6 +61,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
       engine = await PlaybackEngine.create(canvas!);
       if (abortRef.current) { engine.dispose(); return; }
       engineRef.current = engine;
+      if (engineRefProp) engineRefProp.current = engine;
 
       const snap = store.getSnapshot();
       prevSigRef.current = snapshotSignature(snap.timeline);
@@ -124,6 +126,7 @@ export function PreviewPanel({ store, media }: PreviewPanelProps) {
         engineRef.current.dispose();
         engineRef.current = null;
       }
+      if (engineRefProp) engineRefProp.current = null;
       setEngineReady(false);
       // Do NOT reset mountedRef — the StrictMode re-invoke path above handles the reset.
       // A real unmount destroys this component instance and its refs.

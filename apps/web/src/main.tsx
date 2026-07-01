@@ -1,6 +1,7 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
+import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig } from "@palmier/ui";
@@ -22,9 +23,10 @@ interface PalmierAppProps {
   sessionStore: ChatSessionStore;
   mentionItems: { id: string; label: string; kind: "media"; contextText: string }[];
   aiProxyUrl: string;
+  engineRef: { current: PlaybackEngine | null };
 }
 
-function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
@@ -61,6 +63,7 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
       library={library}
       session={session}
       exportGateway={exportGateway}
+      engineRef={engineRef}
       agent={{
         session: agentSession,
         model: agentModel,
@@ -122,11 +125,19 @@ async function bootstrap() {
     model: initialImageModel,
   });
   (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
+  const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {
     store,
     getManifest: () => library.getManifest(),
     newId: () => crypto.randomUUID(),
     generateImage: (input) => imageGenerator.generate(input),
+    renderFrame: async (atFrame: number) => {
+      const engine = engineRef.current;
+      if (!engine) throw new Error("Engine not ready");
+      await engine.seek(atFrame, "exact");
+      const rgba = await engine.readRGBA();
+      return { rgba, width: engine.width, height: engine.height };
+    },
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,6 +179,7 @@ async function bootstrap() {
         sessionStore={sessionStore}
         mentionItems={mentionItems}
         aiProxyUrl={aiProxyUrl}
+        engineRef={engineRef}
       />
     </StrictMode>,
   );

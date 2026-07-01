@@ -16,7 +16,7 @@ import {
 } from "@palmier/core";
 import { TRACK_HEADER_WIDTH } from "../timeline/TrackHeaders.js";
 import type { RippleInsertSpec } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
+import type { MediaByteSource, PlaybackEngine } from "@palmier/engine";
 import { theme } from "../theme/theme.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
 import { PreviewPanel } from "../preview/PreviewPanel.js";
@@ -48,6 +48,7 @@ export interface EditorProps {
   session?: ProjectSession;
   nativeFileMenu?: boolean;
   exportGateway?: ExportGateway;
+  engineRef?: { current: PlaybackEngine | null };
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
   agent?: {
     session: AgentSession;
@@ -74,7 +75,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, onReady, agent }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, engineRef, onReady, agent }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
@@ -443,7 +444,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             }}
           />
         }
-        preview={<PreviewPanel store={store} media={media} />}
+        preview={<PreviewPanel store={store} media={media} engineRef={engineRef} />}
         timeline={<TimelinePanel store={store} dragController={dragController} />}
         inspector={<InspectorPanel store={store} library={library} />}
       />

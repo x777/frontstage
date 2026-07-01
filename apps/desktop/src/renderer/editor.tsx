@@ -20,7 +20,9 @@ declare global {
 import { DesktopGateway } from "./desktop-gateway.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
+import type { PlaybackEngine } from "@palmier/engine";
 
+const engineRef: { current: PlaybackEngine | null } = { current: null };
 const store = new EditorStore(defaultTimeline());
 const library = new MediaLibrary();
 const gateway = new DesktopGateway();
@@ -45,6 +47,13 @@ const executor = new ToolExecutor(buildCatalog(), {
   getManifest: () => library.getManifest(),
   newId: () => crypto.randomUUID(),
   generateImage: (input) => imageGenerator.generate(input),
+  renderFrame: async (atFrame: number) => {
+    const engine = engineRef.current;
+    if (!engine) throw new Error("Engine not ready");
+    await engine.seek(atFrame, "exact");
+    const rgba = await engine.readRGBA();
+    return { rgba, width: engine.width, height: engine.height };
+  },
 });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,6 +164,7 @@ function PalmierDesktopApp() {
       session={session}
       nativeFileMenu={isMac}
       exportGateway={exportGateway}
+      engineRef={engineRef}
       agent={{
         session: agentSession,
         model: agentModelId,

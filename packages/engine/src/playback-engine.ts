@@ -199,5 +199,9 @@ export class PlaybackEngine {
     return this.renderer.readPixel(x, y);
   }
 
+  async readRGBA(): Promise<Uint8Array> { return this.renderer.readRGBA(); }
+  get width(): number { return this.timeline?.width ?? 0; }
+  get height(): number { return this.timeline?.height ?? 0; }
+
   dispose(): void { this.pause(); this.audio?.dispose(); this.audioMixer?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
 }
