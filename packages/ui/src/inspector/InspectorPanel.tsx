@@ -18,6 +18,7 @@ import { theme } from "../theme/theme.js";
 import { NumberField, SliderField, ToggleField, TextField, Section } from "./fields.js";
 import { KeyframeLanes } from "./KeyframeLanes.js";
 import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
+import { ColorWheelsSection } from "./adjust/ColorWheelsSection.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
@@ -88,6 +89,7 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
           }}
         >
           <BasicCorrectionSection store={store} clipIds={selIds} />
+          <ColorWheelsSection store={store} clipIds={selIds} />
         </div>
       );
     }
@@ -368,6 +370,11 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
       {/* Basic Correction */}
       {isVisual && !isText && (
         <BasicCorrectionSection store={store} clipIds={[clipId]} />
+      )}
+
+      {/* Color Wheels */}
+      {isVisual && !isText && (
+        <ColorWheelsSection store={store} clipIds={[clipId]} />
       )}
     </div>
   );

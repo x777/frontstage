@@ -128,6 +128,8 @@ export const theme = {
     settingsPanelMin: "var(--size-settings-panel-min)",
     adjustTrack: "var(--size-adjust-track)",
     adjustThumb: "var(--size-adjust-thumb)",
+    colorWheelPad: "var(--size-color-wheel-pad)",
+    colorWheelPuck: "var(--size-color-wheel-puck)",
   },
   adjust: {
     tempCool: "var(--color-adjust-temp-cool)",
@@ -136,6 +138,8 @@ export const theme = {
     tintMagenta: "var(--color-adjust-tint-magenta)",
     lumaDark: "var(--color-adjust-luma-dark)",
     lumaLight: "var(--color-adjust-luma-light)",
+    wheelRing: "var(--color-adjust-wheel-ring)",
+    wheelCrosshair: "var(--color-adjust-wheel-crosshair)",
   },
   z: {
     menu: "var(--z-menu)",

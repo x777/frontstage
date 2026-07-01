@@ -148,6 +148,12 @@
   --size-adjust-track: 4px;
   --size-adjust-thumb: 12px;
 
+  /* Color wheel pad */
+  --size-color-wheel-pad: 96px;
+  --size-color-wheel-puck: 10px;
+  --color-adjust-wheel-ring: rgba(255,255,255,0.50);
+  --color-adjust-wheel-crosshair: rgba(255,255,255,0.25);
+
   /* Adjust gradient endpoints */
   --color-adjust-temp-cool: rgb(87, 168, 255);
   --color-adjust-temp-warm: rgb(255, 167, 72);
