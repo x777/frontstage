@@ -1,5 +1,6 @@
 import type { Mat2d, Size, Effect, BlendMode } from "@palmier/core";
-import { canonicalSort, resolveParam } from "@palmier/core";
+import { canonicalSort, resolveParam, parseGradeCurve, evalCurve, parseHueCurves, evalHueCurve } from "@palmier/core";
+import type { GradeCurve, HueCurves } from "@palmier/core";
 import type { CompositeLayer } from "./composite-layer.js";
 
 // Uniforms layout (all f32, 64 bytes / 16 floats):
@@ -368,6 +369,47 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: color.curves — CPU-baked 256×1 RGBA LUT; luma-proportional master rescale then per-channel.
+const WGSL_CURVES = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var lut: texture_2d<f32>;
+@group(0) @binding(3) var lutSamp: sampler;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let yv = rec709(c.rgb);
+  let m = textureSampleLevel(lut, lutSamp, vec2f((yv * 255.0 + 0.5) / 256.0, 0.5), 0.0);
+  var rgb = c.rgb;
+  if (yv > 1e-4) { rgb = rgb * min(m.r / yv, 8.0); } else { rgb = vec3f(m.r); }
+  rgb.r = textureSampleLevel(lut, lutSamp, vec2f((rgb.r * 255.0 + 0.5) / 256.0, 0.5), 0.0).g;
+  rgb.g = textureSampleLevel(lut, lutSamp, vec2f((rgb.g * 255.0 + 0.5) / 256.0, 0.5), 0.0).b;
+  rgb.b = textureSampleLevel(lut, lutSamp, vec2f((rgb.b * 255.0 + 0.5) / 256.0, 0.5), 0.0).a;
+  return vec4f(rgb, c.a);
+}
+`;
+
+// Effect: color.hueCurves — CPU-baked 256×1 RGB LUT indexed by hue; satScale multiplicative, sat-gate.
+const WGSL_HUE_CURVES = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var lut: texture_2d<f32>;
+@group(0) @binding(3) var lutSamp: sampler;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let hsv = rgb2hsv(c.rgb);
+  let L = textureSampleLevel(lut, lutSamp, vec2f((hsv.x * 255.0 + 0.5) / 256.0, 0.5), 0.0);
+  let dHue = (L.r - 0.5) * 2.0 * (1.0 / 12.0);
+  let satScale = (L.g - 0.5) * 2.0;
+  let dLum = (L.b - 0.5) * 2.0 * 0.5;
+  let gate = smoothstep(0.04, 0.18, hsv.y);
+  return vec4f(hsv2rgb(vec3f(fract(hsv.x + dHue * gate), clamp(hsv.y * (1.0 + satScale * gate), 0.0, 1.0), clamp(hsv.z + dLum * gate, 0.0, 1.0))), c.a);
+}
+`;
+
 // Normal-blend composite of an effected layer into the accumulator (opacity applied via alpha, ALPHA_BLEND state).
 const WGSL_COMPOSITE = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Comp { opacity: f32 };
@@ -397,7 +439,8 @@ type SourceBinding =
 
 interface EffectStep {
   type: string;
-  uBuf: GPUBuffer;
+  uBuf?: GPUBuffer;
+  lutTex?: GPUTexture;
 }
 
 type LayerPlan =
@@ -420,6 +463,8 @@ interface RendererResources {
   tempModule: GPUShaderModule;
   vibModule: GPUShaderModule;
   wheelsModule: GPUShaderModule;
+  curvesModule: GPUShaderModule;
+  hueCurvesModule: GPUShaderModule;
   compositeModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
@@ -430,6 +475,8 @@ interface RendererResources {
   extLayout: GPUPipelineLayout;
   copyLayout: GPUPipelineLayout;
   fxLayout: GPUPipelineLayout;
+  fxLutBgl: GPUBindGroupLayout;
+  fxLutLayout: GPUPipelineLayout;
   // eager blit pipelines (always used)
   blitCanvasPipeline: GPURenderPipeline;
   blitReadbackPipeline: GPURenderPipeline;
@@ -465,6 +512,8 @@ export class FrameRenderer {
   private tempModule: GPUShaderModule;
   private vibModule: GPUShaderModule;
   private wheelsModule: GPUShaderModule;
+  private curvesModule: GPUShaderModule;
+  private hueCurvesModule: GPUShaderModule;
   private compositeModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
@@ -475,6 +524,8 @@ export class FrameRenderer {
   private extLayout: GPUPipelineLayout;
   private copyLayout: GPUPipelineLayout;
   private fxLayout: GPUPipelineLayout;
+  private fxLutBgl: GPUBindGroupLayout;
+  private fxLutLayout: GPUPipelineLayout;
   // blit pipelines (copy accumulator → canvas or readbackTex, no blend)
   private blitCanvasPipeline: GPURenderPipeline;
   private blitReadbackPipeline: GPURenderPipeline;
@@ -502,6 +553,8 @@ export class FrameRenderer {
     this.tempModule = r.tempModule;
     this.vibModule = r.vibModule;
     this.wheelsModule = r.wheelsModule;
+    this.curvesModule = r.curvesModule;
+    this.hueCurvesModule = r.hueCurvesModule;
     this.compositeModule = r.compositeModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
@@ -510,6 +563,8 @@ export class FrameRenderer {
     this.extLayout = r.extLayout;
     this.copyLayout = r.copyLayout;
     this.fxLayout = r.fxLayout;
+    this.fxLutBgl = r.fxLutBgl;
+    this.fxLutLayout = r.fxLutLayout;
     this.blitCanvasPipeline = r.blitCanvasPipeline;
     this.blitReadbackPipeline = r.blitReadbackPipeline;
     this.readbackTex = r.readbackTex;
@@ -541,6 +596,8 @@ export class FrameRenderer {
     const tempModule = device.createShaderModule({ code: WGSL_TEMP });
     const vibModule = device.createShaderModule({ code: WGSL_VIB });
     const wheelsModule = device.createShaderModule({ code: WGSL_WHEELS });
+    const curvesModule = device.createShaderModule({ code: WGSL_CURVES });
+    const hueCurvesModule = device.createShaderModule({ code: WGSL_HUE_CURVES });
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
 
     const extBgl = device.createBindGroupLayout({
@@ -580,6 +637,16 @@ export class FrameRenderer {
     const blitLayout = device.createPipelineLayout({ bindGroupLayouts: [blitBgl] });
     const fxLayout = device.createPipelineLayout({ bindGroupLayouts: [fxBgl] });
 
+    const fxLutBgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      ],
+    });
+    const fxLutLayout = device.createPipelineLayout({ bindGroupLayouts: [fxLutBgl] });
+
     // Blit pipelines: copy the (rgba16float) accumulator → canvas or readback (rgba16float is filterable).
     const blitCanvasPipeline = device.createRenderPipeline({
       layout: blitLayout,
@@ -607,9 +674,9 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, compositeModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, compositeModule,
       extBgl, copyBgl, blitBgl, fxBgl,
-      extLayout, copyLayout, fxLayout,
+      extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout,
       blitCanvasPipeline, blitReadbackPipeline,
       readbackTex,
       fxPing: makeFxTexture(device, cw, ch),
@@ -732,6 +799,20 @@ export class FrameRenderer {
           fragment: { module: this.wheelsModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
+      case "color.curves":
+        return this.pipelineFor("effect:color.curves", () => this.device.createRenderPipeline({
+          layout: this.fxLutLayout,
+          vertex: { module: this.curvesModule, entryPoint: "vs" },
+          fragment: { module: this.curvesModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "color.hueCurves":
+        return this.pipelineFor("effect:color.hueCurves", () => this.device.createRenderPipeline({
+          layout: this.fxLutLayout,
+          vertex: { module: this.hueCurvesModule, entryPoint: "vs" },
+          fragment: { module: this.hueCurvesModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
       default:
         return null;
     }
@@ -773,6 +854,40 @@ export class FrameRenderer {
       default:
         return null;
     }
+  }
+
+  private bakeCurvesLut(device: GPUDevice, curve: GradeCurve): GPUTexture {
+    const data = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      const x = i / 255;
+      data[i * 4 + 0] = Math.round(evalCurve(curve.master, x) * 255);
+      data[i * 4 + 1] = Math.round(evalCurve(curve.red, x) * 255);
+      data[i * 4 + 2] = Math.round(evalCurve(curve.green, x) * 255);
+      data[i * 4 + 3] = Math.round(evalCurve(curve.blue, x) * 255);
+    }
+    const tex = device.createTexture({
+      size: [256, 1], format: "rgba8unorm",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    device.queue.writeTexture({ texture: tex }, data, { bytesPerRow: 1024 }, [256, 1]);
+    return tex;
+  }
+
+  private bakeHueCurvesLut(device: GPUDevice, curves: HueCurves): GPUTexture {
+    const data = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      const x = i / 255;
+      data[i * 4 + 0] = Math.round(evalHueCurve(curves.hueVsHue, x) * 255);
+      data[i * 4 + 1] = Math.round(evalHueCurve(curves.hueVsSat, x) * 255);
+      data[i * 4 + 2] = Math.round(evalHueCurve(curves.hueVsLum, x) * 255);
+      data[i * 4 + 3] = 255;
+    }
+    const tex = device.createTexture({
+      size: [256, 1], format: "rgba8unorm",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    device.queue.writeTexture({ texture: tex }, data, { bytesPerRow: 1024 }, [256, 1]);
+    return tex;
   }
 
   private resizeIntermediates(w: number, h: number): void {
@@ -874,6 +989,18 @@ export class FrameRenderer {
           const capBuf = uniformBuffer(bigUniform(layer, 1), UNIFORMS_F32 * 4);
           const steps: EffectStep[] = [];
           for (const eff of canonicalSort(enabledEffects)) {
+            if (eff.type === "color.curves") {
+              const lutTex = this.bakeCurvesLut(device, parseGradeCurve(eff.params.curve?.string));
+              tempTextures.push(lutTex);
+              steps.push({ type: eff.type, lutTex });
+              continue;
+            }
+            if (eff.type === "color.hueCurves") {
+              const lutTex = this.bakeHueCurvesLut(device, parseHueCurves(eff.params.curves?.string));
+              tempTextures.push(lutTex);
+              steps.push({ type: eff.type, lutTex });
+              continue;
+            }
             const data = this.effectStepData(eff);
             if (!data) continue; // unimplemented effect type this milestone
             steps.push({ type: eff.type, uBuf: uniformBuffer(data, Math.max(16, data.byteLength)) });
@@ -971,14 +1098,26 @@ export class FrameRenderer {
             colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
           });
           pass.setPipeline(pipe);
-          pass.setBindGroup(0, device.createBindGroup({
-            layout: this.fxBgl,
-            entries: [
-              { binding: 0, resource: ping.createView() },
-              { binding: 1, resource: this.sampler },
-              { binding: 2, resource: { buffer: step.uBuf } },
-            ],
-          }));
+          if (step.lutTex) {
+            pass.setBindGroup(0, device.createBindGroup({
+              layout: this.fxLutBgl,
+              entries: [
+                { binding: 0, resource: ping.createView() },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: step.lutTex.createView() },
+                { binding: 3, resource: this.sampler },
+              ],
+            }));
+          } else {
+            pass.setBindGroup(0, device.createBindGroup({
+              layout: this.fxBgl,
+              entries: [
+                { binding: 0, resource: ping.createView() },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: { buffer: step.uBuf! } },
+              ],
+            }));
+          }
           pass.draw(4);
           pass.end();
           const tmp = ping;

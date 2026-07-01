@@ -2,7 +2,7 @@ import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer 
 import {
   affineTransform, defaultTransform, defaultCrop, type Effect,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
-  applyColorWheels,
+  applyColorWheels, applyCurves, applyHueCurves, parseGradeCurve, parseHueCurves,
 } from "@palmier/core";
 
 const W = 200, H = 200;
@@ -52,6 +52,30 @@ async function main() {
       layer.effects = [{ id: "e", type: "color.saturation", enabled: true, params: { amount: { value: 0 } } }];
       await r.composite([layer], size);
       frame.close();
+    } else if (useCase === "curves") {
+      const curveJson = JSON.stringify({ master: [{ x: 0, y: 0 }, { x: 0.5, y: 0.75 }, { x: 1, y: 1 }] });
+      const inp = { r: 102 / 255, g: 128 / 255, b: 153 / 255 };
+      const f = solidFrame(W, H, "rgb(102,128,153)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "color.curves", enabled: true, params: { curve: { string: curveJson } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+      const expC = applyCurves(inp, parseGradeCurve(curveJson));
+      window.__expected = [expC.r, expC.g, expC.b];
+    } else if (useCase === "hueCurves") {
+      const curvesJson = JSON.stringify({ hueVsHue: [{ x: 0, y: 0.75 }, { x: 1, y: 0.75 }] });
+      const inp = { r: 1, g: 0, b: 0 };
+      const f = solidFrame(W, H, "rgb(255,0,0)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "color.hueCurves", enabled: true, params: { curves: { string: curvesJson } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+      const expH = applyHueCurves(inp, parseHueCurves(curvesJson));
+      window.__expected = [expH.r, expH.g, expH.b];
     } else {
       // Parity tests: mid-color frame, one effect per case, CPU-expected exported to window.__expected.
       const frame = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);

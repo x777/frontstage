@@ -54,3 +54,21 @@ for (const c of PARITY_CASES) {
     }
   });
 }
+
+// LUT-based effects: ±4 tolerance (uint8 LUT quantisation).
+const LUT_CASES = ["curves", "hueCurves"] as const;
+
+for (const c of LUT_CASES) {
+  test(`color.${c} GPU matches CPU within ±4 (LUT quantisation)`, async ({ page }) => {
+    await page.goto(`/effect.html?case=${c}`);
+    await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+    const expected = await page.evaluate(
+      () => (window as unknown as { __expected: [number, number, number] }).__expected,
+    );
+    const p = await px(page, 100, 100);
+    for (let ch = 0; ch < 3; ch++) {
+      const exp8 = Math.round(expected[ch]! * 255);
+      expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
+    }
+  });
+}
