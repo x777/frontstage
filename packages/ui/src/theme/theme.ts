@@ -142,6 +142,13 @@ export const theme = {
     wheelCrosshair: "var(--color-adjust-wheel-crosshair)",
     wheelPuckFill: "var(--color-adjust-wheel-puck-fill)",
     wheelPuckStroke: "var(--color-adjust-wheel-puck-stroke)",
+    curveGrid: "var(--color-adjust-curve-grid)",
+    curveBorder: "var(--color-adjust-curve-border)",
+    curveIdentity: "var(--color-adjust-curve-identity)",
+    curveY: "var(--color-adjust-curve-y)",
+    curveR: "var(--color-adjust-curve-r)",
+    curveG: "var(--color-adjust-curve-g)",
+    curveB: "var(--color-adjust-curve-b)",
   },
   z: {
     menu: "var(--z-menu)",

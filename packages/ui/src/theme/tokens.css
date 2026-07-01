@@ -164,6 +164,15 @@
   --color-adjust-luma-dark: rgb(0, 0, 0);
   --color-adjust-luma-light: rgb(255, 255, 255);
 
+  /* Curve editor */
+  --color-adjust-curve-grid: rgba(255,255,255,0.12);
+  --color-adjust-curve-border: rgba(255,255,255,0.16);
+  --color-adjust-curve-identity: rgba(255,255,255,0.20);
+  --color-adjust-curve-y: #ffffff;
+  --color-adjust-curve-r: #ff4444;
+  --color-adjust-curve-g: #44cc44;
+  --color-adjust-curve-b: #4488ff;
+
   /* Overlay tokens */
   --size-overlay-handle: 10px;
   --color-overlay-transform-border: rgba(255, 255, 255, 0.9);
