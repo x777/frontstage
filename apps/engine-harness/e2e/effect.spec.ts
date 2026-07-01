@@ -263,24 +263,34 @@ test("detail.clarity clarity=0 is a passthrough", async ({ page }) => {
   expect(Math.abs(p[2]! - 128)).toBeLessThanOrEqual(3);
 });
 
-// stylize.glow intensity=0 is a passthrough (black bg stays black).
+// stylize.glow intensity=0 is a passthrough (grey bg stays grey).
+// With the swap bug, the composite reads blurred_bright (≈0, black) instead of glow_result (=orig=grey).
 test("stylize.glow intensity=0 is a passthrough", async ({ page }) => {
   await page.goto("/effect.html?case=glow&intensity=0");
   await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
-  // Off-center pixel far from the bright spot should be black.
+  // Far pixel must stay the grey background (≈64). If the swap bug is present, it reads 0 (black).
   const p = await px(page, 10, 10);
-  expect(p[0]!).toBeLessThan(10);
-  expect(p[1]!).toBeLessThan(10);
-  expect(p[2]!).toBeLessThan(10);
+  expect(p[0]!).toBeGreaterThan(50);
+  expect(p[0]!).toBeLessThan(80);
+  expect(p[1]!).toBeGreaterThan(50);
+  expect(p[1]!).toBeLessThan(80);
+  expect(p[2]!).toBeGreaterThan(50);
+  expect(p[2]!).toBeLessThan(80);
 });
 
-// stylize.glow intensity=1: pixels just outside the bright spot (but not in it) should be non-zero (glow bleeds).
+// stylize.glow intensity=1: pixels near the bright spot should be brighter than the grey background.
+// Also verifies glow composites glow_result (orig+blurred), not just the blurred-bright intermediate.
 test("stylize.glow intensity=1 brightens pixels around a bright spot", async ({ page }) => {
   await page.goto("/effect.html?case=glow&intensity=1");
   await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
-  // 4px from the spot edge (x=105, spot ends at x=101) has measurable glow with radius=15 gaussian.
+  // Near spot (x=105): glow bleeds, pixel > grey background (64 per channel).
   const near = await px(page, 105, 100);
   expect(near[0]! + near[1]! + near[2]!).toBeGreaterThan(15);
+  // Far from spot (x=10): glow contribution ≈0, pixel must stay close to the grey background (≈64).
+  // With the swap bug, composite reads blurred_bright (≈0) instead of glow_result (orig+blurred≈64).
+  const far = await px(page, 10, 10);
+  expect(far[0]!).toBeGreaterThan(50);
+  expect(far[0]!).toBeLessThan(80);
 });
 
 // effect chain: exposure(ev=1) → gaussian(radius=1) on solid mid-grey.
@@ -292,4 +302,29 @@ test("effect chain: exposure → gaussian brightens a solid grey frame", async (
   // Input 128; after ev=1: sRGB(lin(0.502)*2)≈172. Gaussian on solid is identity.
   expect(p[0]!).toBeGreaterThan(150);
   expect(p[0]!).toBeLessThan(210);
+});
+
+// detail.clarity clarity=0.8 increases local contrast at a step edge.
+// Input: left half dark-grey (64), right half light-grey (192), edge at x=100.
+// With large-radius (20px) gaussian local average, near-edge pixels are pushed further from their mean.
+test("detail.clarity clarity=0.8 pushes edge pixel further from local mean", async ({ page }) => {
+  await page.goto("/effect.html?case=clarity-edge");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  // Dark side near edge (x=95): local mean is above 64 (light side bleeds in), clarity pushes this darker.
+  const edgeDark = await px(page, 95, 100);
+  expect(edgeDark[0]!).toBeLessThan(50);
+  // Far from edge on dark side (x=10): local mean ≈ 64 (all dark samples), clarity is a no-op.
+  const farDark = await px(page, 10, 100);
+  expect(farDark[0]!).toBeGreaterThan(54);
+  expect(farDark[0]!).toBeLessThan(74);
+});
+
+// blur.sharpen amount=0 is a passthrough (output = input).
+test("blur.sharpen amount=0 is a passthrough", async ({ page }) => {
+  await page.goto("/effect.html?case=sharpen-zero");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  expect(Math.abs(p[0]! - 128)).toBeLessThanOrEqual(3);
+  expect(Math.abs(p[1]! - 128)).toBeLessThanOrEqual(3);
+  expect(Math.abs(p[2]! - 128)).toBeLessThanOrEqual(3);
 });

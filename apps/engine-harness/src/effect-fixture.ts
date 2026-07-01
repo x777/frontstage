@@ -273,12 +273,13 @@ async function main() {
       await r.composite([layer], size);
       f.close();
     } else if (useCase === "glow") {
-      // Small bright spot on black; glow at intensity=1, threshold=0.5, radius=15 bleeds around spot.
+      // Small bright spot on mid-grey (64,64,64) background; glow bleeds around spot with intensity=1.
+      // Non-black bg ensures glow_result (orig+blurred) ≠ blurred alone, making the swap bug detectable.
       const intensityStr = params.get("intensity") ?? "1";
       const intensity = parseFloat(intensityStr);
       const o = new OffscreenCanvas(W, H);
       const c2 = o.getContext("2d")!;
-      c2.fillStyle = "rgb(0,0,0)";
+      c2.fillStyle = "rgb(64,64,64)";
       c2.fillRect(0, 0, W, H);
       c2.fillStyle = "rgb(255,255,255)";
       c2.fillRect(W / 2 - 2, H / 2 - 2, 4, 4); // 4×4 white spot at center
@@ -288,6 +289,31 @@ async function main() {
         effects: [{ id: "e", type: "stylize.glow", enabled: true, params: {
           intensity: { value: intensity }, threshold: { value: 0.5 }, radius: { value: 15 }, warmth: { value: 0 },
         }}],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "clarity-edge") {
+      // Step edge: left half dark-grey (64), right half light-grey (192), edge at x=100.
+      // clarity=0.8 pushes near-edge pixels further from the local mean.
+      const o = new OffscreenCanvas(W, H);
+      const c2 = o.getContext("2d")!;
+      c2.fillStyle = "rgb(64,64,64)";
+      c2.fillRect(0, 0, W / 2, H);
+      c2.fillStyle = "rgb(192,192,192)";
+      c2.fillRect(W / 2, 0, W / 2, H);
+      const f = new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "detail.clarity", enabled: true, params: { clarity: { value: 0.8 }, dehaze: { value: 0 } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "sharpen-zero") {
+      // Solid mid-grey with sharpen amount=0: passthrough, output = input.
+      const f = solidFrame(W, H, "rgb(128,128,128)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "blur.sharpen", enabled: true, params: { amount: { value: 0 } } }],
       };
       await r.composite([layer], size);
       f.close();

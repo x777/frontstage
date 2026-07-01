@@ -1953,7 +1953,6 @@ export class FrameRenderer {
             gfPass.setPipeline(this.glowFx2Pipeline());
             gfPass.setBindGroup(0, device.createBindGroup({ layout: this.fx2Bgl, entries: [{ binding: 0, resource: pong.createView() }, { binding: 1, resource: this.fxScratch.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: gfBuf } }] }));
             gfPass.draw(4); gfPass.end();
-            const gtmp = ping; ping = pong; pong = gtmp;
             continue;
           }
 
