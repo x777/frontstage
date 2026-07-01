@@ -1,7 +1,37 @@
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { AdjustmentRow } from "../src/inspector/adjust/index.js";
 import { AdjustSection } from "../src/inspector/adjust/index.js";
 import { ScrubbableNumberField } from "../src/inspector/adjust/index.js";
+import { BasicCorrectionSection } from "../src/inspector/adjust/index.js";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
+import type { Clip, Track } from "@palmier/core";
+
+function makeClip(id: string): Clip {
+  return {
+    id,
+    mediaRef: "m",
+    mediaType: "video",
+    sourceClipType: "video",
+    startFrame: 0,
+    durationFrames: 30,
+    trimStartFrame: 0,
+    trimEndFrame: 0,
+    speed: 1,
+    volume: 1,
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+    fadeInInterpolation: "linear",
+    fadeOutInterpolation: "linear",
+    opacity: 1,
+    transform: defaultTransform(),
+    crop: defaultCrop(),
+  };
+}
+
+function makeTimeline(clips: Clip[]) {
+  const track: Track = { id: "t1", type: "video", muted: false, hidden: false, syncLocked: false, clips };
+  return { ...defaultTimeline(), tracks: [track] };
+}
 
 const fmt = (v: number) => v.toFixed(2);
 
@@ -286,4 +316,42 @@ test("ScrubbableNumberField clamps value to max on Enter", () => {
   act(() => { fireEvent.keyDown(input, { key: "Enter" }); });
   expect(onChange).toHaveBeenCalledWith(3);
   expect(onCommit).toHaveBeenCalled();
+});
+
+// --- BasicCorrectionSection integration tests ---
+
+test("BasicCorrectionSection renders 10 labelled rows", () => {
+  const store = new EditorStore(makeTimeline([makeClip("c1")]));
+  render(<BasicCorrectionSection store={store} clipIds={["c1"]} />);
+  const labels = [
+    "Exposure", "Contrast", "Highlights", "Shadows", "Blacks", "Whites",
+    "Temperature", "Tint", "Vibrance", "Saturation",
+  ];
+  for (const label of labels) {
+    expect(screen.getByText(label)).toBeInTheDocument();
+  }
+});
+
+test("BasicCorrectionSection ArrowRight on Exposure dispatches color.exposure effect", () => {
+  const store = new EditorStore(makeTimeline([makeClip("c1")]));
+  render(<BasicCorrectionSection store={store} clipIds={["c1"]} />);
+  const expRow = screen.getByTestId("adjustment-row-Exposure");
+  const slider = within(expRow).getByRole("slider");
+  act(() => { fireEvent.keyDown(slider, { key: "ArrowRight" }); });
+  const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  const expEffect = clip.effects?.find((e) => e.type === "color.exposure");
+  expect(expEffect).toBeDefined();
+  expect(expEffect?.params.ev?.value).toBeGreaterThan(0);
+});
+
+test("BasicCorrectionSection shows — for mixed exposure across 2 clips", () => {
+  const clip1: Clip = {
+    ...makeClip("c1"),
+    effects: [{ id: "e1", type: "color.exposure", enabled: true, params: { ev: { value: 1.5 } } }],
+  };
+  const clip2 = makeClip("c2");
+  const store = new EditorStore(makeTimeline([clip1, clip2]));
+  render(<BasicCorrectionSection store={store} clipIds={["c1", "c2"]} />);
+  const expRow = screen.getByTestId("adjustment-row-Exposure");
+  expect(within(expRow).getByText("—")).toBeInTheDocument();
 });

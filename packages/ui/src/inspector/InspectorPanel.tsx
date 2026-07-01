@@ -17,6 +17,7 @@ import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
 import { NumberField, SliderField, ToggleField, TextField, Section } from "./fields.js";
 import { KeyframeLanes } from "./KeyframeLanes.js";
+import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
@@ -35,48 +36,67 @@ function rgbaToHex(r: number, g: number, b: number): string {
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
+function isNonTextVisual(c: Clip): boolean {
+  return VISUAL_TYPES.has(c.mediaType) && c.mediaType !== "text";
+}
+
 export function InspectorPanel({ store, library }: InspectorPanelProps) {
   const selection = useStore(store, (s) => s.selection);
   const playhead = useStore(store, (s) => s.playhead);
   const timeline = useStore(store, (s) => s.timeline);
 
-  if (selection.size !== 1) {
-    return (
-      <div
-        data-testid="inspector-empty"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-          color: theme.text.muted,
-          fontSize: theme.fontSize.sm,
-        }}
-      >
-        No clip selected
-      </div>
-    );
+  const emptyState = (
+    <div
+      data-testid="inspector-empty"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        color: theme.text.muted,
+        fontSize: theme.fontSize.sm,
+      }}
+    >
+      No clip selected
+    </div>
+  );
+
+  if (selection.size === 0) return emptyState;
+
+  // Multi-selection: show Basic Correction if all selected clips are non-text visual
+  if (selection.size > 1) {
+    const selIds = [...selection];
+    const selClips = selIds.flatMap((id) => {
+      const loc = findClip(timeline, id);
+      if (!loc) return [];
+      const track = timeline.tracks[loc.trackIndex];
+      if (!track) return [];
+      const clip = track.clips[loc.clipIndex];
+      if (!clip) return [];
+      return [clip];
+    });
+    if (selClips.length > 0 && selClips.every(isNonTextVisual)) {
+      return (
+        <div
+          data-testid="inspector-panel"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            overflowY: "auto",
+            background: theme.bg.surface,
+          }}
+        >
+          <BasicCorrectionSection store={store} clipIds={selIds} />
+        </div>
+      );
+    }
+    return emptyState;
   }
 
   const clipId = [...selection][0]!;
   const loc = findClip(timeline, clipId);
-  if (!loc) {
-    return (
-      <div
-        data-testid="inspector-empty"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-          color: theme.text.muted,
-          fontSize: theme.fontSize.sm,
-        }}
-      >
-        No clip selected
-      </div>
-    );
-  }
+  if (!loc) return emptyState;
 
   const clip = timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
   const entry = library?.entry(clip.mediaRef);
@@ -343,6 +363,11 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
             }}
           />
         </Section>
+      )}
+
+      {/* Basic Correction */}
+      {isVisual && !isText && (
+        <BasicCorrectionSection store={store} clipIds={[clipId]} />
       )}
     </div>
   );

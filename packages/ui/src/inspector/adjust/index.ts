@@ -6,3 +6,5 @@ export { AdjustSection } from "./AdjustSection.js";
 export type { AdjustSectionProps } from "./AdjustSection.js";
 export { AdjustmentRow, adjustmentRow } from "./AdjustmentRow.js";
 export type { AdjustmentRowProps } from "./AdjustmentRow.js";
+export { BasicCorrectionSection } from "./BasicCorrectionSection.js";
+export type { BasicCorrectionSectionProps } from "./BasicCorrectionSection.js";
