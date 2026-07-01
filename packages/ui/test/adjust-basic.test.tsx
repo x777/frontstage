@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { AdjustmentRow } from "../src/inspector/adjust/index.js";
 import { AdjustSection } from "../src/inspector/adjust/index.js";
+import { ScrubbableNumberField } from "../src/inspector/adjust/index.js";
 
 const fmt = (v: number) => v.toFixed(2);
 
@@ -54,7 +55,8 @@ test("ArrowRight on AdjustSlider calls onChange then onCommit", () => {
   );
   const slider = screen.getByRole("slider");
   act(() => { fireEvent.keyDown(slider, { key: "ArrowRight" }); });
-  expect(onChange).toHaveBeenCalledWith(expect.any(Number));
+  // step = (max - min) * 0.01 = 6 * 0.01 = 0.06; value(0) + step = 0.06
+  expect(onChange).toHaveBeenCalledWith(expect.closeTo(0.06, 5));
   expect(onCommit).toHaveBeenCalled();
 });
 
@@ -176,11 +178,12 @@ test("AdjustSection header click calls onToggle", () => {
 
 test("AdjustSection reset button fires onReset when canReset=true", () => {
   const onReset = vi.fn();
+  const onToggle = vi.fn();
   render(
     <AdjustSection
       title="Basic"
       expanded={false}
-      onToggle={() => {}}
+      onToggle={onToggle}
       canReset={true}
       onReset={onReset}
       enabled={true}
@@ -192,6 +195,7 @@ test("AdjustSection reset button fires onReset when canReset=true", () => {
   );
   act(() => { fireEvent.click(screen.getByTestId("adjust-section-reset-Basic")); });
   expect(onReset).toHaveBeenCalledOnce();
+  expect(onToggle).not.toHaveBeenCalled();
 });
 
 test("AdjustSection reset button absent when canReset=false", () => {
@@ -214,11 +218,12 @@ test("AdjustSection reset button absent when canReset=false", () => {
 
 test("AdjustSection enable checkbox fires onToggleEnabled", () => {
   const onToggleEnabled = vi.fn();
+  const onToggle = vi.fn();
   render(
     <AdjustSection
       title="Basic"
       expanded={false}
-      onToggle={() => {}}
+      onToggle={onToggle}
       canReset={false}
       onReset={() => {}}
       enabled={true}
@@ -231,4 +236,54 @@ test("AdjustSection enable checkbox fires onToggleEnabled", () => {
   const checkbox = screen.getByTestId("adjust-section-enable-Basic");
   act(() => { fireEvent.click(checkbox); });
   expect(onToggleEnabled).toHaveBeenCalledOnce();
+  expect(onToggle).not.toHaveBeenCalled();
+});
+
+test("ScrubbableNumberField Esc cancels edit without calling onChange or onCommit", () => {
+  const onChange = vi.fn();
+  const onCommit = vi.fn();
+  render(
+    <ScrubbableNumberField
+      value={1.5}
+      min={-3}
+      max={3}
+      onChange={onChange}
+      onCommit={onCommit}
+      format={fmt}
+    />,
+  );
+  const field = screen.getByTestId("scrub-field");
+  field.setPointerCapture = vi.fn();
+  act(() => { fireEvent.pointerDown(field, { pointerId: 1, clientX: 100 }); });
+  act(() => { fireEvent.pointerUp(field, { pointerId: 1, clientX: 100 }); });
+  const input = screen.getByTestId("scrub-field-input");
+  act(() => { fireEvent.change(input, { target: { value: "2.50" } }); });
+  act(() => { fireEvent.keyDown(input, { key: "Escape" }); });
+  expect(onChange).not.toHaveBeenCalled();
+  expect(onCommit).not.toHaveBeenCalled();
+  expect(screen.getByTestId("scrub-field")).toHaveTextContent("1.50");
+});
+
+test("ScrubbableNumberField clamps value to max on Enter", () => {
+  const onChange = vi.fn();
+  const onCommit = vi.fn();
+  render(
+    <ScrubbableNumberField
+      value={1.5}
+      min={-3}
+      max={3}
+      onChange={onChange}
+      onCommit={onCommit}
+      format={fmt}
+    />,
+  );
+  const field = screen.getByTestId("scrub-field");
+  field.setPointerCapture = vi.fn();
+  act(() => { fireEvent.pointerDown(field, { pointerId: 1, clientX: 100 }); });
+  act(() => { fireEvent.pointerUp(field, { pointerId: 1, clientX: 100 }); });
+  const input = screen.getByTestId("scrub-field-input");
+  act(() => { fireEvent.change(input, { target: { value: "999" } }); });
+  act(() => { fireEvent.keyDown(input, { key: "Enter" }); });
+  expect(onChange).toHaveBeenCalledWith(3);
+  expect(onCommit).toHaveBeenCalled();
 });

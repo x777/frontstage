@@ -43,6 +43,7 @@
   --opacity-prominent: 0.80;
   --opacity-high: 0.9;
   --opacity-opaque: 1;
+  --opacity-mix-fill: 0.3;
 
   /* Radius (px) */
   --radius-xs: 3px;

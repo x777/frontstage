@@ -23,6 +23,7 @@ export function ScrubbableNumberField({
   const [editText, setEditText] = useState("");
   const scrubRef = useRef<{ startX: number; startValue: number; moved: boolean } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef(false);
 
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
 
@@ -58,15 +59,15 @@ export function ScrubbableNumberField({
   };
 
   const commitEdit = () => {
-    const parsed = parseFloat(editText);
-    if (!isNaN(parsed)) {
-      onChange(clamp(parsed));
-      onCommit();
+    if (!cancelRef.current) {
+      const parsed = parseFloat(editText);
+      if (!isNaN(parsed)) { onChange(clamp(parsed)); onCommit(); }
     }
+    cancelRef.current = false;
     setEditing(false);
   };
 
-  const cancelEdit = () => setEditing(false);
+  const cancelEdit = () => { cancelRef.current = true; setEditing(false); };
 
   if (editing) {
     return (

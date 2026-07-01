@@ -88,7 +88,7 @@ export function AdjustSlider({
       ref={trackRef}
       role="slider"
       tabIndex={0}
-      aria-valuenow={value ?? def}
+      aria-valuenow={value ?? (min + max) / 2}
       aria-valuemin={min}
       aria-valuemax={max}
       onPointerDown={handlePointerDown}
@@ -117,7 +117,7 @@ export function AdjustSlider({
             width: `${frac * 100}%`,
             borderRadius: theme.radius.xl,
             background: theme.text.primary,
-            opacity: mixed ? 0.3 : 1,
+            opacity: mixed ? theme.opacityNum.mixedFill : undefined,
             pointerEvents: "none",
           }}
         />

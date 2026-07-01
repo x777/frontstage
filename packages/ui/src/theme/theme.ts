@@ -47,6 +47,9 @@ export const theme = {
     high: "var(--opacity-high)",
     opaque: "var(--opacity-opaque)",
   },
+  opacityNum: {
+    mixedFill: 0.3,
+  },
   shadow: {
     lg: "var(--shadow-lg)",
   },
