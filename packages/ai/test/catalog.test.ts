@@ -28,6 +28,8 @@ const EXPECTED_NAMES = [
   "generate_image",
   "ripple_delete_ranges",
   "insert_clips",
+  "apply_color",
+  "apply_effect",
 ] as const;
 
 function makeClip(id: string) {
@@ -86,15 +88,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 17 specs", () => {
+  test("returns exactly 19 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(17);
+    expect(catalog).toHaveLength(19);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(17);
+    expect(new Set(names).size).toBe(19);
   });
 
   test("names match the expected list exactly", () => {
