@@ -119,8 +119,9 @@ export function setClipEffectsCommand(clipIds: string[], effectsFor: (clip: Clip
 }
 
 export function setClipBlendModeCommand(clipIds: string[], mode: BlendMode | undefined): Command {
+  const normalized = mode === "normal" ? undefined : mode; // Normal is the nil default
   return {
     label: "Blend Mode",
-    apply: (tl: Timeline) => clipIds.reduce((t, id) => replaceClip(t, id, (c) => ({ ...c, blendMode: mode })), tl),
+    apply: (tl: Timeline) => clipIds.reduce((t, id) => replaceClip(t, id, (c) => ({ ...c, blendMode: normalized })), tl),
   };
 }

@@ -164,6 +164,16 @@ describe("effect store commands", () => {
     expect(clips[1]!.effects![0]!.type).toBe("color.exposure");
   });
 
+  it("setClipEffectsCommand is ONE undo step across multiple clips", () => {
+    const store = new EditorStore(make2ClipTimeline());
+    store.dispatch(setClipEffectsCommand(["c1", "c2"], (c) => setEffectParam(c.effects, "color.exposure", "ev", 1, snid)));
+    store.undo();
+    const clips = store.getSnapshot().timeline.tracks[0]!.clips;
+    expect(clips[0]!.effects).toBeUndefined(); // both restored in a single undo
+    expect(clips[1]!.effects).toBeUndefined();
+    expect(store.canUndo()).toBe(false);
+  });
+
   it("setClipEffectsCommand normalizes empty array to undefined", () => {
     const store = new EditorStore(make2ClipTimeline());
     store.dispatch(setClipEffectsCommand(["c1"], () => [], "k"));
@@ -185,6 +195,13 @@ describe("effect store commands", () => {
     store.dispatch(setClipBlendModeCommand(["c1"], "multiply"));
     expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.blendMode).toBe("multiply");
     store.dispatch(setClipBlendModeCommand(["c1"], undefined));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.blendMode).toBeUndefined();
+  });
+
+  it("setClipBlendModeCommand normalizes 'normal' to undefined", () => {
+    const store = new EditorStore(make2ClipTimeline());
+    store.dispatch(setClipBlendModeCommand(["c1"], "multiply"));
+    store.dispatch(setClipBlendModeCommand(["c1"], "normal"));
     expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.blendMode).toBeUndefined();
   });
 });
