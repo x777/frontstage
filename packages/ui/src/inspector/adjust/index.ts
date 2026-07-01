@@ -26,4 +26,6 @@ export { HueCurveEditor } from "./HueCurveEditor.js";
 export type { HueCurveEditorProps } from "./HueCurveEditor.js";
 export { HueCurvesSection } from "./HueCurvesSection.js";
 export type { HueCurvesSectionProps } from "./HueCurvesSection.js";
+export { EffectsSection } from "./EffectsSection.js";
+export type { EffectsSectionProps } from "./EffectsSection.js";
 export { computeFrameHistogram, computeFrameHistograms } from "./frame-histogram.js";

@@ -46,5 +46,5 @@ export type { SettingsPanelProps, KeyConfig } from "./agent/SettingsPanel.js";
 export { ModelPicker } from "./agent/ModelPicker.js";
 export type { ModelPickerProps } from "./agent/ModelPicker.js";
 export { localProjectStore } from "./storage/local-project-store.js";
-export { Select, BlendControl, AdjustSlider, ScrubbableNumberField, AdjustSection, AdjustmentRow, adjustmentRow, ColorWheelPad, ColorWheelControl, ColorWheelsSection, CurveEditor, CurvesSection } from "./inspector/adjust/index.js";
-export type { SelectProps, BlendControlProps, AdjustSliderProps, ScrubbableNumberFieldProps, AdjustSectionProps, AdjustmentRowProps, ColorWheelPadProps, ColorWheelControlProps, ColorWheelsSectionProps, CurveEditorProps, CurvesSectionProps } from "./inspector/adjust/index.js";
+export { Select, BlendControl, AdjustSlider, ScrubbableNumberField, AdjustSection, AdjustmentRow, adjustmentRow, ColorWheelPad, ColorWheelControl, ColorWheelsSection, CurveEditor, CurvesSection, EffectsSection } from "./inspector/adjust/index.js";
+export type { SelectProps, BlendControlProps, AdjustSliderProps, ScrubbableNumberFieldProps, AdjustSectionProps, AdjustmentRowProps, ColorWheelPadProps, ColorWheelControlProps, ColorWheelsSectionProps, CurveEditorProps, CurvesSectionProps, EffectsSectionProps } from "./inspector/adjust/index.js";

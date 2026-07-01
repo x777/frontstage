@@ -8,7 +8,7 @@ export interface AdjustmentRowProps {
   min: number;
   max: number;
   def: number;
-  gradient?: "temperature" | "tint" | "luma" | "none";
+  gradient?: "temperature" | "tint" | "luma" | "hue" | "none";
   onChange: (v: number) => void;
   onCommit: () => void;
   format: (v: number) => string;

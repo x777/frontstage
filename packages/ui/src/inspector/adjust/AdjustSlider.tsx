@@ -9,7 +9,7 @@ export interface AdjustSliderProps {
   min: number;
   max: number;
   def: number;
-  gradient?: "temperature" | "tint" | "luma" | "none";
+  gradient?: "temperature" | "tint" | "luma" | "hue" | "none";
   onChange: (v: number) => void;
   onCommit: () => void;
 }
@@ -79,6 +79,8 @@ export function AdjustSlider({
       case "temperature": return `linear-gradient(to right, ${theme.adjust.tempCool}, ${theme.adjust.tempWarm})`;
       case "tint": return `linear-gradient(to right, ${theme.adjust.tintGreen}, ${theme.adjust.tintMagenta})`;
       case "luma": return `linear-gradient(to right, ${theme.adjust.lumaDark}, ${theme.adjust.lumaLight})`;
+      // Mirrors SPECTRUM_STOPS from HueCurveEditor: R→Y→G→C→B→M→R (7 stops, muted saturation/lightness).
+      case "hue": return "linear-gradient(to right, hsl(0,72%,34%) 0%, hsl(60,72%,38%) 16.67%, hsl(120,68%,32%) 33.33%, hsl(180,68%,32%) 50%, hsl(240,64%,38%) 66.67%, hsl(300,64%,36%) 83.33%, hsl(360,72%,34%) 100%)";
       default: return theme.bg.prominent;
     }
   })();
