@@ -42,6 +42,16 @@ describe("buildColorStack", () => {
     expect(s.some((e) => e.type === "color.exposure")).toBe(false);
     expect(s.some((e) => e.type === "color.contrast")).toBe(true);
   });
+  it("compileHueCurves y-encoding matches Swift (/60, (ss-1)/2, unscaled lum)", () => {
+    // targetHue=90 -> center=0.25; hueShift=15 -> peak 0.5+15/60=0.75; satScale=0 -> 0.5+(0-1)/2=0.0; lumShift=-0.5 -> 0.5+(-0.5)=0.0
+    const s = buildColorStack(undefined, { clipIds: [], hueCurves: { targets: [{ targetHue: 90, hueShift: 15, satScale: 0, lumShift: -0.5 }] } }, nid);
+    const hc = s.find((e) => e.type === "color.hueCurves")!;
+    const p = JSON.parse(hc.params.curves!.string!);
+    const near = (arr: any[], x: number) => arr.find((q: any) => Math.abs(q.x - x) < 0.01);
+    expect(near(p.hueVsHue, 0.25).y).toBeCloseTo(0.75, 3);
+    expect(near(p.hueVsSat, 0.25).y).toBeCloseTo(0.0, 3);
+    expect(near(p.hueVsLum, 0.25).y).toBeCloseTo(0.0, 3);
+  });
 });
 
 describe("applyEffectStack", () => {
@@ -56,6 +66,12 @@ describe("applyEffectStack", () => {
   it("removes listed types", () => {
     const existing: Effect[] = [{ id: "g", type: "blur.gaussian", enabled: true, params: {} }];
     expect(applyEffectStack(existing, [], ["blur.gaussian"], nid)).toEqual([]);
+  });
+  it("carries existing params when upserting a type already in the stack", () => {
+    const existing: Effect[] = [{ id: "b", type: "blur.gaussian", enabled: true, params: { radius: { value: 5 } } }];
+    const s = applyEffectStack(existing, [{ type: "blur.gaussian", params: {} }], [], nid);
+    const g = s.find((e) => e.type === "blur.gaussian")!;
+    expect(g.params.radius!.value).toBe(5); // untouched param carried
   });
 });
 

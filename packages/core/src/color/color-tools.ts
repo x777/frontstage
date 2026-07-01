@@ -151,7 +151,7 @@ export function buildColorStack(existing: Effect[] | undefined, input: ApplyColo
   const [lx, ly] = xy(s.shadowsHue ?? 0, s.shadowsAmount ?? 0);
   const [gx, gy] = xy(s.midsHue ?? 0, s.midsAmount ?? 0);
   const [nx, ny] = xy(s.highsHue ?? 0, s.highsAmount ?? 0);
-  if (lx || ly || s.shadowsLum !== 0 || gx || gy || s.midsGamma !== 1 || nx || ny || s.highsGain !== 1) {
+  if (Math.abs(lx) > 1e-9 || Math.abs(ly) > 1e-9 || s.shadowsLum !== 0 || Math.abs(gx) > 1e-9 || Math.abs(gy) > 1e-9 || s.midsGamma !== 1 || Math.abs(nx) > 1e-9 || Math.abs(ny) > 1e-9 || s.highsGain !== 1) {
     out.push(eff("color.wheels", {
       lift_x: v(lx), lift_y: v(ly), lift_m: v(s.shadowsLum),
       gamma_x: v(gx), gamma_y: v(gy), gamma_m: v(s.midsGamma),
@@ -201,13 +201,13 @@ export function scopesGap(c: Scopes, r: Scopes): { deltas: Record<string, number
     [r3(a[0]! - b[0]!), r3(a[1]! - b[1]!), r3(a[2]! - b[2]!)];
   const hints: string[] = [];
   const db = c.lumaBlack - r.lumaBlack;
-  if (Math.abs(db) > 0.03) hints.push(db > 0 ? "blacks higher than ref → lower 'blacks'" : "blacks lower → raise 'blacks'");
+  if (Math.abs(db) > 0.03) hints.push(db > 0 ? "blacks higher than ref → lower 'blacks' / deepen shadows" : "blacks lower than ref → raise 'blacks'");
   const dw = c.warmCoolBias - r.warmCoolBias;
-  if (Math.abs(dw) > 0.03) hints.push(dw > 0 ? "warmer than ref → cooler 'temperature'" : "cooler → warmer 'temperature'");
+  if (Math.abs(dw) > 0.03) hints.push(dw > 0 ? "warmer than ref → cooler 'temperature'" : "cooler than ref → warmer 'temperature'");
   const dg = c.greenMagentaBias - r.greenMagentaBias;
-  if (Math.abs(dg) > 0.02) hints.push(dg > 0 ? "greener → 'tint' toward magenta" : "more magenta → 'tint' toward green");
+  if (Math.abs(dg) > 0.02) hints.push(dg > 0 ? "greener than ref → 'tint' toward magenta" : "more magenta than ref → 'tint' toward green");
   const dsat = c.saturationMean - r.saturationMean;
-  if (Math.abs(dsat) > 0.03) hints.push(dsat > 0 ? "more saturated → lower 'saturation'" : "less saturated → raise 'saturation'");
+  if (Math.abs(dsat) > 0.03) hints.push(dsat > 0 ? "more saturated than ref → lower 'saturation'" : "less saturated than ref → raise 'saturation'");
   return {
     deltas: {
       lumaBlack: r3(db), lumaWhite: r3(c.lumaWhite - r.lumaWhite), lumaMean: r3(c.lumaMean - r.lumaMean),
