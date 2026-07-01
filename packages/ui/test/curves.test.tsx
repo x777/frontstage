@@ -111,7 +111,7 @@ test("reset button removes color.curves effect", () => {
   // Reset — button only appears when canReset=true (effect present)
   act(() => { fireEvent.click(screen.getByTestId("adjust-section-reset-Curves")); });
   const after = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
-  expect(after.effects?.some((e) => e.type === "color.curves")).toBeFalsy();
+  expect(after.effects?.some((e) => e.type === "color.curves") ?? false).toBe(false);
 });
 
 test("CurvesSection section is collapsed by default", () => {
@@ -119,4 +119,21 @@ test("CurvesSection section is collapsed by default", () => {
   render(<CurvesSection store={store} clipIds={["c1"]} />);
   // Channel buttons are not rendered when collapsed
   expect(screen.queryByTestId("curve-channel-master")).not.toBeInTheDocument();
+});
+
+test("toggling enable checkbox flips color.curves effect enabled state", () => {
+  const store = new EditorStore(makeTimeline([makeClip("c1")]));
+  render(<CurvesSection store={store} clipIds={["c1"]} />);
+  act(() => { fireEvent.click(screen.getByTestId("adjust-section-Curves")); });
+
+  // Add a point so the color.curves effect exists (enables the checkbox)
+  act(() => { fireEvent.click(screen.getByTestId("curve-add-point")); });
+
+  const before = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  expect(before.effects?.find((e) => e.type === "color.curves")?.enabled).toBe(true);
+
+  act(() => { fireEvent.click(screen.getByTestId("adjust-section-enable-Curves")); });
+
+  const after = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  expect(after.effects?.find((e) => e.type === "color.curves")?.enabled).toBe(false);
 });

@@ -130,6 +130,8 @@ export const theme = {
     adjustThumb: "var(--size-adjust-thumb)",
     colorWheelPad: "var(--size-color-wheel-pad)",
     colorWheelPuck: "var(--size-color-wheel-puck)",
+    curveCanvas: "var(--size-curve-canvas)",
+    curveDot: "var(--size-curve-dot)",
   },
   adjust: {
     tempCool: "var(--color-adjust-temp-cool)",

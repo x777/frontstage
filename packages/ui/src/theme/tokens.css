@@ -165,6 +165,8 @@
   --color-adjust-luma-light: rgb(255, 255, 255);
 
   /* Curve editor */
+  --size-curve-canvas: 180px;
+  --size-curve-dot: 9px;
   --color-adjust-curve-grid: rgba(255,255,255,0.12);
   --color-adjust-curve-border: rgba(255,255,255,0.16);
   --color-adjust-curve-identity: rgba(255,255,255,0.20);

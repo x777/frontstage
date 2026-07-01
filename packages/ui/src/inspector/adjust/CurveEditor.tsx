@@ -19,9 +19,9 @@ const CURVE_R = "#ff4444";                        // matches --color-adjust-curv
 const CURVE_G = "#44cc44";                        // matches --color-adjust-curve-g
 const CURVE_B = "#4488ff";                        // matches --color-adjust-curve-b
 
-const DOT_RADIUS = 4.5;
+const DOT_RADIUS = 4.5; // matches --size-curve-dot (9px diameter)
 const HIT_RADIUS = 0.08; // normalized [0,1] space hit threshold
-const CANVAS_SIZE = 180;
+const CANVAS_SIZE = 180; // matches --size-curve-canvas (180px)
 const POLYLINE_STEPS = 64;
 
 type Channel = "master" | "red" | "green" | "blue";
@@ -257,7 +257,7 @@ export function CurveEditor({
         data-testid="curve-canvas"
         style={{
           width: "100%",
-          height: `${CANVAS_SIZE}px`,
+          height: theme.size.curveCanvas,
           display: "block",
           cursor: "crosshair",
           outline: "none",
@@ -276,10 +276,7 @@ export function CurveEditor({
         data-testid="curve-add-point"
         aria-label="Add curve point"
         onClick={handleAddTestPoint}
-        style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted, background: "none",
-          border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-          borderRadius: theme.radius.xs, padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          cursor: "pointer", alignSelf: "flex-start" }}
+        style={{ visibility: "hidden", position: "absolute" }}
       >
         +
       </button>
