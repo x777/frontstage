@@ -1,9 +1,9 @@
 import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer } from "@palmier/engine";
 import {
-  affineTransform, defaultTransform, defaultCrop, type Effect,
+  affineTransform, defaultTransform, defaultCrop, type Effect, type BlendMode,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
   applyColorWheels, applyCurves, applyHueCurves, parseGradeCurve, parseHueCurves,
-  parseCubeLUT, sampleLUT,
+  parseCubeLUT, sampleLUT, blendPixel,
 } from "@palmier/core";
 
 const W = 200, H = 200;
@@ -125,6 +125,18 @@ async function main() {
       f.close();
       const expL = sampleLUT(invertLut, inp);
       window.__expected = [expL.r, expL.g, expL.b];
+    } else if (useCase.startsWith("blend-")) {
+      // Blend mode parity tests: two-layer composite, bg=grey(0.5), top=rgb(0.6,0.4,0.8), blendMode=X.
+      const modeKey = useCase.slice("blend-".length) as BlendMode;
+      const bgFrame = solidFrame(W, H, "rgb(128,128,128)");
+      const bgLayer: CompositeLayer = { frame: bgFrame, transform: full, opacity: 1, crop: defaultCrop() };
+      const topFrame = solidFrame(W, H, "rgb(153,102,204)");
+      const topLayer: CompositeLayer = { frame: topFrame, transform: full, opacity: 1, crop: defaultCrop(), blendMode: modeKey };
+      await r.composite([bgLayer, topLayer], size);
+      bgFrame.close();
+      topFrame.close();
+      const exp = blendPixel(modeKey, { r: 0.6, g: 0.4, b: 0.8, a: 1 }, { r: 0.5, g: 0.5, b: 0.5, a: 1 });
+      window.__expected = [exp.r, exp.g, exp.b];
     } else {
       // Parity tests: mid-color frame, one effect per case, CPU-expected exported to window.__expected.
       const frame = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);

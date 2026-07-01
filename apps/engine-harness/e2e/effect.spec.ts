@@ -99,3 +99,21 @@ test("color.lut non-identity 2³ invert cube matches CPU sampleLUT within ±4", 
     expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
   }
 });
+
+// Blend mode parity tests: two-layer composite (bg grey 0.5, top 0.6/0.4/0.8) vs CPU blendPixel.
+const BLEND_CASES = ["blend-multiply", "blend-screen", "blend-overlay", "blend-difference", "blend-colorburn"] as const;
+
+for (const c of BLEND_CASES) {
+  test(`${c} GPU matches CPU blendPixel within ±3`, async ({ page }) => {
+    await page.goto(`/effect.html?case=${c}`);
+    await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+    const expected = await page.evaluate(
+      () => (window as unknown as { __expected: [number, number, number] }).__expected,
+    );
+    const p = await px(page, 100, 100);
+    for (let ch = 0; ch < 3; ch++) {
+      const exp8 = Math.round(expected[ch]! * 255);
+      expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(3);
+    }
+  });
+}

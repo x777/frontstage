@@ -1,5 +1,5 @@
 import type { Mat2d, Size, Effect, BlendMode, CubeLUT } from "@palmier/core";
-import { canonicalSort, resolveParam, parseGradeCurve, evalCurve, parseHueCurves, evalHueCurve } from "@palmier/core";
+import { canonicalSort, resolveParam, parseGradeCurve, evalCurve, parseHueCurves, evalHueCurve, BLEND_MODES } from "@palmier/core";
 import type { GradeCurve, HueCurves } from "@palmier/core";
 import type { CompositeLayer } from "./composite-layer.js";
 
@@ -479,6 +479,44 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Blend shader: full-screen advanced blend pass. src=fxPing, dst=curAccum → otherAccum (no GPU blending; shader computes the full composite).
+const WGSL_BLEND = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct BlendU { mode: u32, opacity: f32 };
+@group(0) @binding(0) var srcTex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var dstTex: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> u: BlendU;
+
+fn sep1(mode: u32, s: f32, d: f32) -> f32 {
+  switch mode {
+    case 1u: { return min(s, d); }
+    case 2u: { return s * d; }
+    case 3u: { if (d <= 0.0) { return 0.0; } if (s <= 0.0) { return 0.0; } return 1.0 - min(1.0, (1.0 - d) / s); }
+    case 4u: { return max(s, d); }
+    case 5u: { return s + d - s * d; }
+    case 6u: { if (d <= 0.0) { return 0.0; } if (s >= 1.0) { return 1.0; } return min(1.0, d / (1.0 - s)); }
+    case 7u: { if (d <= 0.5) { return s * (2.0 * d); } return 1.0 - (1.0 - s) * (1.0 - 2.0 * (d - 0.5)); }
+    case 8u: { if (s <= 0.5) { return d - (1.0 - 2.0 * s) * d * (1.0 - d); } var dd = sqrt(d); if (d <= 0.25) { dd = ((16.0 * d - 12.0) * d + 4.0) * d; } return d + (2.0 * s - 1.0) * (dd - d); }
+    case 9u: { if (s <= 0.5) { return d * (2.0 * s); } return 1.0 - (1.0 - d) * (1.0 - 2.0 * (s - 0.5)); }
+    case 10u: { return abs(s - d); }
+    case 11u: { return s + d - 2.0 * s * d; }
+    default: { return s; }
+  }
+}
+fn blendRgb(mode: u32, s: vec3f, d: vec3f) -> vec3f {
+  // Task 2 adds: if (mode >= 12u) { return hslBlend(mode, s, d); }
+  return vec3f(sep1(mode, s.r, d.r), sep1(mode, s.g, d.g), sep1(mode, s.b, d.b));
+}
+@fragment fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let s = textureSample(srcTex, samp, uv);
+  let d = textureSample(dstTex, samp, uv);
+  let blended = clamp(blendRgb(u.mode, s.rgb, d.rgb), vec3f(0.0), vec3f(1.0));
+  let k = s.a * u.opacity;
+  let outA = d.a + s.a * u.opacity * (1.0 - d.a);
+  return vec4f(mix(d.rgb, blended, k), outA);
+}
+`;
+
 const ALPHA_BLEND: GPUBlendState = {
   color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
   alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
@@ -499,7 +537,7 @@ interface EffectStep {
 
 type LayerPlan =
   | { kind: "simple"; source: SourceBinding; uBuf: GPUBuffer }
-  | { kind: "effected"; source: SourceBinding; capBuf: GPUBuffer; steps: EffectStep[]; compBuf: GPUBuffer };
+  | { kind: "effected"; source: SourceBinding; capBuf: GPUBuffer; steps: EffectStep[]; compBuf: GPUBuffer; blendMode?: BlendMode; opacity: number };
 
 interface RendererResources {
   device: GPUDevice;
@@ -521,6 +559,7 @@ interface RendererResources {
   hueCurvesModule: GPUShaderModule;
   lutModule: GPUShaderModule;
   compositeModule: GPUShaderModule;
+  blendModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
   copyBgl: GPUBindGroupLayout;
@@ -534,6 +573,8 @@ interface RendererResources {
   fxLutLayout: GPUPipelineLayout;
   fxLut3dBgl: GPUBindGroupLayout;
   fxLut3dLayout: GPUPipelineLayout;
+  blendBgl: GPUBindGroupLayout;
+  blendLayout: GPUPipelineLayout;
   // eager blit pipelines (always used)
   blitCanvasPipeline: GPURenderPipeline;
   blitReadbackPipeline: GPURenderPipeline;
@@ -573,6 +614,7 @@ export class FrameRenderer {
   private hueCurvesModule: GPUShaderModule;
   private lutModule: GPUShaderModule;
   private compositeModule: GPUShaderModule;
+  private blendModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
   private copyBgl: GPUBindGroupLayout;
@@ -586,6 +628,8 @@ export class FrameRenderer {
   private fxLutLayout: GPUPipelineLayout;
   private fxLut3dBgl: GPUBindGroupLayout;
   private fxLut3dLayout: GPUPipelineLayout;
+  private blendBgl: GPUBindGroupLayout;
+  private blendLayout: GPUPipelineLayout;
   cubeLUTs = new Map<string, CubeLUT>();
   // blit pipelines (copy accumulator → canvas or readbackTex, no blend)
   private blitCanvasPipeline: GPURenderPipeline;
@@ -618,6 +662,7 @@ export class FrameRenderer {
     this.hueCurvesModule = r.hueCurvesModule;
     this.lutModule = r.lutModule;
     this.compositeModule = r.compositeModule;
+    this.blendModule = r.blendModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
     this.blitBgl = r.blitBgl;
@@ -629,6 +674,8 @@ export class FrameRenderer {
     this.fxLutLayout = r.fxLutLayout;
     this.fxLut3dBgl = r.fxLut3dBgl;
     this.fxLut3dLayout = r.fxLut3dLayout;
+    this.blendBgl = r.blendBgl;
+    this.blendLayout = r.blendLayout;
     this.blitCanvasPipeline = r.blitCanvasPipeline;
     this.blitReadbackPipeline = r.blitReadbackPipeline;
     this.readbackTex = r.readbackTex;
@@ -664,6 +711,7 @@ export class FrameRenderer {
     const hueCurvesModule = device.createShaderModule({ code: WGSL_HUE_CURVES });
     const lutModule = device.createShaderModule({ code: WGSL_LUT });
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
+    const blendModule = device.createShaderModule({ code: WGSL_BLEND });
 
     const extBgl = device.createBindGroupLayout({
       entries: [
@@ -723,6 +771,17 @@ export class FrameRenderer {
     });
     const fxLut3dLayout = device.createPipelineLayout({ bindGroupLayouts: [fxLut3dBgl] });
 
+    // 4-entry blend BGL: srcTex, sampler, dstTex, uniform {mode: u32, opacity: f32}
+    const blendBgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+      ],
+    });
+    const blendLayout = device.createPipelineLayout({ bindGroupLayouts: [blendBgl] });
+
     // Blit pipelines: copy the (rgba16float) accumulator → canvas or readback (rgba16float is filterable).
     const blitCanvasPipeline = device.createRenderPipeline({
       layout: blitLayout,
@@ -750,9 +809,9 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule,
       extBgl, copyBgl, blitBgl, fxBgl,
-      extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout,
+      extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout, blendBgl, blendLayout,
       blitCanvasPipeline, blitReadbackPipeline,
       readbackTex,
       fxPing: makeFxTexture(device, cw, ch),
@@ -812,6 +871,15 @@ export class FrameRenderer {
       layout: this.fxLayout,
       vertex: { module: this.compositeModule, entryPoint: "vs" },
       fragment: { module: this.compositeModule, entryPoint: "fs", targets: [{ format: FX_FORMAT, blend: ALPHA_BLEND }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private blendPipeline(): GPURenderPipeline {
+    return this.pipelineFor("blend", () => this.device.createRenderPipeline({
+      layout: this.blendLayout,
+      vertex: { module: this.blendModule, entryPoint: "vs" },
+      fragment: { module: this.blendModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
       primitive: { topology: "triangle-strip" },
     }));
   }
@@ -1129,17 +1197,19 @@ export class FrameRenderer {
             steps.push({ type: eff.type, uBuf: uniformBuffer(data, Math.max(16, data.byteLength)) });
           }
           const compBuf = uniformBuffer(new Float32Array([layer.opacity]), 16);
-          plans.push({ kind: "effected", source, capBuf, steps, compBuf });
+          plans.push({ kind: "effected", source, capBuf, steps, compBuf, blendMode: bm, opacity: layer.opacity });
         }
       }
 
       // Phase 2 (synchronous): one encoder, capture/effect/composite/blit passes in order, one submit.
-      const accumView = this.accumA.createView();
+      // curAccum/otherAccum ping-pong: advanced blend passes swap them; normal paths draw into curAccum.
+      let curAccum = this.accumA;
+      let otherAccum = this.accumB;
       const encoder = device.createCommandEncoder();
 
-      // Clear the accumulator once; every subsequent accumulator write loads.
+      // Clear curAccum once; every subsequent write to curAccum loads.
       encoder.beginRenderPass({
-        colorAttachments: [{ view: accumView, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+        colorAttachments: [{ view: curAccum.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
       }).end();
 
       let i = 0;
@@ -1148,7 +1218,7 @@ export class FrameRenderer {
         if (plan.kind === "simple") {
           // Batch consecutive simple layers into one ALPHA_BLEND pass (the fast path).
           const pass = encoder.beginRenderPass({
-            colorAttachments: [{ view: accumView, loadOp: "load", storeOp: "store" }],
+            colorAttachments: [{ view: curAccum.createView(), loadOp: "load", storeOp: "store" }],
           });
           while (i < plans.length && plans[i]!.kind === "simple") {
             const sp = plans[i] as Extract<LayerPlan, { kind: "simple" }>;
@@ -1258,29 +1328,61 @@ export class FrameRenderer {
           pong = tmp;
         }
 
-        // (c) Composite the result into the accumulator (normal blend = ALPHA_BLEND with opacity).
-        const comp = encoder.beginRenderPass({
-          colorAttachments: [{ view: accumView, loadOp: "load", storeOp: "store" }],
-        });
-        comp.setPipeline(this.compositePipeline());
-        comp.setBindGroup(0, device.createBindGroup({
-          layout: this.fxBgl,
-          entries: [
-            { binding: 0, resource: ping.createView() },
-            { binding: 1, resource: this.sampler },
-            { binding: 2, resource: { buffer: ep.compBuf } },
-          ],
-        }));
-        comp.draw(4);
-        comp.end();
+        // (c) Composite: normal blend → ALPHA_BLEND into curAccum; advanced blend → blend pass into otherAccum then swap.
+        const blendModeEp = ep.blendMode;
+        if (blendModeEp !== undefined && blendModeEp !== "normal") {
+          // Build blend uniform: { mode: u32, opacity: f32 } — 16-byte aligned buffer.
+          const blendData = new ArrayBuffer(16);
+          const dv = new DataView(blendData);
+          dv.setUint32(0, BLEND_MODES.indexOf(blendModeEp), true);
+          dv.setFloat32(4, ep.opacity, true);
+          const blendUBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+          device.queue.writeBuffer(blendUBuf, 0, blendData);
+          tempBuffers.push(blendUBuf);
+
+          const blendPass = encoder.beginRenderPass({
+            colorAttachments: [{ view: otherAccum.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+          });
+          blendPass.setPipeline(this.blendPipeline());
+          blendPass.setBindGroup(0, device.createBindGroup({
+            layout: this.blendBgl,
+            entries: [
+              { binding: 0, resource: ping.createView() },
+              { binding: 1, resource: this.sampler },
+              { binding: 2, resource: curAccum.createView() },
+              { binding: 3, resource: { buffer: blendUBuf } },
+            ],
+          }));
+          blendPass.draw(4);
+          blendPass.end();
+          // Swap curAccum <-> otherAccum so subsequent passes read the composited result.
+          const tmpAccum = curAccum;
+          curAccum = otherAccum;
+          otherAccum = tmpAccum;
+        } else {
+          const comp = encoder.beginRenderPass({
+            colorAttachments: [{ view: curAccum.createView(), loadOp: "load", storeOp: "store" }],
+          });
+          comp.setPipeline(this.compositePipeline());
+          comp.setBindGroup(0, device.createBindGroup({
+            layout: this.fxBgl,
+            entries: [
+              { binding: 0, resource: ping.createView() },
+              { binding: 1, resource: this.sampler },
+              { binding: 2, resource: { buffer: ep.compBuf } },
+            ],
+          }));
+          comp.draw(4);
+          comp.end();
+        }
         i++;
       }
 
-      // Final: blit the live accumulator (rgba16float) → canvas (8-bit) + readbackTex (rgba8unorm).
+      // Final: blit curAccum (rgba16float) → canvas (8-bit) + readbackTex (rgba8unorm).
       const blitBg = device.createBindGroup({
         layout: this.blitBgl,
         entries: [
-          { binding: 0, resource: accumView },
+          { binding: 0, resource: curAccum.createView() },
           { binding: 1, resource: this.sampler },
         ],
       });
