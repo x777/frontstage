@@ -56,3 +56,5 @@ export * from "./color/scopes.js";
 export * from "./color/color-tools.js";
 export * from "./color/adjust-control.js";
 export * from "./color/wheel-geometry.js";
+export * from "./color/curve-edit.js";
+export * from "./color/histogram.js";
