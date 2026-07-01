@@ -89,7 +89,7 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 19 specs", () => {
+  test("returns exactly 20 specs", () => {
     const catalog = buildCatalog();
     expect(catalog).toHaveLength(20);
   });

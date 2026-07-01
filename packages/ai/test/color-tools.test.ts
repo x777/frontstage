@@ -280,6 +280,9 @@ describe("inspect_color", () => {
     expect(payload.gap).toBeDefined();
     expect(payload.gap.deltas).toBeDefined();
     expect(Array.isArray(payload.gap.hints)).toBe(true);
+    // grey 128 vs 200 differs well past the luma threshold → a real, non-empty gap
+    expect((payload.gap.deltas["lumaMean"] as number)).not.toBe(0);
+    expect(payload.gap.hints.length).toBeGreaterThan(0);
   });
 
   test("jpegBase64 present → image block returned before text block", async () => {
@@ -297,6 +300,8 @@ describe("inspect_color", () => {
     expect(result.isError).toBe(false);
     const imageBlock = result.blocks.find((b) => b.kind === "image");
     expect(imageBlock).toBeDefined();
+    expect(result.blocks[0]?.kind).toBe("image"); // image precedes the text readout
+    expect(result.blocks[result.blocks.length - 1]?.kind).toBe("text");
     expect((imageBlock as { kind: "image"; base64: string; mediaType: string }).base64).toBe("fakejpeg==");
     expect((imageBlock as { kind: "image"; base64: string; mediaType: string }).mediaType).toBe("image/jpeg");
   });
