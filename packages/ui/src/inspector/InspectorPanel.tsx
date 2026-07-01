@@ -22,7 +22,8 @@ import { KeyframeLanes } from "./KeyframeLanes.js";
 import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
 import { CurvesSection } from "./adjust/CurvesSection.js";
 import { ColorWheelsSection } from "./adjust/ColorWheelsSection.js";
-import { computeFrameHistogram } from "./adjust/frame-histogram.js";
+import { HueCurvesSection } from "./adjust/HueCurvesSection.js";
+import { computeFrameHistograms } from "./adjust/frame-histogram.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
@@ -54,13 +55,19 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
   const timeline = useStore(store, (s) => s.timeline);
 
   const [histogram, setHistogram] = useState<Histogram | undefined>(undefined);
+  const [hueHistogram, setHueHistogram] = useState<number[] | undefined>(undefined);
 
   useEffect(() => {
     const engine = engineRef?.current;
     if (!engine) return;
     let cancelled = false;
-    void computeFrameHistogram(engine)
-      .then((h) => { if (!cancelled) setHistogram(h); })
+    void computeFrameHistograms(engine)
+      .then(({ yrgb, hue }) => {
+        if (!cancelled) {
+          setHistogram(yrgb);
+          setHueHistogram(hue);
+        }
+      })
       .catch(() => {}); // engine may be torn down mid-read
     return () => { cancelled = true; };
   }, [engineRef, playhead, timeline, selection]);
@@ -110,6 +117,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
           <BasicCorrectionSection store={store} clipIds={selIds} />
           <CurvesSection store={store} clipIds={selIds} histogram={histogram} />
           <ColorWheelsSection store={store} clipIds={selIds} />
+          <HueCurvesSection store={store} clipIds={selIds} hueHistogram={hueHistogram} />
         </div>
       );
     }
@@ -400,6 +408,11 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
       {/* Color Wheels */}
       {isVisual && !isText && (
         <ColorWheelsSection store={store} clipIds={[clipId]} />
+      )}
+
+      {/* Hue Curves */}
+      {isVisual && !isText && (
+        <HueCurvesSection store={store} clipIds={[clipId]} hueHistogram={hueHistogram} />
       )}
     </div>
   );
