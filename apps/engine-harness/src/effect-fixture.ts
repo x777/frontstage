@@ -204,6 +204,21 @@ async function main() {
       };
       await r.composite([layer], size);
       f.close();
+    } else if (useCase === "gaussian") {
+      // Hard vertical step edge: left half black, right half white, edge at x=100.
+      const o = new OffscreenCanvas(W, H);
+      const c2 = o.getContext("2d")!;
+      c2.fillStyle = "rgb(0,0,0)";
+      c2.fillRect(0, 0, W / 2, H);
+      c2.fillStyle = "rgb(255,255,255)";
+      c2.fillRect(W / 2, 0, W / 2, H);
+      const f = new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "blur.gaussian", enabled: true, params: { radius: { value: 12 } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
     } else {
       // Parity tests: mid-color frame, one effect per case, CPU-expected exported to window.__expected.
       const frame = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);

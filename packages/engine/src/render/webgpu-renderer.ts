@@ -526,6 +526,28 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: blur.gaussian — separable 2-pass gaussian; uniform: {dir: vec2f, radius: f32, _pad: f32}.
+const WGSL_GAUSS = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct GaussU { dir: vec2f, radius: f32, _pad: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: GaussU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var sum = vec4f(0.0); var wsum = 0.0;
+  let sigma = max(0.5, u.radius * 0.5);
+  let taps = i32(min(24.0, ceil(sigma * 3.0)));
+  for (var i = -taps; i <= taps; i = i + 1) {
+    let w = exp(-f32(i * i) / (2.0 * sigma * sigma));
+    sum = sum + textureSample(src, samp, uv + u.dir * f32(i)) * w;
+    wsum = wsum + w;
+  }
+  return sum / wsum;
+}
+`;
+
 // Normal-blend composite of an effected layer into the accumulator (opacity applied via alpha, ALPHA_BLEND state).
 const WGSL_COMPOSITE = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Comp { opacity: f32 };
@@ -615,6 +637,14 @@ const ALPHA_BLEND: GPUBlendState = {
 
 export type ReadPixelFn = (x: number, y: number) => Promise<[number, number, number, number]>;
 
+// Sub-pass descriptor used by the multi-pass effect runner. The bind group includes all inputs; the runner
+// opens a render pass to outputView and draws the full-screen quad.
+export interface SubPass {
+  pipeline: GPURenderPipeline;
+  bindGroup: GPUBindGroup;
+  outputView: GPUTextureView;
+}
+
 type SourceBinding =
   | { type: "ext"; extTex: GPUExternalTexture }
   | { type: "copy"; copyTex: GPUTexture };
@@ -624,6 +654,7 @@ interface EffectStep {
   uBuf?: GPUBuffer;
   lutTex?: GPUTexture;
   lut3dTex?: GPUTexture;
+  gaussRadius?: number; // blur.gaussian only — resolved radius stored for Phase 2 dispatch
 }
 
 type LayerPlan =
@@ -654,15 +685,18 @@ interface RendererResources {
   chromaModule: GPUShaderModule;
   vignetteModule: GPUShaderModule;
   grainModule: GPUShaderModule;
+  gaussModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
   copyBgl: GPUBindGroupLayout;
   blitBgl: GPUBindGroupLayout;
   fxBgl: GPUBindGroupLayout;
+  fx2Bgl: GPUBindGroupLayout; // 2-input layout: texA, texB, samp, uniform (used by T3 spatial effects)
   // pipeline layouts
   extLayout: GPUPipelineLayout;
   copyLayout: GPUPipelineLayout;
   fxLayout: GPUPipelineLayout;
+  fx2Layout: GPUPipelineLayout;
   fxLutBgl: GPUBindGroupLayout;
   fxLutLayout: GPUPipelineLayout;
   fxLut3dBgl: GPUBindGroupLayout;
@@ -676,6 +710,7 @@ interface RendererResources {
   readbackTex: GPUTexture;
   fxPing: GPUTexture;
   fxPong: GPUTexture;
+  fxScratch: GPUTexture; // extra intermediate for multi-pass effects
   accumA: GPUTexture;
   accumB: GPUTexture;
 }
@@ -712,15 +747,18 @@ export class FrameRenderer {
   private chromaModule: GPUShaderModule;
   private vignetteModule: GPUShaderModule;
   private grainModule: GPUShaderModule;
+  private gaussModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
   private copyBgl: GPUBindGroupLayout;
   private blitBgl: GPUBindGroupLayout;
   private fxBgl: GPUBindGroupLayout;
+  private fx2Bgl: GPUBindGroupLayout;
   // pipeline layouts
   private extLayout: GPUPipelineLayout;
   private copyLayout: GPUPipelineLayout;
   private fxLayout: GPUPipelineLayout;
+  private fx2Layout: GPUPipelineLayout;
   private fxLutBgl: GPUBindGroupLayout;
   private fxLutLayout: GPUPipelineLayout;
   private fxLut3dBgl: GPUBindGroupLayout;
@@ -737,6 +775,7 @@ export class FrameRenderer {
   private readbackTex: GPUTexture;
   private fxPing: GPUTexture;
   private fxPong: GPUTexture;
+  private fxScratch: GPUTexture;
   private accumA: GPUTexture;
   private accumB: GPUTexture;
 
@@ -763,13 +802,16 @@ export class FrameRenderer {
     this.chromaModule = r.chromaModule;
     this.vignetteModule = r.vignetteModule;
     this.grainModule = r.grainModule;
+    this.gaussModule = r.gaussModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
     this.blitBgl = r.blitBgl;
     this.fxBgl = r.fxBgl;
+    this.fx2Bgl = r.fx2Bgl;
     this.extLayout = r.extLayout;
     this.copyLayout = r.copyLayout;
     this.fxLayout = r.fxLayout;
+    this.fx2Layout = r.fx2Layout;
     this.fxLutBgl = r.fxLutBgl;
     this.fxLutLayout = r.fxLutLayout;
     this.fxLut3dBgl = r.fxLut3dBgl;
@@ -781,6 +823,7 @@ export class FrameRenderer {
     this.readbackTex = r.readbackTex;
     this.fxPing = r.fxPing;
     this.fxPong = r.fxPong;
+    this.fxScratch = r.fxScratch;
     this.accumA = r.accumA;
     this.accumB = r.accumB;
   }
@@ -815,6 +858,7 @@ export class FrameRenderer {
     const chromaModule = device.createShaderModule({ code: WGSL_CHROMA });
     const vignetteModule = device.createShaderModule({ code: WGSL_VIGNETTE });
     const grainModule = device.createShaderModule({ code: WGSL_GRAIN });
+    const gaussModule = device.createShaderModule({ code: WGSL_GAUSS });
 
     const extBgl = device.createBindGroupLayout({
       entries: [
@@ -848,10 +892,21 @@ export class FrameRenderer {
       ],
     });
 
+    // 2-input layout for spatial effects (T3): texA, texB, samp, uniform.
+    const fx2Bgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+      ],
+    });
+
     const extLayout = device.createPipelineLayout({ bindGroupLayouts: [extBgl] });
     const copyLayout = device.createPipelineLayout({ bindGroupLayouts: [copyBgl] });
     const blitLayout = device.createPipelineLayout({ bindGroupLayouts: [blitBgl] });
     const fxLayout = device.createPipelineLayout({ bindGroupLayouts: [fxBgl] });
+    const fx2Layout = device.createPipelineLayout({ bindGroupLayouts: [fx2Bgl] });
 
     const fxLutBgl = device.createBindGroupLayout({
       entries: [
@@ -912,13 +967,14 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule, chromaModule, vignetteModule, grainModule,
-      extBgl, copyBgl, blitBgl, fxBgl,
-      extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout, blendBgl, blendLayout,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule, chromaModule, vignetteModule, grainModule, gaussModule,
+      extBgl, copyBgl, blitBgl, fxBgl, fx2Bgl,
+      extLayout, copyLayout, fxLayout, fx2Layout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout, blendBgl, blendLayout,
       blitCanvasPipeline, blitReadbackPipeline,
       readbackTex,
       fxPing: makeFxTexture(device, cw, ch),
       fxPong: makeFxTexture(device, cw, ch),
+      fxScratch: makeFxTexture(device, cw, ch),
       accumA: makeFxTexture(device, cw, ch),
       accumB: makeFxTexture(device, cw, ch),
     });
@@ -1093,7 +1149,16 @@ export class FrameRenderer {
     }
   }
 
-  // Resolved-param uniform bytes for an effect, or null if the type is unimplemented this milestone.
+  private gaussPipeline(): GPURenderPipeline {
+    return this.pipelineFor("effect:blur.gaussian", () => this.device.createRenderPipeline({
+      layout: this.fxLayout,
+      vertex: { module: this.gaussModule, entryPoint: "vs" },
+      fragment: { module: this.gaussModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  // Resolved-param uniform bytes for an effect, or null if the type is unimplemented or multi-pass.
   // clip-relative frame is 0 for M9B (static effect params; keyframed effect params are a later fold).
   private effectStepData(eff: Effect, rw: number, rh: number): Float32Array<ArrayBuffer> | null {
     switch (eff.type) {
@@ -1218,10 +1283,12 @@ export class FrameRenderer {
   private resizeIntermediates(w: number, h: number): void {
     this.fxPing.destroy();
     this.fxPong.destroy();
+    this.fxScratch.destroy();
     this.accumA.destroy();
     this.accumB.destroy();
     this.fxPing = makeFxTexture(this.device, w, h);
     this.fxPong = makeFxTexture(this.device, w, h);
+    this.fxScratch = makeFxTexture(this.device, w, h);
     this.accumA = makeFxTexture(this.device, w, h);
     this.accumB = makeFxTexture(this.device, w, h);
   }
@@ -1314,6 +1381,10 @@ export class FrameRenderer {
           const capBuf = uniformBuffer(bigUniform(layer, 1), UNIFORMS_F32 * 4);
           const steps: EffectStep[] = [];
           for (const eff of canonicalSort(enabledEffects)) {
+            if (eff.type === "blur.gaussian") {
+              steps.push({ type: eff.type, gaussRadius: resolveParam(eff.params.radius, 0, 8) });
+              continue;
+            }
             if (eff.type === "color.curves") {
               const lutTex = this.bakeCurvesLut(device, parseGradeCurve(eff.params.curve?.string));
               tempTextures.push(lutTex);
@@ -1430,6 +1501,49 @@ export class FrameRenderer {
 
         // (b) Effect passes in canonical order: ping → pong full-screen, then swap.
         for (const step of ep.steps) {
+          // Multi-pass: blur.gaussian runs H (ping→scratch) then V (scratch→pong), then swap.
+          if (step.type === "blur.gaussian") {
+            const radius = step.gaussRadius ?? 8;
+            const hData = new Float32Array([1 / rw, 0, radius, 0]);
+            const hBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(hBuf, 0, hData);
+            tempBuffers.push(hBuf);
+            const hPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: this.fxScratch.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            hPass.setPipeline(this.gaussPipeline());
+            hPass.setBindGroup(0, device.createBindGroup({
+              layout: this.fxBgl,
+              entries: [
+                { binding: 0, resource: ping.createView() },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: { buffer: hBuf } },
+              ],
+            }));
+            hPass.draw(4);
+            hPass.end();
+            const vData = new Float32Array([0, 1 / rh, radius, 0]);
+            const vBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(vBuf, 0, vData);
+            tempBuffers.push(vBuf);
+            const vPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            vPass.setPipeline(this.gaussPipeline());
+            vPass.setBindGroup(0, device.createBindGroup({
+              layout: this.fxBgl,
+              entries: [
+                { binding: 0, resource: this.fxScratch.createView() },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: { buffer: vBuf } },
+              ],
+            }));
+            vPass.draw(4);
+            vPass.end();
+            const tmp = ping; ping = pong; pong = tmp;
+            continue;
+          }
+
           const pipe = this.effectPipeline(step.type);
           if (!pipe) continue;
           const pass = encoder.beginRenderPass({
@@ -1645,6 +1759,7 @@ export class FrameRenderer {
     this.readbackTex.destroy();
     this.fxPing.destroy();
     this.fxPong.destroy();
+    this.fxScratch.destroy();
     this.accumA.destroy();
     this.accumB.destroy();
     this.device.destroy();

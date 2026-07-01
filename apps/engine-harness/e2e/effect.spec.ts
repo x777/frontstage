@@ -198,3 +198,17 @@ test("stylize.grain amount=0 is a passthrough (output = input grey)", async ({ p
   expect(Math.abs(p[1]! - 128)).toBeLessThanOrEqual(2);
   expect(Math.abs(p[2]! - 128)).toBeLessThanOrEqual(2);
 });
+
+// blur.gaussian: hard vertical step edge (left black, right white, edge at x=100) blurred with radius 12.
+// A sharp edge pixel at (100,100) would be 0 or 255; a blurred edge is mid-grey.
+test("blur.gaussian blurs a hard edge to mid-grey", async ({ page }) => {
+  await page.goto("/effect.html?case=gaussian");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  expect(p[0]!).toBeGreaterThan(80);
+  expect(p[0]!).toBeLessThan(175);
+  expect(p[1]!).toBeGreaterThan(80);
+  expect(p[1]!).toBeLessThan(175);
+  expect(p[2]!).toBeGreaterThan(80);
+  expect(p[2]!).toBeLessThan(175);
+});
