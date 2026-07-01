@@ -3,10 +3,12 @@ import { wheelDisplayColor, pointToXY, xyToPuck } from "@palmier/core";
 import { theme } from "../../theme/theme.js";
 
 const NUDGE = 0.05;
-// Canvas colors — CSS vars can't be used in canvas 2D context
-const RING_COLOR = "rgba(255,255,255,0.50)";
-const CROSSHAIR_COLOR = "rgba(255,255,255,0.25)";
-const PUCK_STROKE = "rgba(0,0,0,0.50)";
+const PUCK_RADIUS = 5; // matches --size-color-wheel-puck (10px)
+// Canvas colors mirror their tokens (ctx can't consume CSS vars).
+const RING_COLOR = "rgba(255,255,255,0.50)";        // matches --color-adjust-wheel-ring
+const CROSSHAIR_COLOR = "rgba(255,255,255,0.25)";   // matches --color-adjust-wheel-crosshair
+const PUCK_FILL = "#ffffff";                         // matches --color-adjust-wheel-puck-fill
+const PUCK_STROKE = "rgba(0,0,0,0.50)";             // matches --color-adjust-wheel-puck-stroke
 
 export interface ColorWheelPadProps {
   x: number;
@@ -25,7 +27,6 @@ export function ColorWheelPad({ x, y, size, title, onChange, onCommit }: ColorWh
   const cx = size / 2;
   const cy = size / 2;
   const radius = size / 2;
-  const puckR = parseInt(theme.size.colorWheelPuck) / 2 || 5;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -74,14 +75,14 @@ export function ColorWheelPad({ x, y, size, title, onChange, onCommit }: ColorWh
 
     // Puck
     const { px: px_, py: py_ } = xyToPuck(x, y, cx, cy, radius);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = PUCK_FILL;
     ctx.beginPath();
-    ctx.arc(px_, py_, puckR, 0, Math.PI * 2);
+    ctx.arc(px_, py_, PUCK_RADIUS, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = PUCK_STROKE;
     ctx.lineWidth = 1;
     ctx.stroke();
-  }, [x, y, size, cx, cy, radius, puckR]);
+  }, [x, y, size, cx, cy, radius]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();

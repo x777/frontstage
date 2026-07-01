@@ -140,6 +140,8 @@ export const theme = {
     lumaLight: "var(--color-adjust-luma-light)",
     wheelRing: "var(--color-adjust-wheel-ring)",
     wheelCrosshair: "var(--color-adjust-wheel-crosshair)",
+    wheelPuckFill: "var(--color-adjust-wheel-puck-fill)",
+    wheelPuckStroke: "var(--color-adjust-wheel-puck-stroke)",
   },
   z: {
     menu: "var(--z-menu)",

@@ -57,6 +57,30 @@ test("ArrowRight on Lift pad dispatches color.wheels effect with non-zero lift_x
   expect(Math.abs(liftX) + Math.abs(liftY)).toBeGreaterThan(0);
 });
 
+test("ArrowRight nudge on Lift pad is a single undo step (two-axis write undone together)", () => {
+  const store = new EditorStore(makeTimeline([makeClip("c1")]));
+  render(<ColorWheelsSection store={store} clipIds={["c1"]} />);
+  act(() => { fireEvent.click(screen.getByTestId("adjust-section-Color Wheels")); });
+
+  const liftPad = screen.getByRole("slider", { name: "Lift" });
+  act(() => { fireEvent.keyDown(liftPad, { key: "ArrowRight" }); });
+
+  // Confirm lift_x changed (the two-axis dispatch landed)
+  const before = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  const liftX = before.effects?.find((e) => e.type === "color.wheels")?.params.lift_x?.value ?? 0;
+  expect(Math.abs(liftX)).toBeGreaterThan(0);
+
+  // One undo should fully remove the effect
+  act(() => { store.undo(); });
+
+  const after = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  const wheelsEffect = after.effects?.find((e) => e.type === "color.wheels");
+  const liftXAfter = wheelsEffect?.params.lift_x?.value ?? 0;
+  const liftYAfter = wheelsEffect?.params.lift_y?.value ?? 0;
+  expect(Math.abs(liftXAfter) + Math.abs(liftYAfter)).toBe(0);
+  expect(store.canUndo()).toBe(false);
+});
+
 test("2-clip selection with differing gamma_m shows — on Gamma luma field", () => {
   const clip1: Clip = {
     ...makeClip("c1"),
