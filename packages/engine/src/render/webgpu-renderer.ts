@@ -1,4 +1,4 @@
-import type { Mat2d, Size, Effect, BlendMode } from "@palmier/core";
+import type { Mat2d, Size, Effect, BlendMode, CubeLUT } from "@palmier/core";
 import { canonicalSort, resolveParam, parseGradeCurve, evalCurve, parseHueCurves, evalHueCurve } from "@palmier/core";
 import type { GradeCurve, HueCurves } from "@palmier/core";
 import type { CompositeLayer } from "./composite-layer.js";
@@ -410,6 +410,59 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: color.lut — 3D-texture tetrahedral sampler, exact port of sampleLUT + combine from lut.ts.
+const WGSL_LUT = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Lut { intensity: f32, dim: f32, _pad0: f32, _pad1: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var lut3d: texture_3d<f32>;
+@group(0) @binding(3) var<uniform> u: Lut;
+
+fn lutCombine(c0: vec3f, cA: vec3f, cB: vec3f, c1: vec3f, w0: f32, w1: f32, w2: f32) -> vec3f {
+  return c0 * (1.0 - w0) + cA * (w0 - w1) + cB * (w1 - w2) + c1 * w2;
+}
+
+fn lutNode(r: i32, g: i32, b: i32) -> vec3f {
+  return textureLoad(lut3d, vec3i(r, g, b), 0).rgb;
+}
+
+fn tetra(p: vec3f, n: i32) -> vec3f {
+  let r0 = i32(floor(p.x));
+  let g0 = i32(floor(p.y));
+  let b0 = i32(floor(p.z));
+  let r1 = min(r0 + 1, n - 1);
+  let g1 = min(g0 + 1, n - 1);
+  let b1 = min(b0 + 1, n - 1);
+  let fr = p.x - f32(r0);
+  let fg = p.y - f32(g0);
+  let fb = p.z - f32(b0);
+  let c000 = lutNode(r0, g0, b0);
+  let c111 = lutNode(r1, g1, b1);
+  if (fr >= fg && fg >= fb) {
+    return lutCombine(c000, lutNode(r1, g0, b0), lutNode(r1, g1, b0), c111, fr, fg, fb);
+  } else if (fr >= fb && fb >= fg) {
+    return lutCombine(c000, lutNode(r1, g0, b0), lutNode(r1, g0, b1), c111, fr, fb, fg);
+  } else if (fb >= fr && fr >= fg) {
+    return lutCombine(c000, lutNode(r0, g0, b1), lutNode(r1, g0, b1), c111, fb, fr, fg);
+  } else if (fg >= fr && fr >= fb) {
+    return lutCombine(c000, lutNode(r0, g1, b0), lutNode(r1, g1, b0), c111, fg, fr, fb);
+  } else if (fg >= fb && fb >= fr) {
+    return lutCombine(c000, lutNode(r0, g1, b0), lutNode(r0, g1, b1), c111, fg, fb, fr);
+  }
+  return lutCombine(c000, lutNode(r0, g0, b1), lutNode(r0, g1, b1), c111, fb, fg, fr);
+}
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let n = i32(u.dim);
+  let p = clamp(c.rgb, vec3f(0.0), vec3f(1.0)) * (f32(n) - 1.0);
+  let sampled = tetra(p, n);
+  return vec4f(mix(c.rgb, sampled, u.intensity), c.a);
+}
+`;
+
 // Normal-blend composite of an effected layer into the accumulator (opacity applied via alpha, ALPHA_BLEND state).
 const WGSL_COMPOSITE = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Comp { opacity: f32 };
@@ -441,6 +494,7 @@ interface EffectStep {
   type: string;
   uBuf?: GPUBuffer;
   lutTex?: GPUTexture;
+  lut3dTex?: GPUTexture;
 }
 
 type LayerPlan =
@@ -465,6 +519,7 @@ interface RendererResources {
   wheelsModule: GPUShaderModule;
   curvesModule: GPUShaderModule;
   hueCurvesModule: GPUShaderModule;
+  lutModule: GPUShaderModule;
   compositeModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
@@ -477,6 +532,8 @@ interface RendererResources {
   fxLayout: GPUPipelineLayout;
   fxLutBgl: GPUBindGroupLayout;
   fxLutLayout: GPUPipelineLayout;
+  fxLut3dBgl: GPUBindGroupLayout;
+  fxLut3dLayout: GPUPipelineLayout;
   // eager blit pipelines (always used)
   blitCanvasPipeline: GPURenderPipeline;
   blitReadbackPipeline: GPURenderPipeline;
@@ -514,6 +571,7 @@ export class FrameRenderer {
   private wheelsModule: GPUShaderModule;
   private curvesModule: GPUShaderModule;
   private hueCurvesModule: GPUShaderModule;
+  private lutModule: GPUShaderModule;
   private compositeModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
@@ -526,6 +584,9 @@ export class FrameRenderer {
   private fxLayout: GPUPipelineLayout;
   private fxLutBgl: GPUBindGroupLayout;
   private fxLutLayout: GPUPipelineLayout;
+  private fxLut3dBgl: GPUBindGroupLayout;
+  private fxLut3dLayout: GPUPipelineLayout;
+  cubeLUTs = new Map<string, CubeLUT>();
   // blit pipelines (copy accumulator → canvas or readbackTex, no blend)
   private blitCanvasPipeline: GPURenderPipeline;
   private blitReadbackPipeline: GPURenderPipeline;
@@ -555,6 +616,7 @@ export class FrameRenderer {
     this.wheelsModule = r.wheelsModule;
     this.curvesModule = r.curvesModule;
     this.hueCurvesModule = r.hueCurvesModule;
+    this.lutModule = r.lutModule;
     this.compositeModule = r.compositeModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
@@ -565,6 +627,8 @@ export class FrameRenderer {
     this.fxLayout = r.fxLayout;
     this.fxLutBgl = r.fxLutBgl;
     this.fxLutLayout = r.fxLutLayout;
+    this.fxLut3dBgl = r.fxLut3dBgl;
+    this.fxLut3dLayout = r.fxLut3dLayout;
     this.blitCanvasPipeline = r.blitCanvasPipeline;
     this.blitReadbackPipeline = r.blitReadbackPipeline;
     this.readbackTex = r.readbackTex;
@@ -598,6 +662,7 @@ export class FrameRenderer {
     const wheelsModule = device.createShaderModule({ code: WGSL_WHEELS });
     const curvesModule = device.createShaderModule({ code: WGSL_CURVES });
     const hueCurvesModule = device.createShaderModule({ code: WGSL_HUE_CURVES });
+    const lutModule = device.createShaderModule({ code: WGSL_LUT });
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
 
     const extBgl = device.createBindGroupLayout({
@@ -647,6 +712,17 @@ export class FrameRenderer {
     });
     const fxLutLayout = device.createPipelineLayout({ bindGroupLayouts: [fxLutBgl] });
 
+    // color.lut: src (float), sampler, lut3d (unfilterable-float, 3d), uniform
+    const fxLut3dBgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "unfilterable-float", viewDimension: "3d" } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+      ],
+    });
+    const fxLut3dLayout = device.createPipelineLayout({ bindGroupLayouts: [fxLut3dBgl] });
+
     // Blit pipelines: copy the (rgba16float) accumulator → canvas or readback (rgba16float is filterable).
     const blitCanvasPipeline = device.createRenderPipeline({
       layout: blitLayout,
@@ -674,9 +750,9 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, compositeModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule,
       extBgl, copyBgl, blitBgl, fxBgl,
-      extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout,
+      extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout,
       blitCanvasPipeline, blitReadbackPipeline,
       readbackTex,
       fxPing: makeFxTexture(device, cw, ch),
@@ -813,6 +889,13 @@ export class FrameRenderer {
           fragment: { module: this.hueCurvesModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
+      case "color.lut":
+        return this.pipelineFor("effect:color.lut", () => this.device.createRenderPipeline({
+          layout: this.fxLut3dLayout,
+          vertex: { module: this.lutModule, entryPoint: "vs" },
+          fragment: { module: this.lutModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
       default:
         return null;
     }
@@ -887,6 +970,35 @@ export class FrameRenderer {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     device.queue.writeTexture({ texture: tex }, data, { bytesPerRow: 1024 }, [256, 1]);
+    return tex;
+  }
+
+  private uploadCubeLutTexture(device: GPUDevice, lut: CubeLUT): GPUTexture {
+    const n = lut.dimension;
+    const tex = device.createTexture({
+      size: [n, n, n],
+      format: "rgba32float",
+      dimension: "3d",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    const bytesPerTexel = 16; // rgba32float: 4 channels × 4 bytes each
+    const unpaddedBytesPerRow = n * bytesPerTexel;
+    const bytesPerRow = Math.ceil(unpaddedBytesPerRow / 256) * 256;
+    const buf = new Uint8Array(bytesPerRow * n * n);
+    const view = new DataView(buf.buffer);
+    for (let b = 0; b < n; b++) {
+      for (let g = 0; g < n; g++) {
+        for (let r = 0; r < n; r++) {
+          const srcIdx = (b * n * n + g * n + r) * 4;
+          const dstBase = (b * n + g) * bytesPerRow + r * bytesPerTexel;
+          view.setFloat32(dstBase + 0, lut.data[srcIdx]!, true);
+          view.setFloat32(dstBase + 4, lut.data[srcIdx + 1]!, true);
+          view.setFloat32(dstBase + 8, lut.data[srcIdx + 2]!, true);
+          view.setFloat32(dstBase + 12, lut.data[srcIdx + 3]!, true);
+        }
+      }
+    }
+    device.queue.writeTexture({ texture: tex }, buf, { bytesPerRow, rowsPerImage: n }, [n, n, n]);
     return tex;
   }
 
@@ -1001,6 +1113,17 @@ export class FrameRenderer {
               steps.push({ type: eff.type, lutTex });
               continue;
             }
+            if (eff.type === "color.lut") {
+              const path = eff.params.path?.string ?? "";
+              const cubeLut = this.cubeLUTs.get(path);
+              if (!cubeLut) continue;
+              const lut3dTex = this.uploadCubeLutTexture(device, cubeLut);
+              tempTextures.push(lut3dTex);
+              const intensity = resolveParam(eff.params.intensity, 0, 1);
+              const uBuf = uniformBuffer(new Float32Array([intensity, cubeLut.dimension, 0, 0]), 16);
+              steps.push({ type: eff.type, lut3dTex, uBuf });
+              continue;
+            }
             const data = this.effectStepData(eff);
             if (!data) continue; // unimplemented effect type this milestone
             steps.push({ type: eff.type, uBuf: uniformBuffer(data, Math.max(16, data.byteLength)) });
@@ -1098,7 +1221,17 @@ export class FrameRenderer {
             colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
           });
           pass.setPipeline(pipe);
-          if (step.lutTex) {
+          if (step.lut3dTex) {
+            pass.setBindGroup(0, device.createBindGroup({
+              layout: this.fxLut3dBgl,
+              entries: [
+                { binding: 0, resource: ping.createView() },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: step.lut3dTex.createView() },
+                { binding: 3, resource: { buffer: step.uBuf! } },
+              ],
+            }));
+          } else if (step.lutTex) {
             pass.setBindGroup(0, device.createBindGroup({
               layout: this.fxLutBgl,
               entries: [

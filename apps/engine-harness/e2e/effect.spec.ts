@@ -72,3 +72,30 @@ for (const c of LUT_CASES) {
     }
   });
 }
+
+// color.lut 3D-texture tests: ±4 tolerance (float32 precision through rgba8unorm readback).
+test("color.lut identity 2³ cube round-trips input unchanged", async ({ page }) => {
+  await page.goto("/effect.html?case=lut");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const expected = await page.evaluate(
+    () => (window as unknown as { __expected: [number, number, number] }).__expected,
+  );
+  const p = await px(page, 100, 100);
+  for (let ch = 0; ch < 3; ch++) {
+    const exp8 = Math.round(expected[ch]! * 255);
+    expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
+  }
+});
+
+test("color.lut non-identity 2³ invert cube matches CPU sampleLUT within ±4", async ({ page }) => {
+  await page.goto("/effect.html?case=lut2");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const expected = await page.evaluate(
+    () => (window as unknown as { __expected: [number, number, number] }).__expected,
+  );
+  const p = await px(page, 100, 100);
+  for (let ch = 0; ch < 3; ch++) {
+    const exp8 = Math.round(expected[ch]! * 255);
+    expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
+  }
+});

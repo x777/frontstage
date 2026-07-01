@@ -3,6 +3,7 @@ import {
   affineTransform, defaultTransform, defaultCrop, type Effect,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
   applyColorWheels, applyCurves, applyHueCurves, parseGradeCurve, parseHueCurves,
+  parseCubeLUT, sampleLUT,
 } from "@palmier/core";
 
 const W = 200, H = 200;
@@ -76,6 +77,54 @@ async function main() {
       f.close();
       const expH = applyHueCurves(inp, parseHueCurves(curvesJson));
       window.__expected = [expH.r, expH.g, expH.b];
+    } else if (useCase === "lut") {
+      // Identity 2³ cube: output = input. Uses MID color.
+      const identityCubeText = [
+        "LUT_3D_SIZE 2",
+        "0 0 0",
+        "1 0 0",
+        "0 1 0",
+        "1 1 0",
+        "0 0 1",
+        "1 0 1",
+        "0 1 1",
+        "1 1 1",
+      ].join("\n");
+      const identityLut = parseCubeLUT(identityCubeText)!;
+      const f = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "color.lut", enabled: true, params: { path: { string: "identity2" }, intensity: { value: 1 } } }],
+      };
+      r.cubeLUTs.set("identity2", identityLut);
+      await r.composite([layer], size);
+      f.close();
+      window.__expected = [MID_R / 255, MID_G / 255, MID_B / 255];
+    } else if (useCase === "lut2") {
+      // Non-identity 2³ invert cube: output = (1-r, 1-g, 1-b). Uses MID color.
+      const invertCubeText = [
+        "LUT_3D_SIZE 2",
+        "1 1 1",
+        "0 1 1",
+        "1 0 1",
+        "0 0 1",
+        "1 1 0",
+        "0 1 0",
+        "1 0 0",
+        "0 0 0",
+      ].join("\n");
+      const invertLut = parseCubeLUT(invertCubeText)!;
+      const inp = { r: MID_R / 255, g: MID_G / 255, b: MID_B / 255 };
+      const f = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "color.lut", enabled: true, params: { path: { string: "invert2" }, intensity: { value: 1 } } }],
+      };
+      r.cubeLUTs.set("invert2", invertLut);
+      await r.composite([layer], size);
+      f.close();
+      const expL = sampleLUT(invertLut, inp);
+      window.__expected = [expL.r, expL.g, expL.b];
     } else {
       // Parity tests: mid-color frame, one effect per case, CPU-expected exported to window.__expected.
       const frame = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
