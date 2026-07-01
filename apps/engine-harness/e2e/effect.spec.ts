@@ -101,7 +101,7 @@ test("color.lut non-identity 2³ invert cube matches CPU sampleLUT within ±4", 
 });
 
 // Blend mode parity tests: two-layer composite (bg grey 0.5, top 0.6/0.4/0.8) vs CPU blendPixel.
-const BLEND_CASES = ["blend-multiply", "blend-screen", "blend-overlay", "blend-difference", "blend-colorburn"] as const;
+const BLEND_CASES = ["blend-multiply", "blend-screen", "blend-overlay", "blend-difference", "blend-colorBurn"] as const;
 
 for (const c of BLEND_CASES) {
   test(`${c} GPU matches CPU blendPixel within ±3`, async ({ page }) => {
