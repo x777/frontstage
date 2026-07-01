@@ -503,8 +503,36 @@ fn sep1(mode: u32, s: f32, d: f32) -> f32 {
     default: { return s; }
   }
 }
+fn bLum(c: vec3f) -> f32 { return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b; }
+fn clipColor(c: vec3f) -> vec3f {
+  let l = bLum(c); let n = min(c.r, min(c.g, c.b)); let x = max(c.r, max(c.g, c.b));
+  var r = c;
+  if (n < 0.0) { r = l + (c - vec3f(l)) * l / (l - n); }
+  if (x > 1.0) { r = l + (r - vec3f(l)) * (1.0 - l) / (x - l); }
+  return r;
+}
+fn setLum(c: vec3f, l: f32) -> vec3f { return clipColor(c + vec3f(l - bLum(c))); }
+fn bSat(c: vec3f) -> f32 { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+fn setSat(c: vec3f, s: f32) -> vec3f {
+  let mn = min(c.r, min(c.g, c.b)); let mx = max(c.r, max(c.g, c.b)); let md = c.r + c.g + c.b - mn - mx;
+  var newMid = 0.0; var newMax = 0.0;
+  if (mx > mn) { newMid = (md - mn) * s / (mx - mn); newMax = s; }
+  var o = vec3f(0.0);
+  if (c.r == mx) { o.r = newMax; } else if (c.r == mn) { o.r = 0.0; } else { o.r = newMid; }
+  if (c.g == mx) { o.g = newMax; } else if (c.g == mn) { o.g = 0.0; } else { o.g = newMid; }
+  if (c.b == mx) { o.b = newMax; } else if (c.b == mn) { o.b = 0.0; } else { o.b = newMid; }
+  return o;
+}
+fn hslBlend(mode: u32, s: vec3f, d: vec3f) -> vec3f {
+  switch mode {
+    case 12u: { return setLum(setSat(s, bSat(d)), bLum(d)); }
+    case 13u: { return setLum(setSat(d, bSat(s)), bLum(d)); }
+    case 14u: { return setLum(s, bLum(d)); }
+    default:  { return setLum(d, bLum(s)); }
+  }
+}
 fn blendRgb(mode: u32, s: vec3f, d: vec3f) -> vec3f {
-  // Task 2 adds: if (mode >= 12u) { return hslBlend(mode, s, d); }
+  if (mode >= 12u) { return hslBlend(mode, s, d); }
   return vec3f(sep1(mode, s.r, d.r), sep1(mode, s.g, d.g), sep1(mode, s.b, d.b));
 }
 @fragment fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {

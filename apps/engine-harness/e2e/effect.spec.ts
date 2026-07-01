@@ -117,3 +117,21 @@ for (const c of BLEND_CASES) {
     }
   });
 }
+
+// HSL blend mode parity: bg rgb(0.2,0.5,0.7), top rgb(0.6,0.4,0.8), ±4 tolerance (HSL clip nonlinearity).
+const HSL_BLEND_CASES = ["blend-hue", "blend-saturation", "blend-color", "blend-luminosity"] as const;
+
+for (const c of HSL_BLEND_CASES) {
+  test(`${c} GPU matches CPU blendPixel within ±4`, async ({ page }) => {
+    await page.goto(`/effect.html?case=${c}`);
+    await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+    const expected = await page.evaluate(
+      () => (window as unknown as { __expected: [number, number, number] }).__expected,
+    );
+    const p = await px(page, 100, 100);
+    for (let ch = 0; ch < 3; ch++) {
+      const exp8 = Math.round(expected[ch]! * 255);
+      expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
+    }
+  });
+}
