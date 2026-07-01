@@ -23,6 +23,7 @@ import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
 import { CurvesSection } from "./adjust/CurvesSection.js";
 import { ColorWheelsSection } from "./adjust/ColorWheelsSection.js";
 import { HueCurvesSection } from "./adjust/HueCurvesSection.js";
+import { LUTSection } from "./adjust/LUTSection.js";
 import { EffectsSection } from "./adjust/EffectsSection.js";
 import { BlendControl } from "./adjust/BlendControl.js";
 import { computeFrameHistograms } from "./adjust/frame-histogram.js";
@@ -120,6 +121,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
           <CurvesSection store={store} clipIds={selIds} histogram={histogram} />
           <ColorWheelsSection store={store} clipIds={selIds} />
           <HueCurvesSection store={store} clipIds={selIds} hueHistogram={hueHistogram} />
+          <LUTSection store={store} clipIds={selIds} engineRef={engineRef} />
           <EffectsSection store={store} clipIds={selIds} />
           <BlendControl store={store} clipIds={selIds} />
         </div>
@@ -417,6 +419,11 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
       {/* Hue Curves */}
       {isVisual && !isText && (
         <HueCurvesSection store={store} clipIds={[clipId]} hueHistogram={hueHistogram} />
+      )}
+
+      {/* LUT */}
+      {isVisual && !isText && (
+        <LUTSection store={store} clipIds={[clipId]} engineRef={engineRef} />
       )}
 
       {/* Effects */}

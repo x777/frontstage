@@ -28,4 +28,6 @@ export { HueCurvesSection } from "./HueCurvesSection.js";
 export type { HueCurvesSectionProps } from "./HueCurvesSection.js";
 export { EffectsSection } from "./EffectsSection.js";
 export type { EffectsSectionProps } from "./EffectsSection.js";
+export { LUTSection } from "./LUTSection.js";
+export type { LUTSectionProps } from "./LUTSection.js";
 export { computeFrameHistogram, computeFrameHistograms } from "./frame-histogram.js";

@@ -1,0 +1,204 @@
+import { useState, useRef } from "react";
+import type { EditorStore, Clip, CubeLUT } from "@palmier/core";
+import {
+  findClip,
+  parseCubeLUT,
+  effectDescriptor,
+  sharedParamValue,
+  setEffectParam,
+  setEffectString,
+  setSectionEnabled,
+  resetSection,
+  setClipEffectsCommand,
+} from "@palmier/core";
+import { useStore } from "../../store/use-store.js";
+import { AdjustSection } from "./AdjustSection.js";
+import { AdjustSlider } from "./AdjustSlider.js";
+import { theme } from "../../theme/theme.js";
+
+const LUT_TYPE = "color.lut";
+
+export interface LUTSectionProps {
+  store: EditorStore;
+  clipIds: string[];
+  engineRef?: { current: { registerLUT(path: string, cube: CubeLUT): void } | null };
+}
+
+export function LUTSection({ store, clipIds, engineRef }: LUTSectionProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [parseError, setParseError] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const timeline = useStore(store, (s) => s.timeline);
+
+  const clips: Clip[] = clipIds.flatMap((id) => {
+    const loc = findClip(timeline, id);
+    if (!loc) return [];
+    const track = timeline.tracks[loc.trackIndex];
+    if (!track) return [];
+    const clip = track.clips[loc.clipIndex];
+    if (!clip) return [];
+    return [clip];
+  });
+
+  const firstPath = clips[0]?.effects?.find((e) => e.type === LUT_TYPE)?.params["path"]?.string ?? "";
+  const allSamePath = clips.every(
+    (c) => (c.effects?.find((e) => e.type === LUT_TYPE)?.params["path"]?.string ?? "") === firstPath,
+  );
+  const lutName = allSamePath ? (firstPath || "None") : "—";
+
+  const d = effectDescriptor(LUT_TYPE);
+  const intensitySpec = d?.params.find((p) => p.key === "intensity");
+  const { min = 0, max = 1, default: def = 1 } = intensitySpec ?? {};
+  const intensity = sharedParamValue(clips, LUT_TYPE, "intensity");
+
+  const canReset = clips.some((c) => c.effects?.some((e) => e.type === LUT_TYPE));
+  const sectionEnabled = !clips.some((c) => c.effects?.some((e) => e.type === LUT_TYPE && !e.enabled));
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParseError(false);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      const cube = parseCubeLUT(text);
+      if (!cube) {
+        setParseError(true);
+        return;
+      }
+      engineRef?.current?.registerLUT(file.name, cube);
+      store.dispatch(
+        setClipEffectsCommand(
+          clipIds,
+          (c) => setEffectString(c.effects, LUT_TYPE, "path", file.name, () => crypto.randomUUID()),
+        ),
+      );
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <AdjustSection
+      title="LUTs"
+      expanded={expanded}
+      onToggle={() => setExpanded((x) => !x)}
+      canReset={canReset}
+      onReset={() =>
+        store.dispatch(setClipEffectsCommand(clipIds, (c) => resetSection(c.effects, [LUT_TYPE])))
+      }
+      enabled={sectionEnabled}
+      onToggleEnabled={() =>
+        store.dispatch(
+          setClipEffectsCommand(clipIds, (c) => setSectionEnabled(c.effects, [LUT_TYPE], !sectionEnabled)),
+        )
+      }
+      canEnable={canReset}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.xs }}>
+        {/* File picker row */}
+        <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
+          <label
+            style={{
+              display: "inline-block",
+              padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+              background: theme.bg.raised,
+              border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+              borderRadius: theme.radius.xs,
+              fontSize: theme.fontSize.xs,
+              color: theme.text.primary,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".cube"
+              data-testid="lut-file-input"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+            Load .cube…
+          </label>
+          <span
+            data-testid="lut-name"
+            style={{
+              flex: 1,
+              fontSize: theme.fontSize.xs,
+              color: lutName === "None" ? theme.text.muted : theme.text.primary,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {lutName}
+          </span>
+          {canReset && (
+            <button
+              data-testid="lut-remove"
+              onClick={() =>
+                store.dispatch(
+                  setClipEffectsCommand(clipIds, (c) =>
+                    setEffectString(c.effects, LUT_TYPE, "path", "", () => crypto.randomUUID()),
+                  ),
+                )
+              }
+              style={{
+                background: "none",
+                border: "none",
+                padding: `0 ${theme.spacing.xxs}`,
+                color: theme.text.secondary,
+                fontSize: theme.fontSize.xs,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+
+        {/* Parse error */}
+        {parseError && (
+          <span
+            data-testid="lut-parse-error"
+            style={{ fontSize: theme.fontSize.xs, color: theme.status.error }}
+          >
+            Invalid .cube file
+          </span>
+        )}
+
+        {/* Intensity slider */}
+        <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
+          <span
+            style={{
+              fontSize: theme.fontSize.xs,
+              color: theme.text.secondary,
+              minWidth: theme.size.inspectorLabel,
+              flexShrink: 0,
+            }}
+          >
+            Intensity
+          </span>
+          <AdjustSlider
+            value={intensity}
+            min={min}
+            max={max}
+            def={def}
+            onChange={(v) =>
+              store.dispatch(
+                setClipEffectsCommand(
+                  clipIds,
+                  (c) => setEffectParam(c.effects, LUT_TYPE, "intensity", v, () => crypto.randomUUID()),
+                  "fx-color.lut-intensity",
+                ),
+              )
+            }
+            onCommit={() => {}}
+          />
+        </div>
+      </div>
+    </AdjustSection>
+  );
+}
