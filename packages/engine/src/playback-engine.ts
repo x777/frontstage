@@ -1,5 +1,6 @@
 import {
   type Timeline,
+  type CubeLUT,
   timelineTotalFrames,
 } from "@palmier/core";
 import type { MediaByteSource } from "./media/media-source.js";
@@ -194,6 +195,8 @@ export class PlaybackEngine {
     return this.audio ? () => this.audio!.currentTime : undefined;
   }
   get __audioMixer(): AudioMixer | undefined { return this.audioMixer; }
+
+  registerLUT(path: string, cube: CubeLUT): void { this.renderer.registerLUT(path, cube); }
 
   readPixel(x: number, y: number): Promise<[number, number, number, number]> {
     return this.renderer.readPixel(x, y);

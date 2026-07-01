@@ -894,7 +894,8 @@ export class FrameRenderer {
   private fxLut3dLayout: GPUPipelineLayout;
   private blendBgl: GPUBindGroupLayout;
   private blendLayout: GPUPipelineLayout;
-  cubeLUTs = new Map<string, CubeLUT>();
+  private cubeLUTs = new Map<string, CubeLUT>();
+  private lut3dTexCache = new Map<string, GPUTexture>();
   // blit/copy pipelines
   private blitCanvasPipeline: GPURenderPipeline;
   private blitReadbackPipeline: GPURenderPipeline;
@@ -1611,8 +1612,8 @@ export class FrameRenderer {
               const path = eff.params.path?.string ?? "";
               const cubeLut = this.cubeLUTs.get(path);
               if (!cubeLut) continue;
-              const lut3dTex = this.uploadCubeLutTexture(device, cubeLut);
-              tempTextures.push(lut3dTex);
+              let lut3dTex = this.lut3dTexCache.get(path);
+              if (!lut3dTex) { lut3dTex = this.uploadCubeLutTexture(device, cubeLut); this.lut3dTexCache.set(path, lut3dTex); }
               const intensity = resolveParam(eff.params.intensity, 0, 1);
               const uBuf = uniformBuffer(new Float32Array([intensity, cubeLut.dimension, 0, 0]), 16);
               steps.push({ type: eff.type, lut3dTex, uBuf });
@@ -2167,7 +2168,15 @@ export class FrameRenderer {
     this.ctx.configure({ device: this.device, format: this.canvasFmt, alphaMode: "opaque" });
   }
 
+  registerLUT(path: string, cube: CubeLUT): void {
+    this.cubeLUTs.set(path, cube);
+    const old = this.lut3dTexCache.get(path);
+    if (old) { old.destroy(); this.lut3dTexCache.delete(path); }
+  }
+
   dispose(): void {
+    for (const tex of this.lut3dTexCache.values()) tex.destroy();
+    this.lut3dTexCache.clear();
     this.readbackTex.destroy();
     this.fxPing.destroy();
     this.fxPong.destroy();

@@ -74,31 +74,28 @@ for (const c of LUT_CASES) {
 }
 
 // color.lut 3D-texture tests: ±4 tolerance (float32 precision through rgba8unorm readback).
-test("color.lut identity 2³ cube round-trips input unchanged", async ({ page }) => {
-  await page.goto("/effect.html?case=lut");
-  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
-  const expected = await page.evaluate(
-    () => (window as unknown as { __expected: [number, number, number] }).__expected,
-  );
-  const p = await px(page, 100, 100);
-  for (let ch = 0; ch < 3; ch++) {
-    const exp8 = Math.round(expected[ch]! * 255);
-    expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
-  }
-});
+// All cases use registerLUT (the public API) to inject the CubeLUT.
+const LUT_3D_CASES: Array<{ name: string; case: string; tol: number }> = [
+  { name: "identity 2³ cube round-trips input unchanged", case: "lut", tol: 4 },
+  { name: "non-identity 2³ invert cube matches CPU sampleLUT within ±4", case: "lut2", tol: 4 },
+  { name: "cache stability: second render with cached texture matches sampleLUT", case: "lut-cached", tol: 4 },
+  { name: "cache invalidation: re-registerLUT changes output to match new cube", case: "lut-reinit", tol: 4 },
+];
 
-test("color.lut non-identity 2³ invert cube matches CPU sampleLUT within ±4", async ({ page }) => {
-  await page.goto("/effect.html?case=lut2");
-  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
-  const expected = await page.evaluate(
-    () => (window as unknown as { __expected: [number, number, number] }).__expected,
-  );
-  const p = await px(page, 100, 100);
-  for (let ch = 0; ch < 3; ch++) {
-    const exp8 = Math.round(expected[ch]! * 255);
-    expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
-  }
-});
+for (const c of LUT_3D_CASES) {
+  test(`color.lut ${c.name}`, async ({ page }) => {
+    await page.goto(`/effect.html?case=${c.case}`);
+    await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+    const expected = await page.evaluate(
+      () => (window as unknown as { __expected: [number, number, number] }).__expected,
+    );
+    const p = await px(page, 100, 100);
+    for (let ch = 0; ch < 3; ch++) {
+      const exp8 = Math.round(expected[ch]! * 255);
+      expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(c.tol);
+    }
+  });
+}
 
 // Blend mode parity tests: two-layer composite (bg grey 0.5, top 0.6/0.4/0.8) vs CPU blendPixel.
 const BLEND_CASES = ["blend-multiply", "blend-screen", "blend-overlay", "blend-difference", "blend-colorBurn"] as const;

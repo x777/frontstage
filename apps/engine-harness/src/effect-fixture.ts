@@ -79,7 +79,7 @@ async function main() {
       const expH = applyHueCurves(inp, parseHueCurves(curvesJson));
       window.__expected = [expH.r, expH.g, expH.b];
     } else if (useCase === "lut") {
-      // Identity 2³ cube: output = input. Uses MID color.
+      // Identity 2³ cube via registerLUT: output = input. Uses MID color.
       const identityCubeText = [
         "LUT_3D_SIZE 2",
         "0 0 0",
@@ -92,17 +92,17 @@ async function main() {
         "1 1 1",
       ].join("\n");
       const identityLut = parseCubeLUT(identityCubeText)!;
+      r.registerLUT("identity2", identityLut);
       const f = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
       const layer: CompositeLayer = {
         frame: f, transform: full, opacity: 1, crop: defaultCrop(),
         effects: [{ id: "e", type: "color.lut", enabled: true, params: { path: { string: "identity2" }, intensity: { value: 1 } } }],
       };
-      r.cubeLUTs.set("identity2", identityLut);
       await r.composite([layer], size);
       f.close();
       window.__expected = [MID_R / 255, MID_G / 255, MID_B / 255];
     } else if (useCase === "lut2") {
-      // Non-identity 2³ invert cube: output = (1-r, 1-g, 1-b). Uses MID color.
+      // Non-identity 2³ invert cube via registerLUT: output = (1-r, 1-g, 1-b). Uses MID color.
       const invertCubeText = [
         "LUT_3D_SIZE 2",
         "1 1 1",
@@ -116,14 +116,83 @@ async function main() {
       ].join("\n");
       const invertLut = parseCubeLUT(invertCubeText)!;
       const inp = { r: MID_R / 255, g: MID_G / 255, b: MID_B / 255 };
+      r.registerLUT("invert2", invertLut);
       const f = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
       const layer: CompositeLayer = {
         frame: f, transform: full, opacity: 1, crop: defaultCrop(),
         effects: [{ id: "e", type: "color.lut", enabled: true, params: { path: { string: "invert2" }, intensity: { value: 1 } } }],
       };
-      r.cubeLUTs.set("invert2", invertLut);
       await r.composite([layer], size);
       f.close();
+      const expL = sampleLUT(invertLut, inp);
+      window.__expected = [expL.r, expL.g, expL.b];
+    } else if (useCase === "lut-cached") {
+      // Cache stability: register invert LUT, render twice, second result must still match sampleLUT.
+      const invertCubeText = [
+        "LUT_3D_SIZE 2",
+        "1 1 1",
+        "0 1 1",
+        "1 0 1",
+        "0 0 1",
+        "1 1 0",
+        "0 1 0",
+        "1 0 0",
+        "0 0 0",
+      ].join("\n");
+      const invertLut = parseCubeLUT(invertCubeText)!;
+      const inp = { r: MID_R / 255, g: MID_G / 255, b: MID_B / 255 };
+      r.registerLUT("cached-invert", invertLut);
+      const layer = (f: VideoFrame): CompositeLayer => ({
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "color.lut", enabled: true, params: { path: { string: "cached-invert" }, intensity: { value: 1 } } }],
+      });
+      const f1 = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      await r.composite([layer(f1)], size);
+      f1.close();
+      const f2 = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      await r.composite([layer(f2)], size);
+      f2.close();
+      const expL = sampleLUT(invertLut, inp);
+      window.__expected = [expL.r, expL.g, expL.b];
+    } else if (useCase === "lut-reinit") {
+      // Cache invalidation: register identity, render, re-register invert, render again — output must change.
+      const identityCubeText = [
+        "LUT_3D_SIZE 2",
+        "0 0 0",
+        "1 0 0",
+        "0 1 0",
+        "1 1 0",
+        "0 0 1",
+        "1 0 1",
+        "0 1 1",
+        "1 1 1",
+      ].join("\n");
+      const invertCubeText = [
+        "LUT_3D_SIZE 2",
+        "1 1 1",
+        "0 1 1",
+        "1 0 1",
+        "0 0 1",
+        "1 1 0",
+        "0 1 0",
+        "1 0 0",
+        "0 0 0",
+      ].join("\n");
+      const identityLut = parseCubeLUT(identityCubeText)!;
+      const invertLut = parseCubeLUT(invertCubeText)!;
+      const inp = { r: MID_R / 255, g: MID_G / 255, b: MID_B / 255 };
+      const mkLayer = (f: VideoFrame): CompositeLayer => ({
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "color.lut", enabled: true, params: { path: { string: "reinit-test" }, intensity: { value: 1 } } }],
+      });
+      r.registerLUT("reinit-test", identityLut);
+      const f1 = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      await r.composite([mkLayer(f1)], size);
+      f1.close();
+      r.registerLUT("reinit-test", invertLut);
+      const f2 = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      await r.composite([mkLayer(f2)], size);
+      f2.close();
       const expL = sampleLUT(invertLut, inp);
       window.__expected = [expL.r, expL.g, expL.b];
     } else if (useCase.startsWith("blend-")) {
