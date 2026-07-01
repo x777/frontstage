@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { ProjectSession } from "./project-session.js";
 import type { ProjectHost } from "./project-session.js";
 import { InMemoryProjectGateway } from "./memory-gateway.js";
+import { writeProject } from "./project-io.js";
 import type { ProjectDoc } from "../schema/serialize.js";
+import { PROJECT_FILES } from "../schema/serialize.js";
 import type { Timeline } from "../timeline.js";
 import { defaultTimeline } from "../timeline.js";
 import type { MediaManifest } from "../media.js";
@@ -336,5 +338,93 @@ describe("ProjectSession", () => {
     expect(ok).toBe(true);
     expect(session.getState().ref?.id).toBe("queued-ref");
     expect(session.getState().name).toBe("Queued");
+  });
+
+  describe("corrupt media.json recovery", () => {
+    it("open succeeds with an empty manifest when media.json is corrupt", async () => {
+      const ref: ProjectRef = { id: "corrupt-proj", name: "Corrupt" };
+      const gw = new InMemoryProjectGateway();
+      const bound = await gw.bind(ref);
+      await writeProject(bound.store, {
+        timeline: defaultTimeline(),
+        manifest: emptyMediaManifest(),
+        generationLog: emptyGenerationLog(),
+      });
+      await bound.store.writeText(PROJECT_FILES.manifest, "{ this is not valid json");
+
+      const host = new FakeHost();
+      const session = new ProjectSession(host, gw);
+      const opened = await session.open(alwaysProceed, ref);
+
+      expect(opened).toBe(true);
+      expect(host.manifest.entries).toEqual([]);
+    });
+
+    it("save right after opening a corrupt-manifest project preserves the original bytes", async () => {
+      const ref: ProjectRef = { id: "corrupt-proj", name: "Corrupt" };
+      const gw = new InMemoryProjectGateway();
+      const bound = await gw.bind(ref);
+      await writeProject(bound.store, {
+        timeline: defaultTimeline(),
+        manifest: emptyMediaManifest(),
+        generationLog: emptyGenerationLog(),
+      });
+      const corrupt = "{ this is not valid json";
+      await bound.store.writeText(PROJECT_FILES.manifest, corrupt);
+
+      const host = new FakeHost();
+      const session = new ProjectSession(host, gw);
+      await session.open(alwaysProceed, ref);
+
+      const ok = await session.save();
+
+      expect(ok).toBe(true);
+      expect(await bound.store.readText(PROJECT_FILES.manifest)).toBe(corrupt);
+    });
+
+    it("a rebuilt manifest is written and clears the load-failed flag; a later empty save is not held hostage", async () => {
+      const ref: ProjectRef = { id: "corrupt-proj", name: "Corrupt" };
+      const gw = new InMemoryProjectGateway();
+      const bound = await gw.bind(ref);
+      await writeProject(bound.store, {
+        timeline: defaultTimeline(),
+        manifest: emptyMediaManifest(),
+        generationLog: emptyGenerationLog(),
+      });
+      const corrupt = "{ this is not valid json";
+      await bound.store.writeText(PROJECT_FILES.manifest, corrupt);
+
+      const host = new FakeHost();
+      const session = new ProjectSession(host, gw);
+      await session.open(alwaysProceed, ref);
+
+      // Rebuild the library: the manifest is no longer empty, so save must write it for real.
+      host.manifest = {
+        version: 2,
+        entries: [
+          {
+            id: "x",
+            name: "x.mp4",
+            type: "video",
+            source: { kind: "project", relativePath: "media/x.mp4" },
+            duration: 1,
+          },
+        ],
+        folders: [],
+      };
+      await session.save();
+
+      const rebuilt = await bound.store.readText(PROJECT_FILES.manifest);
+      expect(rebuilt).not.toBe(corrupt);
+      expect(JSON.parse(rebuilt!).entries).toHaveLength(1);
+
+      // Empty the library and save again: the flag is clear now, so this must persist as empty
+      // rather than resurrecting the rebuilt entries on a later reopen.
+      host.manifest = emptyMediaManifest();
+      await session.save();
+
+      const emptied = await bound.store.readText(PROJECT_FILES.manifest);
+      expect(JSON.parse(emptied!).entries).toEqual([]);
+    });
   });
 });

@@ -39,6 +39,11 @@ export class ProjectSession {
   private savedTimeline: Timeline;
   private savedManifest: MediaManifest;
   private listeners: Set<() => void> = new Set();
+  // Set when the opened project's media.json existed but failed to decode, so saves preserve
+  // the original bytes instead of clobbering them with an empty manifest. Cleared once a real
+  // (non-empty, while failed) manifest is actually written.
+  private manifestLoadFailed = false;
+  private preservedManifestText: string | null = null;
 
   constructor(host: ProjectHost, gateway: ProjectGateway, untitledName = "Untitled") {
     this.host = host;
@@ -81,6 +86,8 @@ export class ProjectSession {
     });
     this.state = { ref: null, name: this.untitledName };
     this.bound = null;
+    this.manifestLoadFailed = false;
+    this.preservedManifestText = null;
     this.advanceSaved();
     this.emit();
     return true;
@@ -94,6 +101,8 @@ export class ProjectSession {
     const doc = await readProject(bound.store);
     this.host.loadDoc(doc);
     this.bound = bound;
+    this.manifestLoadFailed = doc.manifestUnreadable;
+    this.preservedManifestText = doc.manifestUnreadable ? doc.rawManifestText : null;
     this.state = { ref: r, name: r.name };
     this.advanceSaved();
     await this.gateway.addRecent(r);
@@ -137,11 +146,28 @@ export class ProjectSession {
   }
 
   private async persist(bound: BoundProject): Promise<void> {
-    await writeProject(bound.store, {
-      timeline: this.host.getTimeline(),
-      manifest: this.host.getManifest(),
-      generationLog: this.host.getGenerationLog(),
-    });
+    const manifest = this.host.getManifest();
+    // While the original manifest failed to load and nothing has rebuilt it, don't clobber the
+    // recoverable original with an empty one — write its preserved bytes back instead.
+    const manifestEmpty = manifest.entries.length === 0 && manifest.folders.length === 0;
+    const preserveText =
+      this.manifestLoadFailed && manifestEmpty && this.preservedManifestText !== null
+        ? this.preservedManifestText
+        : null;
+
+    await writeProject(
+      bound.store,
+      {
+        timeline: this.host.getTimeline(),
+        manifest,
+        generationLog: this.host.getGenerationLog(),
+      },
+      preserveText !== null ? { preserveManifestText: preserveText } : undefined
+    );
+
+    // A real manifest was just written, so the unreadable original (if any) is gone — stop preserving it.
+    if (preserveText === null) this.manifestLoadFailed = false;
+
     const pending = this.host.pendingMedia();
     for (const [path, bytes] of pending) {
       await bound.media.writeMedia(path, bytes);

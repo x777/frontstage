@@ -31,5 +31,32 @@ describe("serialize", () => {
     expect(clip.speed).toBe(1); // default filled
     expect(clip.transform.centerX).toBeCloseTo(0.5); // migrated from x
     expect(doc.manifest.entries).toEqual([]); // missing manifest → empty
+    expect(doc.manifestUnreadable).toBe(false); // missing != corrupt
+  });
+
+  test("corrupt media.json (invalid JSON) degrades to an empty manifest, flagged unreadable", () => {
+    const files = encodeProjectFiles({ timeline: defaultTimeline(), manifest: emptyMediaManifest(), generationLog: emptyGenerationLog() });
+    const doc = decodeProjectFiles({ timeline: files[PROJECT_FILES.timeline]!, manifest: "{ this is not valid json" });
+    expect(doc.manifest.entries).toEqual([]);
+    expect(doc.manifest.folders).toEqual([]);
+    expect(doc.manifestUnreadable).toBe(true);
+    expect(doc.timeline.fps).toBe(defaultTimeline().fps); // timeline still decodes fine
+  });
+
+  test("valid-JSON-wrong-shape media.json degrades the same way", () => {
+    const files = encodeProjectFiles({ timeline: defaultTimeline(), manifest: emptyMediaManifest(), generationLog: emptyGenerationLog() });
+    const doc = decodeProjectFiles({
+      timeline: files[PROJECT_FILES.timeline]!,
+      manifest: JSON.stringify({ entries: "not-an-array" }),
+    });
+    expect(doc.manifest.entries).toEqual([]);
+    expect(doc.manifestUnreadable).toBe(true);
+  });
+
+  test("corrupt generation-log degrades to an empty log; project still opens", () => {
+    const files = encodeProjectFiles({ timeline: defaultTimeline(), manifest: emptyMediaManifest(), generationLog: emptyGenerationLog() });
+    const doc = decodeProjectFiles({ timeline: files[PROJECT_FILES.timeline]!, generationLog: "{ this is not valid json" });
+    expect(doc.generationLog.entries).toEqual([]);
+    expect(doc.manifestUnreadable).toBe(false); // unrelated to the manifest flag
   });
 });
