@@ -153,6 +153,23 @@ test("key.chroma GPU matches applyChromaKey within ±4 (alpha + PMA rgb)", async
   }
 });
 
+// key.chroma-partial: exercises spill+partial-alpha path — GPU must match CPU on a ~50% key.
+test("key.chroma-partial GPU matches applyChromaKey within ±4 (spill + partial alpha)", async ({ page }) => {
+  await page.goto("/effect.html?case=chroma-partial");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const expected = await page.evaluate(
+    () => (window as unknown as { __expectedRGBA: [number, number, number, number] }).__expectedRGBA,
+  );
+  const p = await px(page, 100, 100);
+  // alpha parity
+  expect(Math.abs(p[3]! - Math.round(expected[3]! * 255))).toBeLessThanOrEqual(4);
+  // rgb parity against pre-multiplied expected (compositor alpha-blends into transparent bg)
+  for (let ch = 0; ch < 3; ch++) {
+    const expPma = Math.round(expected[ch]! * expected[3]! * 255);
+    expect(Math.abs(p[ch]! - expPma)).toBeLessThanOrEqual(4);
+  }
+});
+
 // stylize.vignette: corner must be darker than center (amount=-0.8 darkens corners).
 test("stylize.vignette darkens corners relative to center", async ({ page }) => {
   await page.goto("/effect.html?case=vignette");

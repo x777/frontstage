@@ -156,6 +156,21 @@ async function main() {
       f.close();
       const exp = applyChromaKey(inp, 0.333, 0.5, 0.5, 0.5);
       window.__expectedRGBA = [exp.r, exp.g, exp.b, exp.a];
+    } else if (useCase === "chroma-partial") {
+      // Partial chroma key: cyan-teal input (hue≈0.542) sits between inner=0.125 and outer=0.295
+      // from keyHue=0.333, so applyChromaKey returns 0 < alpha < 1 and spill-adjusted rgb.
+      const inp = { r: 0, g: 153 / 255, b: 204 / 255, a: 1 };
+      const f = solidFrame(W, H, `rgb(0, 153, 204)`);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "key.chroma", enabled: true, params: {
+          keyHue: { value: 0.333 }, tolerance: { value: 0.5 }, softness: { value: 0.5 }, spill: { value: 0.5 },
+        }}],
+      };
+      await r.composite([layer], size);
+      f.close();
+      const exp = applyChromaKey(inp, 0.333, 0.5, 0.5, 0.5);
+      window.__expectedRGBA = [exp.r, exp.g, exp.b, exp.a];
     } else if (useCase === "vignette") {
       // Vignette behavior: white frame, amount=-0.8 should darken corners relative to center.
       const f = solidFrame(W, H, "rgb(255,255,255)");
