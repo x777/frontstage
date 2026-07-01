@@ -36,6 +36,8 @@ const PARITY_CASES = [
   "blacksWhites",
   "temperature",
   "vibrance",
+  "wheels",
+  "wheels2",
 ] as const;
 
 for (const c of PARITY_CASES) {

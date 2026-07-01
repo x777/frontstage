@@ -184,6 +184,21 @@ fn rgb2hsv(c: vec3f) -> vec3f {
   let s = select(0.0, d / cmax, cmax > 0.0);
   return vec3f(h, s, cmax);
 }
+fn hsv2rgb(c: vec3f) -> vec3f {
+  let h = fract(c.x);
+  let i = floor(h * 6.0);
+  let f = h * 6.0 - i;
+  let p = c.z * (1.0 - c.y);
+  let q = c.z * (1.0 - f * c.y);
+  let t = c.z * (1.0 - (1.0 - f) * c.y);
+  let ii = i32(i) % 6;
+  if (ii == 0) { return vec3f(c.z, t, p); }
+  if (ii == 1) { return vec3f(q, c.z, p); }
+  if (ii == 2) { return vec3f(p, c.z, t); }
+  if (ii == 3) { return vec3f(p, q, c.z); }
+  if (ii == 4) { return vec3f(t, p, c.z); }
+  return vec3f(c.z, p, q);
+}
 `;
 
 // Effect: color.saturation — WGSL port of core applySaturation (y + (rgb-y)*amount; amount=0 → grey).
@@ -314,6 +329,45 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: color.wheels — lift/gamma/gain per channel with optional chroma offset on each wheel.
+const WGSL_WHEELS = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Wheels { lift: vec4f, gamma: vec4f, gain: vec4f };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Wheels;
+
+fn chromaOffset(x: f32, y: f32) -> vec3f {
+  let r = min(1.0, sqrt(x * x + y * y));
+  if (r <= 1e-6) { return vec3f(0.0); }
+  var hue = atan2(y, x) / (2.0 * 3.14159265359); hue = fract(hue);
+  let rgb = hsv2rgb(vec3f(hue, r, 1.0));
+  let m = (rgb.r + rgb.g + rgb.b) / 3.0;
+  return rgb - vec3f(m);
+}
+
+fn wheelCh(inp: f32, lo: f32, go: f32, ga: f32, liftM: f32, gammaM: f32, gainM: f32) -> f32 {
+  let liftC = liftM + lo * 0.2;
+  let gainC = gainM * (1.0 + ga * 0.35);
+  let invGamma = 1.0 / max(0.01, gammaM * (1.0 + go * 0.35));
+  return clamp(pow(max(0.0, inp * (1.0 - liftC) + liftC) * gainC, invGamma), 0.0, 1.0);
+}
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let lo = chromaOffset(u.lift.x, u.lift.y);
+  let go = chromaOffset(u.gamma.x, u.gamma.y);
+  let ga = chromaOffset(u.gain.x, u.gain.y);
+  c = vec4f(
+    wheelCh(c.r, lo.r, go.r, ga.r, u.lift.z, u.gamma.z, u.gain.z),
+    wheelCh(c.g, lo.g, go.g, ga.g, u.lift.z, u.gamma.z, u.gain.z),
+    wheelCh(c.b, lo.b, go.b, ga.b, u.lift.z, u.gamma.z, u.gain.z),
+    c.a);
+  return c;
+}
+`;
+
 // Normal-blend composite of an effected layer into the accumulator (opacity applied via alpha, ALPHA_BLEND state).
 const WGSL_COMPOSITE = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Comp { opacity: f32 };
@@ -365,6 +419,7 @@ interface RendererResources {
   bwModule: GPUShaderModule;
   tempModule: GPUShaderModule;
   vibModule: GPUShaderModule;
+  wheelsModule: GPUShaderModule;
   compositeModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
@@ -409,6 +464,7 @@ export class FrameRenderer {
   private bwModule: GPUShaderModule;
   private tempModule: GPUShaderModule;
   private vibModule: GPUShaderModule;
+  private wheelsModule: GPUShaderModule;
   private compositeModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
@@ -445,6 +501,7 @@ export class FrameRenderer {
     this.bwModule = r.bwModule;
     this.tempModule = r.tempModule;
     this.vibModule = r.vibModule;
+    this.wheelsModule = r.wheelsModule;
     this.compositeModule = r.compositeModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
@@ -483,6 +540,7 @@ export class FrameRenderer {
     const bwModule = device.createShaderModule({ code: WGSL_BW });
     const tempModule = device.createShaderModule({ code: WGSL_TEMP });
     const vibModule = device.createShaderModule({ code: WGSL_VIB });
+    const wheelsModule = device.createShaderModule({ code: WGSL_WHEELS });
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
 
     const extBgl = device.createBindGroupLayout({
@@ -549,7 +607,7 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, compositeModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, compositeModule,
       extBgl, copyBgl, blitBgl, fxBgl,
       extLayout, copyLayout, fxLayout,
       blitCanvasPipeline, blitReadbackPipeline,
@@ -667,6 +725,13 @@ export class FrameRenderer {
           fragment: { module: this.vibModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
+      case "color.wheels":
+        return this.pipelineFor("effect:color.wheels", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.wheelsModule, entryPoint: "vs" },
+          fragment: { module: this.wheelsModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
       default:
         return null;
     }
@@ -690,6 +755,21 @@ export class FrameRenderer {
         return new Float32Array([resolveParam(eff.params.temperature, 0, 6500), resolveParam(eff.params.tint, 0, 0)]);
       case "color.vibrance":
         return new Float32Array([resolveParam(eff.params.amount, 0, 0)]);
+      case "color.wheels":
+        return new Float32Array([
+          resolveParam(eff.params.lift_x, 0, 0),
+          resolveParam(eff.params.lift_y, 0, 0),
+          resolveParam(eff.params.lift_m, 0, 0),
+          0,
+          resolveParam(eff.params.gamma_x, 0, 0),
+          resolveParam(eff.params.gamma_y, 0, 0),
+          resolveParam(eff.params.gamma_m, 0, 1),
+          0,
+          resolveParam(eff.params.gain_x, 0, 0),
+          resolveParam(eff.params.gain_y, 0, 0),
+          resolveParam(eff.params.gain_m, 0, 1),
+          0,
+        ]);
       default:
         return null;
     }
@@ -796,7 +876,7 @@ export class FrameRenderer {
           for (const eff of canonicalSort(enabledEffects)) {
             const data = this.effectStepData(eff);
             if (!data) continue; // unimplemented effect type this milestone
-            steps.push({ type: eff.type, uBuf: uniformBuffer(data, 16) });
+            steps.push({ type: eff.type, uBuf: uniformBuffer(data, Math.max(16, data.byteLength)) });
           }
           const compBuf = uniformBuffer(new Float32Array([layer.opacity]), 16);
           plans.push({ kind: "effected", source, capBuf, steps, compBuf });

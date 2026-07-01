@@ -2,6 +2,7 @@ import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer 
 import {
   affineTransform, defaultTransform, defaultCrop, type Effect,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
+  applyColorWheels,
 } from "@palmier/core";
 
 const W = 200, H = 200;
@@ -83,6 +84,14 @@ async function main() {
         case "vibrance":
           effects = [{ id: "e", type: "color.vibrance", enabled: true, params: { amount: { value: 0.6 } } }];
           exp = applyVibrance(MID, 0.6);
+          break;
+        case "wheels":
+          effects = [{ id: "e", type: "color.wheels", enabled: true, params: { lift_m: { value: 0.1 } } }];
+          exp = applyColorWheels(MID, { x: 0, y: 0, m: 0.1 }, { x: 0, y: 0, m: 1 }, { x: 0, y: 0, m: 1 });
+          break;
+        case "wheels2":
+          effects = [{ id: "e", type: "color.wheels", enabled: true, params: { lift_x: { value: 0.5 }, gain_m: { value: 1.2 } } }];
+          exp = applyColorWheels(MID, { x: 0.5, y: 0, m: 0 }, { x: 0, y: 0, m: 1 }, { x: 0, y: 0, m: 1.2 });
           break;
       }
 
