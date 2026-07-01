@@ -39,14 +39,21 @@ export class AudioMixer {
 
     if (allClips.length === 0) return undefined;
 
-    // Demux each unique mediaRef once
+    // Demux each unique mediaRef once. Missing/broken media for one ref must not sink the whole
+    // mix (or export) — skip it, warn once, and let that clip contribute silence.
     const demuxCache = new Map<string, { bytes: ArrayBuffer; audio?: import("../demux/mp4-demuxer.js").DemuxedAudioTrack }>();
+    const failedRefs = new Set<string>();
     for (const clip of allClips) {
-      if (demuxCache.has(clip.mediaRef)) continue;
-      const blob = await media.open(clip.mediaRef);
-      const bytes = await blob.arrayBuffer();
-      const demux = await demuxMp4(new Blob([bytes]));
-      demuxCache.set(clip.mediaRef, { bytes, audio: demux.audio });
+      if (demuxCache.has(clip.mediaRef) || failedRefs.has(clip.mediaRef)) continue;
+      try {
+        const blob = await media.open(clip.mediaRef);
+        const bytes = await blob.arrayBuffer();
+        const demux = await demuxMp4(new Blob([bytes]));
+        demuxCache.set(clip.mediaRef, { bytes, audio: demux.audio });
+      } catch (e) {
+        console.warn(`audio media open failed for ${clip.mediaRef}, skipping:`, e);
+        failedRefs.add(clip.mediaRef);
+      }
     }
 
     // Decode PCM once per mediaRef and share across clips referencing the same media
