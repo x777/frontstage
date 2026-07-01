@@ -463,6 +463,69 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: key.chroma — mirrors applyChromaKey from color-math.ts exactly.
+const WGSL_CHROMA = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Chroma { keyHue: f32, tolerance: f32, softness: f32, spill: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Chroma;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let hsv = rgb2hsv(c.rgb);
+  let diff = abs(hsv.x - u.keyHue);
+  let hd = min(diff, 1.0 - diff);
+  let inner = u.tolerance * 0.25;
+  let key = (1.0 - smoothstep(inner, inner + u.softness * 0.3 + 0.02, hd)) * smoothstep(0.12, 0.32, hsv.y);
+  let yGrey = rec709(c.rgb);
+  let m = u.spill * key;
+  c = vec4f(c.rgb * (1.0 - m) + vec3f(yGrey) * m, c.a * (1.0 - key));
+  return c;
+}
+`;
+
+// Effect: stylize.vignette — standard radial falloff.
+const WGSL_VIGNETTE = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Vignette { amount: f32, midpoint: f32, roundness: f32, feather: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Vignette;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let p = (uv - vec2f(0.5)) * 2.0;
+  let rr = mix(max(abs(p.x), abs(p.y)), length(p), (u.roundness + 1.0) * 0.5);
+  let falloff = 1.0 - smoothstep(u.midpoint, u.midpoint + u.feather + 0.001, rr);
+  let vig = 1.0 + u.amount * (1.0 - falloff);
+  c = vec4f(clamp(c.rgb * vig, vec3f(0.0), vec3f(1.0)), c.a);
+  return c;
+}
+`;
+
+// Effect: stylize.grain — deterministic hash noise; resX/resY are the canvas dimensions.
+const WGSL_GRAIN = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Grain { amount: f32, size: f32, resX: f32, resY: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Grain;
+
+fn hash21(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(12.9898, 78.233))) * 43758.5453); }
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let cell = floor(uv * vec2f(u.resX, u.resY) / max(0.5, u.size));
+  let g = hash21(cell) - 0.5;
+  c = vec4f(clamp(c.rgb + vec3f(g * u.amount), vec3f(0.0), vec3f(1.0)), c.a);
+  return c;
+}
+`;
+
 // Normal-blend composite of an effected layer into the accumulator (opacity applied via alpha, ALPHA_BLEND state).
 const WGSL_COMPOSITE = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Comp { opacity: f32 };
@@ -588,6 +651,9 @@ interface RendererResources {
   lutModule: GPUShaderModule;
   compositeModule: GPUShaderModule;
   blendModule: GPUShaderModule;
+  chromaModule: GPUShaderModule;
+  vignetteModule: GPUShaderModule;
+  grainModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
   copyBgl: GPUBindGroupLayout;
@@ -643,6 +709,9 @@ export class FrameRenderer {
   private lutModule: GPUShaderModule;
   private compositeModule: GPUShaderModule;
   private blendModule: GPUShaderModule;
+  private chromaModule: GPUShaderModule;
+  private vignetteModule: GPUShaderModule;
+  private grainModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
   private copyBgl: GPUBindGroupLayout;
@@ -691,6 +760,9 @@ export class FrameRenderer {
     this.lutModule = r.lutModule;
     this.compositeModule = r.compositeModule;
     this.blendModule = r.blendModule;
+    this.chromaModule = r.chromaModule;
+    this.vignetteModule = r.vignetteModule;
+    this.grainModule = r.grainModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
     this.blitBgl = r.blitBgl;
@@ -740,6 +812,9 @@ export class FrameRenderer {
     const lutModule = device.createShaderModule({ code: WGSL_LUT });
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
     const blendModule = device.createShaderModule({ code: WGSL_BLEND });
+    const chromaModule = device.createShaderModule({ code: WGSL_CHROMA });
+    const vignetteModule = device.createShaderModule({ code: WGSL_VIGNETTE });
+    const grainModule = device.createShaderModule({ code: WGSL_GRAIN });
 
     const extBgl = device.createBindGroupLayout({
       entries: [
@@ -837,7 +912,7 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule, chromaModule, vignetteModule, grainModule,
       extBgl, copyBgl, blitBgl, fxBgl,
       extLayout, copyLayout, fxLayout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout, blendBgl, blendLayout,
       blitCanvasPipeline, blitReadbackPipeline,
@@ -992,6 +1067,27 @@ export class FrameRenderer {
           fragment: { module: this.lutModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
+      case "key.chroma":
+        return this.pipelineFor("effect:key.chroma", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.chromaModule, entryPoint: "vs" },
+          fragment: { module: this.chromaModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "stylize.vignette":
+        return this.pipelineFor("effect:stylize.vignette", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.vignetteModule, entryPoint: "vs" },
+          fragment: { module: this.vignetteModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "stylize.grain":
+        return this.pipelineFor("effect:stylize.grain", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.grainModule, entryPoint: "vs" },
+          fragment: { module: this.grainModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
       default:
         return null;
     }
@@ -999,7 +1095,7 @@ export class FrameRenderer {
 
   // Resolved-param uniform bytes for an effect, or null if the type is unimplemented this milestone.
   // clip-relative frame is 0 for M9B (static effect params; keyframed effect params are a later fold).
-  private effectStepData(eff: Effect): Float32Array<ArrayBuffer> | null {
+  private effectStepData(eff: Effect, rw: number, rh: number): Float32Array<ArrayBuffer> | null {
     switch (eff.type) {
       case "color.saturation":
         return new Float32Array([resolveParam(eff.params.amount, 0, 1)]);
@@ -1029,6 +1125,27 @@ export class FrameRenderer {
           resolveParam(eff.params.gain_y, 0, 0),
           resolveParam(eff.params.gain_m, 0, 1),
           0,
+        ]);
+      case "key.chroma":
+        return new Float32Array([
+          resolveParam(eff.params.keyHue, 0, 0.333),
+          resolveParam(eff.params.tolerance, 0, 0),
+          resolveParam(eff.params.softness, 0, 0.5),
+          resolveParam(eff.params.spill, 0, 0.5),
+        ]);
+      case "stylize.vignette":
+        return new Float32Array([
+          resolveParam(eff.params.amount, 0, 0),
+          resolveParam(eff.params.midpoint, 0, 0.5),
+          resolveParam(eff.params.roundness, 0, 0),
+          resolveParam(eff.params.feather, 0, 0.5),
+        ]);
+      case "stylize.grain":
+        return new Float32Array([
+          resolveParam(eff.params.amount, 0, 0),
+          resolveParam(eff.params.size, 0, 1.5),
+          rw,
+          rh,
         ]);
       default:
         return null;
@@ -1220,7 +1337,7 @@ export class FrameRenderer {
               steps.push({ type: eff.type, lut3dTex, uBuf });
               continue;
             }
-            const data = this.effectStepData(eff);
+            const data = this.effectStepData(eff, rw, rh);
             if (!data) continue; // unimplemented effect type this milestone
             steps.push({ type: eff.type, uBuf: uniformBuffer(data, Math.max(16, data.byteLength)) });
           }

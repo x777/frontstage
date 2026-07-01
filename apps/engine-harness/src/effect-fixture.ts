@@ -3,7 +3,7 @@ import {
   affineTransform, defaultTransform, defaultCrop, type Effect, type BlendMode,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
   applyColorWheels, applyCurves, applyHueCurves, parseGradeCurve, parseHueCurves,
-  parseCubeLUT, sampleLUT, blendPixel,
+  parseCubeLUT, sampleLUT, blendPixel, applyChromaKey,
 } from "@palmier/core";
 
 const W = 200, H = 200;
@@ -17,6 +17,7 @@ declare global {
     __readPixel: ReadPixelFn;
     __status: string;
     __expected: [number, number, number];
+    __expectedRGBA: [number, number, number, number];
   }
 }
 
@@ -141,6 +142,53 @@ async function main() {
       topFrame.close();
       const exp = blendPixel(modeKey, { r: 0.6, g: 0.4, b: 0.8, a: 1 }, { ...bgRef, a: 1 });
       window.__expected = [exp.r, exp.g, exp.b];
+    } else if (useCase === "chroma") {
+      // Chroma key GPU parity vs applyChromaKey. Green input fully keyed: expected alpha=0, rgb pre-mult=0.
+      const inp = { r: 0.1, g: 0.9, b: 0.1, a: 1 };
+      const f = solidFrame(W, H, `rgb(${Math.round(inp.r * 255)},${Math.round(inp.g * 255)},${Math.round(inp.b * 255)})`);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "key.chroma", enabled: true, params: {
+          keyHue: { value: 0.333 }, tolerance: { value: 0.5 }, softness: { value: 0.5 }, spill: { value: 0.5 },
+        }}],
+      };
+      await r.composite([layer], size);
+      f.close();
+      const exp = applyChromaKey(inp, 0.333, 0.5, 0.5, 0.5);
+      window.__expectedRGBA = [exp.r, exp.g, exp.b, exp.a];
+    } else if (useCase === "vignette") {
+      // Vignette behavior: white frame, amount=-0.8 should darken corners relative to center.
+      const f = solidFrame(W, H, "rgb(255,255,255)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "stylize.vignette", enabled: true, params: {
+          amount: { value: -0.8 }, midpoint: { value: 0.3 }, roundness: { value: 0 }, feather: { value: 0.3 },
+        }}],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "grain") {
+      // Grain behavior: mid-grey with amount=0.5 should add per-cell noise.
+      const f = solidFrame(W, H, "rgb(128,128,128)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "stylize.grain", enabled: true, params: {
+          amount: { value: 0.5 }, size: { value: 1 },
+        }}],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "grain-zero") {
+      // Grain with amount=0 must be a passthrough: output = input (mid-grey 128).
+      const f = solidFrame(W, H, "rgb(128,128,128)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "stylize.grain", enabled: true, params: {
+          amount: { value: 0 }, size: { value: 1 },
+        }}],
+      };
+      await r.composite([layer], size);
+      f.close();
     } else {
       // Parity tests: mid-color frame, one effect per case, CPU-expected exported to window.__expected.
       const frame = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);

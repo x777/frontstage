@@ -135,3 +135,49 @@ for (const c of HSL_BLEND_CASES) {
     }
   });
 }
+
+// key.chroma: GPU parity vs applyChromaKey (alpha + pre-multiplied rgb within ±4).
+test("key.chroma GPU matches applyChromaKey within ±4 (alpha + PMA rgb)", async ({ page }) => {
+  await page.goto("/effect.html?case=chroma");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const expected = await page.evaluate(
+    () => (window as unknown as { __expectedRGBA: [number, number, number, number] }).__expectedRGBA,
+  );
+  const p = await px(page, 100, 100);
+  // alpha parity
+  expect(Math.abs(p[3]! - Math.round(expected[3]! * 255))).toBeLessThanOrEqual(4);
+  // rgb parity against pre-multiplied expected (compositor alpha-blends into transparent bg)
+  for (let ch = 0; ch < 3; ch++) {
+    const expPma = Math.round(expected[ch]! * expected[3]! * 255);
+    expect(Math.abs(p[ch]! - expPma)).toBeLessThanOrEqual(4);
+  }
+});
+
+// stylize.vignette: corner must be darker than center (amount=-0.8 darkens corners).
+test("stylize.vignette darkens corners relative to center", async ({ page }) => {
+  await page.goto("/effect.html?case=vignette");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const corner = await px(page, 5, 5);
+  const center = await px(page, 100, 100);
+  expect(corner[0]!).toBeLessThan(center[0]!);
+});
+
+// stylize.grain: amount=0.5 adds noise (two distant pixels must differ); amount=0 is passthrough.
+test("stylize.grain adds noise when amount>0", async ({ page }) => {
+  await page.goto("/effect.html?case=grain");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const a = await px(page, 5, 5);
+  const b = await px(page, 50, 50);
+  const differ = a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2];
+  expect(differ).toBe(true);
+});
+
+test("stylize.grain amount=0 is a passthrough (output = input grey)", async ({ page }) => {
+  await page.goto("/effect.html?case=grain-zero");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  // Input was rgb(128,128,128); with amount=0 the effect is a no-op.
+  expect(Math.abs(p[0]! - 128)).toBeLessThanOrEqual(2);
+  expect(Math.abs(p[1]! - 128)).toBeLessThanOrEqual(2);
+  expect(Math.abs(p[2]! - 128)).toBeLessThanOrEqual(2);
+});
