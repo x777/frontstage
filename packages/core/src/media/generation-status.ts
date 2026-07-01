@@ -59,7 +59,9 @@ export function createPlaceholderEntry(args: {
   name: string;
   duration: number;
   ext: string;
-  genInput: Partial<GenerationInput> & Pick<GenerationInput, "prompt">;
+  // Full GenerationInput required: a partial one fails schema-parse on reload and the
+  // corrupt-manifest degrade path would wipe the whole library. Use sentinels ("") like Swift.
+  genInput: GenerationInput;
   folderId?: string;
 }): MediaManifestEntry {
   const entry: MediaManifestEntry = {
@@ -68,7 +70,7 @@ export function createPlaceholderEntry(args: {
     type: args.type,
     duration: args.duration,
     source: { kind: "project", relativePath: `media/gen-${args.id.slice(0, 8)}.${args.ext}` },
-    generationInput: args.genInput as GenerationInput,
+    generationInput: args.genInput,
     generationStatus: "preparing",
   };
   if (args.folderId !== undefined) entry.folderId = args.folderId;
