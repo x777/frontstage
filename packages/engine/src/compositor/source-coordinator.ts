@@ -36,6 +36,7 @@ export class SourceCoordinator {
     private readonly _sourceSizes: Map<string, Size>,
     private readonly demuxCache: Map<string, { track: NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>; fileBytes: ArrayBuffer }>,
     private readonly media: MediaByteSource,
+    private readonly failedRefs: Set<string>,
   ) {
     this.textRasterizer = new TextRasterizer();
   }
@@ -44,6 +45,7 @@ export class SourceCoordinator {
     const sources = new Map<string, SourceEntry>();
     const clipById = new Map<string, Clip>();
     const sourceSizes = new Map<string, Size>();
+    const failedRefs = new Set<string>();
 
     type DemuxVideo = NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>;
     const demuxCache = new Map<string, { track: DemuxVideo; fileBytes: ArrayBuffer }>();
@@ -54,7 +56,7 @@ export class SourceCoordinator {
         for (const clip of track.clips) {
           if (clip.mediaType !== "video" && clip.mediaType !== "image") continue;
           clipById.set(clip.id, clip);
-          await SourceCoordinator._addClipSource(clip, media, demuxCache, sources, sourceSizes);
+          await SourceCoordinator._tryAddClipSource(clip, media, demuxCache, sources, sourceSizes, failedRefs);
         }
       }
     } catch (e) {
@@ -65,7 +67,28 @@ export class SourceCoordinator {
       throw e;
     }
 
-    return new SourceCoordinator(timeline, sources, clipById, sourceSizes, demuxCache, media);
+    return new SourceCoordinator(timeline, sources, clipById, sourceSizes, demuxCache, media, failedRefs);
+  }
+
+  // Missing media for one clip must not sink the whole load — skip it, warn once, and let
+  // reconcile() retry (a generation placeholder's real file lands after the initial load).
+  private static async _tryAddClipSource(
+    clip: Clip,
+    media: MediaByteSource,
+    demuxCache: Map<string, { track: NonNullable<Awaited<ReturnType<typeof demuxMp4>>["video"]>; fileBytes: ArrayBuffer }>,
+    sources: Map<string, SourceEntry>,
+    sourceSizes: Map<string, Size>,
+    failedRefs: Set<string>,
+  ): Promise<void> {
+    try {
+      await SourceCoordinator._addClipSource(clip, media, demuxCache, sources, sourceSizes);
+      failedRefs.delete(clip.mediaRef);
+    } catch (e) {
+      if (!failedRefs.has(clip.mediaRef)) {
+        console.warn(`compositor: skipping clip ${clip.id} (media open failed for ${clip.mediaRef}):`, e);
+      }
+      failedRefs.add(clip.mediaRef);
+    }
   }
 
   private static async _addClipSource(
@@ -128,14 +151,14 @@ export class SourceCoordinator {
       const existing = this.sources.get(clipId);
       if (!existing) {
         this.clipById.set(clipId, clip);
-        await SourceCoordinator._addClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes);
+        await SourceCoordinator._tryAddClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes, this.failedRefs);
       } else if (existing.mediaRef !== clip.mediaRef) {
         // Same clipId but mediaRef changed (media replace) — dispose old and rebuild
         if (existing.type === "video") existing.mgr.dispose();
         else existing.src.dispose();
         this.sources.delete(clipId);
         this.clipById.set(clipId, clip);
-        await SourceCoordinator._addClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes);
+        await SourceCoordinator._tryAddClipSource(clip, this.media, this.demuxCache, this.sources, this._sourceSizes, this.failedRefs);
       } else {
         // mediaRef unchanged — keep; update clip metadata in case trim/speed changed
         this.clipById.set(clipId, clip);
