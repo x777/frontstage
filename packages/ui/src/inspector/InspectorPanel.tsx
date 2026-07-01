@@ -59,9 +59,9 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
     const engine = engineRef?.current;
     if (!engine) return;
     let cancelled = false;
-    void computeFrameHistogram(engine).then((h) => {
-      if (!cancelled) setHistogram(h);
-    });
+    void computeFrameHistogram(engine)
+      .then((h) => { if (!cancelled) setHistogram(h); })
+      .catch(() => {}); // engine may be torn down mid-read
     return () => { cancelled = true; };
   }, [engineRef, playhead, timeline, selection]);
 
