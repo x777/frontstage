@@ -52,3 +52,4 @@ export * from "./color/grade-curve.js";
 export * from "./color/color-math.js";
 export * from "./color/lut.js";
 export * from "./color/scopes.js";
+export * from "./color/color-tools.js";
