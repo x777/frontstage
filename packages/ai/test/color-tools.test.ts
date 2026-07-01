@@ -192,6 +192,19 @@ describe("apply_effect", () => {
     expect(store.canUndo()).toBe(false);
   });
 
+  test("rejects unknown effect type with isError, store unchanged", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const ctx = makeCtx(store);
+    const result = await applyEffectTool().run(
+      { clipIds: ["c1"], effects: [{ type: "blur.gaussain" }] },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(store.getSnapshot().timeline).toBe(before);
+    expect(store.canUndo()).toBe(false);
+  });
+
   test("is ONE undo step", async () => {
     const store = new EditorStore(makeTimeline());
     const ctx = makeCtx(store);

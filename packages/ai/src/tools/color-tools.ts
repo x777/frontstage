@@ -5,6 +5,7 @@ import {
   applyEffectStack,
   computeScopes,
   scopesGap,
+  effectDescriptor,
   type ApplyColorInput,
   type Effect,
   type Timeline,
@@ -152,6 +153,9 @@ export function applyEffectTool(): ToolSpec {
       for (const e of adds) {
         if (e.type.startsWith("color.")) {
           return errorResult(`'${e.type}' is a color effect — use apply_color instead`);
+        }
+        if (!effectDescriptor(e.type)) {
+          return errorResult(`unknown effect type: '${e.type}'`);
         }
       }
       const tl = ctx.store.getSnapshot().timeline;
