@@ -100,8 +100,7 @@ test("LUTSection: intensity slider ArrowRight increases intensity when LUT is lo
   expect(effect?.params["intensity"]?.value).toBeGreaterThan(0.5);
 });
 
-test("LUTSection: Remove button clears the LUT (effect pruned when intensity at default)", () => {
-  // intensity not set in params → defaults to 1 → same as spec default → effect pruned when path=""
+test("LUTSection: Remove button fully removes the LUT effect", () => {
   const store = new EditorStore(makeTimeline([makeClip("c1", {
     effects: [{ id: "e1", type: "color.lut", enabled: true, params: { path: { string: "test.cube" } } }],
   })]));
@@ -110,6 +109,22 @@ test("LUTSection: Remove button clears the LUT (effect pruned when intensity at 
 
   act(() => { fireEvent.click(screen.getByTestId("adjust-section-LUTs")); });
 
+  act(() => { fireEvent.click(screen.getByTestId("lut-remove")); });
+
+  const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  expect(clip.effects?.find((e) => e.type === "color.lut")).toBeUndefined();
+});
+
+test("LUTSection: Remove fully removes even with a non-default intensity", () => {
+  // A customised intensity (0.5) would leave a stale {path:"", intensity:0.5} if Remove
+  // used setEffectString(path=""); resetSection removes the effect unconditionally.
+  const store = new EditorStore(makeTimeline([makeClip("c1", {
+    effects: [{ id: "e1", type: "color.lut", enabled: true, params: { path: { string: "test.cube" }, intensity: { value: 0.5 } } }],
+  })]));
+
+  render(<LUTSection store={store} clipIds={["c1"]} />);
+
+  act(() => { fireEvent.click(screen.getByTestId("adjust-section-LUTs")); });
   act(() => { fireEvent.click(screen.getByTestId("lut-remove")); });
 
   const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;

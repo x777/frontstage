@@ -64,6 +64,7 @@ export function LUTSection({ store, clipIds, engineRef }: LUTSectionProps) {
       const cube = parseCubeLUT(text);
       if (!cube) {
         setParseError(true);
+        if (fileInputRef.current) fileInputRef.current.value = ""; // allow re-picking the same file
         return;
       }
       engineRef?.current?.registerLUT(file.name, cube);
@@ -138,11 +139,7 @@ export function LUTSection({ store, clipIds, engineRef }: LUTSectionProps) {
             <button
               data-testid="lut-remove"
               onClick={() =>
-                store.dispatch(
-                  setClipEffectsCommand(clipIds, (c) =>
-                    setEffectString(c.effects, LUT_TYPE, "path", "", () => crypto.randomUUID()),
-                  ),
-                )
+                store.dispatch(setClipEffectsCommand(clipIds, (c) => resetSection(c.effects, [LUT_TYPE])))
               }
               style={{
                 background: "none",
