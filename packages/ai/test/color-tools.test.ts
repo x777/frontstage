@@ -102,8 +102,46 @@ describe("apply_color", () => {
     const tl = store.getSnapshot().timeline;
     const loc = findClip(tl, "c1")!;
     const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
-    // neutral stack = empty → stored as undefined or empty; either is valid
-    expect(clip.effects?.length ?? 0).toBe(0);
+    // neutral stack = empty → stored as undefined
+    expect(clip.effects).toBeUndefined();
+  });
+
+  test("multi-clip: ONE call is ONE undo step that restores ALL clips", async () => {
+    const twoClipTimeline: Timeline = {
+      ...defaultTimeline(),
+      tracks: [
+        {
+          id: "t1",
+          type: "video",
+          muted: false,
+          hidden: false,
+          syncLocked: false,
+          clips: [makeClip("c1", 0), makeClip("c2", 60)],
+        },
+      ],
+    };
+    const store = new EditorStore(twoClipTimeline);
+    const ctx = makeCtx(store);
+    const result = await applyColorTool().run({ clipIds: ["c1", "c2"], exposure: 0.3 }, ctx);
+    expect(result.isError).toBe(false);
+
+    const tlAfter = store.getSnapshot().timeline;
+    const loc1 = findClip(tlAfter, "c1")!;
+    const loc2 = findClip(tlAfter, "c2")!;
+    const clip1After = tlAfter.tracks[loc1.trackIndex]!.clips[loc1.clipIndex]!;
+    const clip2After = tlAfter.tracks[loc2.trackIndex]!.clips[loc2.clipIndex]!;
+    expect(clip1After.effects?.find((e) => e.type === "color.exposure")).toBeDefined();
+    expect(clip2After.effects?.find((e) => e.type === "color.exposure")).toBeDefined();
+
+    store.undo();
+    expect(store.canUndo()).toBe(false);
+    const tlUndo = store.getSnapshot().timeline;
+    const loc1u = findClip(tlUndo, "c1")!;
+    const loc2u = findClip(tlUndo, "c2")!;
+    const clip1Undo = tlUndo.tracks[loc1u.trackIndex]!.clips[loc1u.clipIndex]!;
+    const clip2Undo = tlUndo.tracks[loc2u.trackIndex]!.clips[loc2u.clipIndex]!;
+    expect(clip1Undo.effects).toBeUndefined();
+    expect(clip2Undo.effects).toBeUndefined();
   });
 });
 
@@ -138,7 +176,7 @@ describe("apply_effect", () => {
     const tl = store.getSnapshot().timeline;
     const loc = findClip(tl, "c1")!;
     const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
-    expect(clip.effects?.some((e) => e.type === "blur.gaussian")).toBeFalsy();
+    expect(clip.effects).toBeUndefined();
   });
 
   test("rejects color.* type with isError, store unchanged", async () => {
@@ -166,7 +204,7 @@ describe("apply_effect", () => {
     const tl = store.getSnapshot().timeline;
     const loc = findClip(tl, "c1")!;
     const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
-    expect(clip.effects?.some((e) => e.type === "blur.gaussian")).toBeFalsy();
+    expect(clip.effects).toBeUndefined();
     expect(store.canUndo()).toBe(false);
   });
 
