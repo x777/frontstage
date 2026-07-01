@@ -1,5 +1,9 @@
 import type { Effect } from "../color/effect.js";
 import type { Clip } from "../clip.js";
+import type { Timeline } from "../timeline.js";
+import type { Command } from "./editor-store.js";
+import { replaceClip } from "./timeline-commands.js";
+import type { BlendMode } from "../color/blend-mode.js";
 import { effectDescriptor, canonicalIndex, clampParam, defaultEffect } from "../color/effect-registry.js";
 
 function isEffectNeutral(effect: Effect): boolean {
@@ -100,4 +104,23 @@ const PARAM_LABELS: Record<string, string> = {
 
 export function effectParamLabel(type: string, key: string): string {
   return PARAM_LABELS[`${type}:${key}`] ?? key;
+}
+
+export function setClipEffectsCommand(clipIds: string[], effectsFor: (clip: Clip) => Effect[], coalesceKey?: string): Command {
+  return {
+    label: "Adjust",
+    coalesceKey,
+    apply: (tl: Timeline) =>
+      clipIds.reduce((t, id) => replaceClip(t, id, (c) => {
+        const next = effectsFor(c);
+        return { ...c, effects: next.length ? next : undefined };
+      }), tl),
+  };
+}
+
+export function setClipBlendModeCommand(clipIds: string[], mode: BlendMode | undefined): Command {
+  return {
+    label: "Blend Mode",
+    apply: (tl: Timeline) => clipIds.reduce((t, id) => replaceClip(t, id, (c) => ({ ...c, blendMode: mode })), tl),
+  };
 }

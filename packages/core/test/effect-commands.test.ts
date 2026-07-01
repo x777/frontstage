@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   setEffectParam, setEffectString, setSectionEnabled, resetSection, sharedParamValue, effectParamLabel,
+  setClipEffectsCommand, setClipBlendModeCommand,
 } from "../src/editor/effect-commands.js";
+import { EditorStore } from "../src/editor/editor-store.js";
 import type { Effect } from "../src/color/effect.js";
 import type { Clip } from "../src/clip.js";
+import type { Timeline, Track } from "../src/timeline.js";
 
 let n = 0; const nid = () => `id${n++}`;
 const clip = (effects?: Effect[]): Clip => ({ id: "c", mediaType: "video", startFrame: 0, durationFrames: 10, effects } as unknown as Clip);
@@ -125,5 +128,63 @@ describe("effectParamLabel", () => {
   });
   it("falls back to the key for unmapped params", () => {
     expect(effectParamLabel("color.zzz", "weird")).toBe("weird");
+  });
+});
+
+describe("effect store commands", () => {
+  let sn = 0;
+  const snid = () => `sid${sn++}`;
+
+  function makeClip(id: string): Clip {
+    return {
+      id, mediaRef: "m", mediaType: "video", sourceClipType: "video",
+      startFrame: 0, durationFrames: 30, trimStartFrame: 0, trimEndFrame: 0,
+      speed: 1, volume: 1, fadeInFrames: 0, fadeOutFrames: 0,
+      fadeInInterpolation: "linear", fadeOutInterpolation: "linear", opacity: 1,
+      transform: { centerX: 0.5, centerY: 0.5, width: 1, height: 1, rotation: 0, flipHorizontal: false, flipVertical: false },
+      crop: { top: 0, bottom: 0, left: 0, right: 0 },
+    };
+  }
+
+  function makeTrack(clips: Clip[]): Track {
+    return { id: "t1", type: "video", muted: false, hidden: false, syncLocked: false, clips };
+  }
+
+  function make2ClipTimeline(): Timeline {
+    return { fps: 30, width: 1920, height: 1080, settingsConfigured: true, tracks: [makeTrack([makeClip("c1"), makeClip("c2")])] };
+  }
+
+  it("setClipEffectsCommand applies effectsFor to all listed clips", () => {
+    const store = new EditorStore(make2ClipTimeline());
+    store.dispatch(setClipEffectsCommand(["c1", "c2"], (c) => setEffectParam(c.effects, "color.exposure", "ev", 1, snid)));
+    const clips = store.getSnapshot().timeline.tracks[0]!.clips;
+    expect(clips[0]!.effects).toHaveLength(1);
+    expect(clips[0]!.effects![0]!.type).toBe("color.exposure");
+    expect(clips[1]!.effects).toHaveLength(1);
+    expect(clips[1]!.effects![0]!.type).toBe("color.exposure");
+  });
+
+  it("setClipEffectsCommand normalizes empty array to undefined", () => {
+    const store = new EditorStore(make2ClipTimeline());
+    store.dispatch(setClipEffectsCommand(["c1"], () => [], "k"));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.effects).toBeUndefined();
+  });
+
+  it("setClipEffectsCommand coalescing collapses to one undo step", () => {
+    const store = new EditorStore(make2ClipTimeline());
+    store.dispatch(setClipEffectsCommand(["c1"], () => setEffectParam(undefined, "color.exposure", "ev", 1, snid), "drag-k"));
+    store.dispatch(setClipEffectsCommand(["c1"], () => setEffectParam(undefined, "color.exposure", "ev", 2, snid), "drag-k"));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.effects![0]!.params.ev!.value).toBe(2);
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.effects).toBeUndefined();
+    expect(store.canUndo()).toBe(false);
+  });
+
+  it("setClipBlendModeCommand sets and clears blendMode", () => {
+    const store = new EditorStore(make2ClipTimeline());
+    store.dispatch(setClipBlendModeCommand(["c1"], "multiply"));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.blendMode).toBe("multiply");
+    store.dispatch(setClipBlendModeCommand(["c1"], undefined));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.blendMode).toBeUndefined();
   });
 });
