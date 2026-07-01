@@ -58,3 +58,4 @@ export * from "./color/adjust-control.js";
 export * from "./color/wheel-geometry.js";
 export * from "./color/curve-edit.js";
 export * from "./color/histogram.js";
+export * from "./color/hue-curve-edit.js";

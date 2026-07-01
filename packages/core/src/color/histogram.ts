@@ -1,3 +1,17 @@
+import { rgbToHsv } from "./color-math.js";
+
+export function hueHistogram(rgba: Uint8Array, width: number, height: number, bins = 96): number[] {
+  const out = new Array<number>(bins).fill(0);
+  const n = width * height;
+  for (let i = 0; i < n; i++) {
+    const { h, s } = rgbToHsv({ r: rgba[i * 4]! / 255, g: rgba[i * 4 + 1]! / 255, b: rgba[i * 4 + 2]! / 255 });
+    const hueN = ((h % 1) + 1) % 1;
+    const bin = Math.min(bins - 1, Math.floor(hueN * bins));
+    out[bin] = (out[bin] ?? 0) + s;
+  }
+  return out;
+}
+
 export function histogramYRGB(rgba: Uint8Array, width: number, height: number, bins = 256): { y: number[]; r: number[]; g: number[]; b: number[] } {
   const y = new Array<number>(bins).fill(0), r = new Array<number>(bins).fill(0), g = new Array<number>(bins).fill(0), b = new Array<number>(bins).fill(0);
   const n = width * height;
