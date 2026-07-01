@@ -27,3 +27,28 @@ test("a plain layer (no effects) is unchanged red", async ({ page }) => {
   expect(p[1]).toBeLessThan(40);     // G
   expect(p[2]).toBeLessThan(40);     // B
 });
+
+// Parity tests: GPU pixel must match CPU-computed expected within ±3 (8-bit quantisation).
+const PARITY_CASES = [
+  "exposure",
+  "contrast",
+  "highlightsShadows",
+  "blacksWhites",
+  "temperature",
+  "vibrance",
+] as const;
+
+for (const c of PARITY_CASES) {
+  test(`color.${c} GPU matches CPU within ±3`, async ({ page }) => {
+    await page.goto(`/effect.html?case=${c}`);
+    await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+    const expected = await page.evaluate(
+      () => (window as unknown as { __expected: [number, number, number] }).__expected,
+    );
+    const p = await px(page, 100, 100);
+    for (let ch = 0; ch < 3; ch++) {
+      const exp8 = Math.round(expected[ch]! * 255);
+      expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(3);
+    }
+  });
+}

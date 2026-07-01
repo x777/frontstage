@@ -158,6 +158,34 @@ fn vs(@builtin(vertex_index) vi: u32) -> VertexOut {
 }
 `;
 
+// Shared helpers used by the 6 scalar color effects.
+const WGSL_COLOR_PRELUDE = /* wgsl */ `
+fn srgbToLin(x: f32) -> f32 {
+  return select(pow((x + 0.055) / 1.055, 2.4), x / 12.92, x <= 0.04045);
+}
+fn linToSrgb(x: f32) -> f32 {
+  return select(1.055 * pow(x, 1.0 / 2.4) - 0.055, x * 12.92, x <= 0.0031308);
+}
+fn rec709(c: vec3f) -> f32 {
+  return dot(c, vec3f(0.2126, 0.7152, 0.0722));
+}
+fn rgb2hsv(c: vec3f) -> vec3f {
+  let cmax = max(c.r, max(c.g, c.b));
+  let cmin = min(c.r, min(c.g, c.b));
+  let d = cmax - cmin;
+  var h = 0.0;
+  if (d > 1e-9) {
+    if (cmax == c.r) { h = ((c.g - c.b) / d) % 6.0; }
+    else if (cmax == c.g) { h = (c.b - c.r) / d + 2.0; }
+    else { h = (c.r - c.g) / d + 4.0; }
+    h = h / 6.0;
+    if (h < 0.0) { h = h + 1.0; }
+  }
+  let s = select(0.0, d / cmax, cmax > 0.0);
+  return vec3f(h, s, cmax);
+}
+`;
+
 // Effect: color.saturation — WGSL port of core applySaturation (y + (rgb-y)*amount; amount=0 → grey).
 const WGSL_SAT = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Sat { amount: f32 };
@@ -171,6 +199,117 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
   var c = textureSample(src, samp, uv);
   let y = dot(c.rgb, vec3f(0.2126, 0.7152, 0.0722));
   c = vec4f(vec3f(y) + (c.rgb - vec3f(y)) * u.amount, c.a);
+  return c;
+}
+`;
+
+// Effect: color.exposure — linear exposure via sRGB↔linear roundtrip.
+const WGSL_EXPOSURE = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Exp { ev: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Exp;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let k = pow(2.0, u.ev);
+  c = vec4f(linToSrgb(srgbToLin(c.r) * k), linToSrgb(srgbToLin(c.g) * k), linToSrgb(srgbToLin(c.b) * k), c.a);
+  return c;
+}
+`;
+
+// Effect: color.contrast — pivot at 0.5.
+const WGSL_CONTRAST = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Con { amount: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Con;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  c = vec4f((c.rgb - vec3f(0.5)) * u.amount + vec3f(0.5), c.a);
+  return c;
+}
+`;
+
+// Effect: color.highlightsShadows — smoothstep masks for hi/lo adjustment.
+const WGSL_HS = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct HS { highlights: f32, shadows: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: HS;
+
+fn hsAdj(x: f32, hi: f32, sh: f32) -> f32 {
+  let shadowMask = 1.0 - smoothstep(0.0, 0.5, x);
+  let hiMask = smoothstep(0.5, 1.0, x);
+  return clamp(x + sh * 0.5 * shadowMask + hi * 0.5 * hiMask, 0.0, 1.0);
+}
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  c = vec4f(hsAdj(c.r, u.highlights, u.shadows), hsAdj(c.g, u.highlights, u.shadows), hsAdj(c.b, u.highlights, u.shadows), c.a);
+  return c;
+}
+`;
+
+// Effect: color.blacksWhites — remap [blacks*0.25, 1+whites*0.25] → [0,1].
+const WGSL_BW = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct BW { blacks: f32, whites: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: BW;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let lo = u.blacks * 0.25;
+  let hi = 1.0 + u.whites * 0.25;
+  let bwd = max(1e-3, hi - lo);
+  c = vec4f(clamp((c.rgb - vec3f(lo)) / vec3f(bwd), vec3f(0.0), vec3f(1.0)), c.a);
+  return c;
+}
+`;
+
+// Effect: color.temperature — per-channel scale from colour temperature + tint.
+const WGSL_TEMP = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Tmp { temperature: f32, tint: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Tmp;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let tt = (u.temperature - 6500.0) / 4500.0;
+  let scale = vec3f(1.0 + tt * 0.2, 1.0 - (u.tint / 100.0) * 0.2, 1.0 - tt * 0.2);
+  c = vec4f(clamp(c.rgb * scale, vec3f(0.0), vec3f(1.0)), c.a);
+  return c;
+}
+`;
+
+// Effect: color.vibrance — saturation boost proportional to (1 - existing saturation).
+const WGSL_VIB = WGSL_COLOR_PRELUDE + WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Vib { amount: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Vib;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let hsv = rgb2hsv(c.rgb);
+  let boost = u.amount * (1.0 - hsv.y);
+  let y = rec709(c.rgb);
+  c = vec4f(vec3f(y) + (c.rgb - vec3f(y)) * (1.0 + boost), c.a);
   return c;
 }
 `;
@@ -219,8 +358,13 @@ interface RendererResources {
   // shader modules
   extModule: GPUShaderModule;
   texModule: GPUShaderModule;
-  blitModule: GPUShaderModule;
   satModule: GPUShaderModule;
+  exposureModule: GPUShaderModule;
+  contrastModule: GPUShaderModule;
+  hsModule: GPUShaderModule;
+  bwModule: GPUShaderModule;
+  tempModule: GPUShaderModule;
+  vibModule: GPUShaderModule;
   compositeModule: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
@@ -236,7 +380,6 @@ interface RendererResources {
   blitReadbackPipeline: GPURenderPipeline;
   // textures
   readbackTex: GPUTexture;
-  frameTex: GPUTexture;
   fxPing: GPUTexture;
   fxPong: GPUTexture;
   accumA: GPUTexture;
@@ -260,6 +403,12 @@ export class FrameRenderer {
   private extModule: GPUShaderModule;
   private texModule: GPUShaderModule;
   private satModule: GPUShaderModule;
+  private exposureModule: GPUShaderModule;
+  private contrastModule: GPUShaderModule;
+  private hsModule: GPUShaderModule;
+  private bwModule: GPUShaderModule;
+  private tempModule: GPUShaderModule;
+  private vibModule: GPUShaderModule;
   private compositeModule: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
@@ -277,7 +426,6 @@ export class FrameRenderer {
   private pipelineCache = new Map<string, GPURenderPipeline>();
   // canvas-sized textures (recreated on resize)
   private readbackTex: GPUTexture;
-  private frameTex: GPUTexture;
   private fxPing: GPUTexture;
   private fxPong: GPUTexture;
   private accumA: GPUTexture;
@@ -291,6 +439,12 @@ export class FrameRenderer {
     this.extModule = r.extModule;
     this.texModule = r.texModule;
     this.satModule = r.satModule;
+    this.exposureModule = r.exposureModule;
+    this.contrastModule = r.contrastModule;
+    this.hsModule = r.hsModule;
+    this.bwModule = r.bwModule;
+    this.tempModule = r.tempModule;
+    this.vibModule = r.vibModule;
     this.compositeModule = r.compositeModule;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
@@ -302,7 +456,6 @@ export class FrameRenderer {
     this.blitCanvasPipeline = r.blitCanvasPipeline;
     this.blitReadbackPipeline = r.blitReadbackPipeline;
     this.readbackTex = r.readbackTex;
-    this.frameTex = r.frameTex;
     this.fxPing = r.fxPing;
     this.fxPong = r.fxPong;
     this.accumA = r.accumA;
@@ -324,6 +477,12 @@ export class FrameRenderer {
     const texModule = device.createShaderModule({ code: WGSL_TEX });
     const blitModule = device.createShaderModule({ code: WGSL_BLIT });
     const satModule = device.createShaderModule({ code: WGSL_SAT });
+    const exposureModule = device.createShaderModule({ code: WGSL_EXPOSURE });
+    const contrastModule = device.createShaderModule({ code: WGSL_CONTRAST });
+    const hsModule = device.createShaderModule({ code: WGSL_HS });
+    const bwModule = device.createShaderModule({ code: WGSL_BW });
+    const tempModule = device.createShaderModule({ code: WGSL_TEMP });
+    const vibModule = device.createShaderModule({ code: WGSL_VIB });
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
 
     const extBgl = device.createBindGroupLayout({
@@ -388,19 +547,13 @@ export class FrameRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
 
-    const frameTex = device.createTexture({
-      size: [cw, ch],
-      format: "rgba8unorm",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
-
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, blitModule, satModule, compositeModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, compositeModule,
       extBgl, copyBgl, blitBgl, fxBgl,
       extLayout, copyLayout, fxLayout,
       blitCanvasPipeline, blitReadbackPipeline,
-      readbackTex, frameTex,
+      readbackTex,
       fxPing: makeFxTexture(device, cw, ch),
       fxPong: makeFxTexture(device, cw, ch),
       accumA: makeFxTexture(device, cw, ch),
@@ -472,17 +625,71 @@ export class FrameRenderer {
           fragment: { module: this.satModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
+      case "color.exposure":
+        return this.pipelineFor("effect:color.exposure", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.exposureModule, entryPoint: "vs" },
+          fragment: { module: this.exposureModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "color.contrast":
+        return this.pipelineFor("effect:color.contrast", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.contrastModule, entryPoint: "vs" },
+          fragment: { module: this.contrastModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "color.highlightsShadows":
+        return this.pipelineFor("effect:color.highlightsShadows", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.hsModule, entryPoint: "vs" },
+          fragment: { module: this.hsModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "color.blacksWhites":
+        return this.pipelineFor("effect:color.blacksWhites", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.bwModule, entryPoint: "vs" },
+          fragment: { module: this.bwModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "color.temperature":
+        return this.pipelineFor("effect:color.temperature", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.tempModule, entryPoint: "vs" },
+          fragment: { module: this.tempModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "color.vibrance":
+        return this.pipelineFor("effect:color.vibrance", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.vibModule, entryPoint: "vs" },
+          fragment: { module: this.vibModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
       default:
         return null;
     }
   }
 
   // Resolved-param uniform bytes for an effect, or null if the type is unimplemented this milestone.
-  // clip-relative frame is 0 for M9B-1 (static effect params; keyframed effect params are a later fold).
+  // clip-relative frame is 0 for M9B (static effect params; keyframed effect params are a later fold).
   private effectStepData(eff: Effect): Float32Array<ArrayBuffer> | null {
     switch (eff.type) {
       case "color.saturation":
         return new Float32Array([resolveParam(eff.params.amount, 0, 1)]);
+      case "color.exposure":
+        return new Float32Array([resolveParam(eff.params.ev, 0, 0)]);
+      case "color.contrast":
+        return new Float32Array([resolveParam(eff.params.amount, 0, 1)]);
+      case "color.highlightsShadows":
+        return new Float32Array([resolveParam(eff.params.highlights, 0, 0), resolveParam(eff.params.shadows, 0, 0)]);
+      case "color.blacksWhites":
+        return new Float32Array([resolveParam(eff.params.blacks, 0, 0), resolveParam(eff.params.whites, 0, 0)]);
+      case "color.temperature":
+        return new Float32Array([resolveParam(eff.params.temperature, 0, 6500), resolveParam(eff.params.tint, 0, 0)]);
+      case "color.vibrance":
+        return new Float32Array([resolveParam(eff.params.amount, 0, 0)]);
       default:
         return null;
     }
@@ -505,14 +712,6 @@ export class FrameRenderer {
     const rh = renderSize.height;
 
     // Recreate canvas-sized textures if size changed.
-    if (this.frameTex.width !== rw || this.frameTex.height !== rh) {
-      this.frameTex.destroy();
-      this.frameTex = device.createTexture({
-        size: [rw, rh],
-        format: "rgba8unorm",
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-      });
-    }
     if (this.readbackTex.width !== rw || this.readbackTex.height !== rh) {
       this.readbackTex.destroy();
       this.readbackTex = device.createTexture({
@@ -839,18 +1038,11 @@ export class FrameRenderer {
       format: "rgba8unorm",
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
-    this.frameTex.destroy();
-    this.frameTex = this.device.createTexture({
-      size: [w, h],
-      format: "rgba8unorm",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
     this.resizeIntermediates(w, h);
     this.ctx.configure({ device: this.device, format: this.canvasFmt, alphaMode: "opaque" });
   }
 
   dispose(): void {
-    this.frameTex.destroy();
     this.readbackTex.destroy();
     this.fxPing.destroy();
     this.fxPong.destroy();
