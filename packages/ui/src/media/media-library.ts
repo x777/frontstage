@@ -1,4 +1,4 @@
-import { clipTypeFromFileExtension } from "@palmier/core";
+import { clipTypeFromFileExtension, serializeGenerationStatus } from "@palmier/core";
 import type { MediaManifest, MediaManifestEntry } from "@palmier/core";
 import type { MediaGateway } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
@@ -109,6 +109,37 @@ export class MediaLibrary {
     const { relativePath } = entry.source;
     this._bytes.set(relativePath, bytes);
     this._entries.push(entry);
+    this.emit();
+  }
+
+  // Reserves an id/relativePath before the file exists — no bytes, no pending-persist.
+  addPlaceholder(entry: MediaManifestEntry): void {
+    this._entries.push(entry);
+    this.emit();
+  }
+
+  patchEntry(id: string, patch: Partial<MediaManifestEntry>): void {
+    if (!this._entries.some((e) => e.id === id)) return;
+    this._entries = this._entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
+    this.emit();
+  }
+
+  // Reserved relativePath becomes real: same bytes/pending-persist mechanics as addEntry, in place.
+  finalizeGenerated(id: string, bytes: Uint8Array, patch: Partial<MediaManifestEntry>): void {
+    const entry = this._entries.find((e) => e.id === id);
+    if (!entry) return;
+    if (entry.source.kind !== "project") throw new Error("finalizeGenerated requires a project source");
+    this._bytes.set(entry.source.relativePath, bytes);
+    this._entries = this._entries.map((e) =>
+      e.id === id ? { ...e, ...patch, generationStatus: undefined } : e
+    );
+    this.emit();
+  }
+
+  markGenerationFailed(ids: string[], message: string): void {
+    const idSet = new Set(ids);
+    const generationStatus = serializeGenerationStatus({ kind: "failed", message });
+    this._entries = this._entries.map((e) => (idSet.has(e.id) ? { ...e, generationStatus } : e));
     this.emit();
   }
 
