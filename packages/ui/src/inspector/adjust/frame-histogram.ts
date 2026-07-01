@@ -19,10 +19,3 @@ export async function computeFrameHistograms(
     hue: hueHistogram(rgba, engine.width, engine.height),
   };
 }
-
-export async function computeFrameHueHistogram(
-  engine: Engine,
-): Promise<number[]> {
-  const rgba = await engine.readRGBA();
-  return hueHistogram(rgba, engine.width, engine.height);
-}

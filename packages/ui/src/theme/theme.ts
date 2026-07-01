@@ -151,6 +151,10 @@ export const theme = {
     curveR: "var(--color-adjust-curve-r)",
     curveG: "var(--color-adjust-curve-g)",
     curveB: "var(--color-adjust-curve-b)",
+    hueCurveNeutral: "var(--color-adjust-huecurve-neutral)",
+    hueCurveHue: "var(--color-adjust-huecurve-hue)",
+    hueCurveSat: "var(--color-adjust-huecurve-sat)",
+    hueCurveLum: "var(--color-adjust-huecurve-lum)",
   },
   z: {
     menu: "var(--z-menu)",
