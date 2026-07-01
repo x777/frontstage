@@ -43,6 +43,13 @@ describe("serialize", () => {
     expect(doc.timeline.fps).toBe(defaultTimeline().fps); // timeline still decodes fine
   });
 
+  test("0-byte media.json (truncated write) is corrupt, not missing", () => {
+    const files = encodeProjectFiles({ timeline: defaultTimeline(), manifest: emptyMediaManifest(), generationLog: emptyGenerationLog() });
+    const doc = decodeProjectFiles({ timeline: files[PROJECT_FILES.timeline]!, manifest: "" });
+    expect(doc.manifest.entries).toEqual([]);
+    expect(doc.manifestUnreadable).toBe(true); // the file existed but is unreadable
+  });
+
   test("valid-JSON-wrong-shape media.json degrades the same way", () => {
     const files = encodeProjectFiles({ timeline: defaultTimeline(), manifest: emptyMediaManifest(), generationLog: emptyGenerationLog() });
     const doc = decodeProjectFiles({

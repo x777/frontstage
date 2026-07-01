@@ -43,7 +43,8 @@ export function decodeProjectFiles(files: {
   // preserve the original file on disk instead of clobbering it with an empty one.
   let manifest: MediaManifest;
   let manifestUnreadable = false;
-  if (files.manifest) {
+  // !== undefined: a 0-byte file (truncated write) is corrupt, not missing.
+  if (files.manifest !== undefined) {
     try {
       manifest = MediaManifestSchema.parse(JSON.parse(files.manifest));
     } catch {

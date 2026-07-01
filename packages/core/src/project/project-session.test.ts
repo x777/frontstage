@@ -382,6 +382,31 @@ describe("ProjectSession", () => {
       expect(await bound.store.readText(PROJECT_FILES.manifest)).toBe(corrupt);
     });
 
+    it("saveAs carries the preserved original bytes to the new location", async () => {
+      const ref: ProjectRef = { id: "corrupt-proj", name: "Corrupt" };
+      const gw = new InMemoryProjectGateway({
+        saveAsFactory: (name) => ({ id: "copied-proj", name }),
+      });
+      const bound = await gw.bind(ref);
+      await writeProject(bound.store, {
+        timeline: defaultTimeline(),
+        manifest: emptyMediaManifest(),
+        generationLog: emptyGenerationLog(),
+      });
+      const corrupt = "{ this is not valid json";
+      await bound.store.writeText(PROJECT_FILES.manifest, corrupt);
+
+      const host = new FakeHost();
+      const session = new ProjectSession(host, gw);
+      await session.open(alwaysProceed, ref);
+
+      const ok = await session.saveAs();
+
+      expect(ok).toBe(true);
+      const copied = await gw.bind({ id: "copied-proj", name: "Corrupt" });
+      expect(await copied.store.readText(PROJECT_FILES.manifest)).toBe(corrupt);
+    });
+
     it("a rebuilt manifest is written and clears the load-failed flag; a later empty save is not held hostage", async () => {
       const ref: ProjectRef = { id: "corrupt-proj", name: "Corrupt" };
       const gw = new InMemoryProjectGateway();
