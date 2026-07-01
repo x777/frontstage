@@ -18,3 +18,4 @@ export { CurveEditor } from "./CurveEditor.js";
 export type { CurveEditorProps } from "./CurveEditor.js";
 export { CurvesSection } from "./CurvesSection.js";
 export type { CurvesSectionProps } from "./CurvesSection.js";
+export { computeFrameHistogram } from "./frame-histogram.js";

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import type { EditorStore, MediaManifestEntry } from "@palmier/core";
 import {
   findClip,
@@ -13,6 +14,7 @@ import {
   rgbaFromHex,
 } from "@palmier/core";
 import type { Clip, Transform, Crop, TextStyle } from "@palmier/core";
+import type { PlaybackEngine } from "@palmier/engine";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
 import { NumberField, SliderField, ToggleField, TextField, Section } from "./fields.js";
@@ -20,6 +22,7 @@ import { KeyframeLanes } from "./KeyframeLanes.js";
 import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
 import { CurvesSection } from "./adjust/CurvesSection.js";
 import { ColorWheelsSection } from "./adjust/ColorWheelsSection.js";
+import { computeFrameHistogram } from "./adjust/frame-histogram.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
@@ -28,7 +31,10 @@ interface MediaLibraryLike {
 export interface InspectorPanelProps {
   store: EditorStore;
   library?: MediaLibraryLike;
+  engineRef?: { current: PlaybackEngine | null };
 }
+
+type Histogram = { y: number[]; r: number[]; g: number[]; b: number[] };
 
 const VISUAL_TYPES = new Set(["video", "image", "text", "lottie"]);
 const AUDIO_TYPES = new Set(["audio", "video"]);
@@ -42,10 +48,22 @@ function isNonTextVisual(c: Clip): boolean {
   return VISUAL_TYPES.has(c.mediaType) && c.mediaType !== "text";
 }
 
-export function InspectorPanel({ store, library }: InspectorPanelProps) {
+export function InspectorPanel({ store, library, engineRef }: InspectorPanelProps) {
   const selection = useStore(store, (s) => s.selection);
   const playhead = useStore(store, (s) => s.playhead);
   const timeline = useStore(store, (s) => s.timeline);
+
+  const [histogram, setHistogram] = useState<Histogram | undefined>(undefined);
+
+  useEffect(() => {
+    const engine = engineRef?.current;
+    if (!engine) return;
+    let cancelled = false;
+    void computeFrameHistogram(engine).then((h) => {
+      if (!cancelled) setHistogram(h);
+    });
+    return () => { cancelled = true; };
+  }, [engineRef, playhead, timeline, selection]);
 
   const emptyState = (
     <div
@@ -90,7 +108,7 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
           }}
         >
           <BasicCorrectionSection store={store} clipIds={selIds} />
-          <CurvesSection store={store} clipIds={selIds} />
+          <CurvesSection store={store} clipIds={selIds} histogram={histogram} />
           <ColorWheelsSection store={store} clipIds={selIds} />
         </div>
       );
@@ -376,7 +394,7 @@ export function InspectorPanel({ store, library }: InspectorPanelProps) {
 
       {/* Curves */}
       {isVisual && !isText && (
-        <CurvesSection store={store} clipIds={[clipId]} />
+        <CurvesSection store={store} clipIds={[clipId]} histogram={histogram} />
       )}
 
       {/* Color Wheels */}
