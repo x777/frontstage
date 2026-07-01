@@ -9,7 +9,7 @@ import {
   type Timeline,
   type MediaManifest,
 } from "@palmier/core";
-import { applyColorTool, applyEffectTool, type ToolContext } from "../src/index.js";
+import { applyColorTool, applyEffectTool, inspectColorTool, type ToolContext } from "../src/index.js";
 
 function makeClip(id: string, startFrame = 0) {
   return {
@@ -219,5 +219,85 @@ describe("apply_effect", () => {
     expect(result.isError).toBe(true);
     expect(store.getSnapshot().timeline).toBe(before);
     expect(store.canUndo()).toBe(false);
+  });
+});
+
+// ── inspect_color ─────────────────────────────────────────────────────────────
+
+function solidRgba(value: number, count = 16): Uint8Array {
+  const buf = new Uint8Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    buf[i * 4] = value;
+    buf[i * 4 + 1] = value;
+    buf[i * 4 + 2] = value;
+    buf[i * 4 + 3] = 255;
+  }
+  return buf;
+}
+
+describe("inspect_color", () => {
+  test("no renderFrame → isError with 'not available' message", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeCtx(store);
+    const result = await inspectColorTool().run({}, ctx);
+    expect(result.isError).toBe(true);
+    const block = result.blocks[0];
+    expect(block?.kind === "text" && block.text).toMatch(/not available/);
+  });
+
+  test("solid grey → scopes.lumaMean ≈ 128/255", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx: ToolContext = {
+      ...makeCtx(store),
+      renderFrame: async () => ({ rgba: solidRgba(128), width: 4, height: 4 }),
+    };
+    const result = await inspectColorTool().run({}, ctx);
+    expect(result.isError).toBe(false);
+    const textBlock = result.blocks.find((b) => b.kind === "text");
+    expect(textBlock).toBeDefined();
+    const payload = JSON.parse((textBlock as { kind: "text"; text: string }).text) as {
+      scopes: { lumaMean: number };
+    };
+    expect(payload.scopes.lumaMean).toBeCloseTo(128 / 255, 2);
+  });
+
+  test("referenceFrame → payload has gap with deltas + hints array", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx: ToolContext = {
+      ...makeCtx(store),
+      renderFrame: async (f: number) => ({
+        rgba: solidRgba(f === 0 ? 128 : 200),
+        width: 4,
+        height: 4,
+      }),
+    };
+    const result = await inspectColorTool().run({ atFrame: 0, referenceFrame: 10 }, ctx);
+    expect(result.isError).toBe(false);
+    const textBlock = result.blocks.find((b) => b.kind === "text");
+    const payload = JSON.parse((textBlock as { kind: "text"; text: string }).text) as {
+      gap: { deltas: Record<string, unknown>; hints: string[] };
+    };
+    expect(payload.gap).toBeDefined();
+    expect(payload.gap.deltas).toBeDefined();
+    expect(Array.isArray(payload.gap.hints)).toBe(true);
+  });
+
+  test("jpegBase64 present → image block returned before text block", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx: ToolContext = {
+      ...makeCtx(store),
+      renderFrame: async () => ({
+        rgba: solidRgba(128),
+        width: 4,
+        height: 4,
+        jpegBase64: "fakejpeg==",
+      }),
+    };
+    const result = await inspectColorTool().run({}, ctx);
+    expect(result.isError).toBe(false);
+    const imageBlock = result.blocks.find((b) => b.kind === "image");
+    expect(imageBlock).toBeDefined();
+    expect((imageBlock as { kind: "image"; base64: string; mediaType: string }).base64).toBe("fakejpeg==");
+    expect((imageBlock as { kind: "image"; base64: string; mediaType: string }).mediaType).toBe("image/jpeg");
   });
 });

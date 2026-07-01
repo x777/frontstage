@@ -16,6 +16,7 @@ export interface ToolContext {
   getManifest: () => MediaManifest;
   newId: () => string;
   generateImage?: (input: ImageGenInput) => Promise<MediaManifestEntry>;
+  renderFrame?: (atFrame: number) => Promise<{ rgba: Uint8Array; width: number; height: number; jpegBase64?: string }>;
 }
 
 export interface ToolSpec {

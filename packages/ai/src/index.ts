@@ -5,7 +5,7 @@ export { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClips
 export { rippleDeleteRangesTool, insertClipsTool } from "./tools/ripple-tools.js";
 export { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./tools/property-tools.js";
 export { removeTracksTool } from "./tools/track-tools.js";
-export { applyColorTool, applyEffectTool } from "./tools/color-tools.js";
+export { applyColorTool, applyEffectTool, inspectColorTool } from "./tools/color-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";
 export { ImageGenerator } from "./agent/image-generator.js";

@@ -3,11 +3,13 @@ import {
   findClip,
   buildColorStack,
   applyEffectStack,
+  computeScopes,
+  scopesGap,
   type ApplyColorInput,
   type Effect,
   type Timeline,
 } from "@palmier/core";
-import type { ToolSpec } from "./types.js";
+import type { ToolBlock, ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
 const numPair = z.array(z.tuple([z.number(), z.number()]));
@@ -78,6 +80,46 @@ export function applyColorTool(): ToolSpec {
       });
       asUndoStep(ctx.store, "Color Grade (Agent)", [reducer]);
       return ok(`Applied color grade to ${input.clipIds.length} clip(s).`);
+    },
+  };
+}
+
+export function inspectColorTool(): ToolSpec {
+  return {
+    name: "inspect_color",
+    description:
+      "Renders a timeline frame and reports color scopes (luma/RGB levels, saturation, warm/cool + green/magenta bias, histograms). Optionally compares to a reference frame with actionable gap hints.",
+    inputSchema: z.object({
+      clipId: z.string().optional(),
+      atFrame: z.number().int().optional(),
+      referenceFrame: z.number().int().optional(),
+    }),
+    async run(args, ctx) {
+      const a = args as { clipId?: string; atFrame?: number; referenceFrame?: number };
+      if (!ctx.renderFrame) return errorResult("frame rendering is not available in this context");
+      const tl = ctx.store.getSnapshot().timeline;
+      let frame = a.atFrame;
+      if (frame === undefined && a.clipId) {
+        const loc = findClip(tl, a.clipId);
+        if (!loc) return errorResult(`unknown clip: ${a.clipId}`);
+        const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+        frame = clip.startFrame + Math.floor(clip.durationFrames / 2);
+      }
+      frame = frame ?? tl.tracks.flatMap((t) => t.clips).reduce((m, c) => Math.max(m, c.startFrame), 0);
+      const subject = await ctx.renderFrame(frame);
+      const scopes = computeScopes(subject.rgba, subject.width, subject.height);
+      const payload: Record<string, unknown> = { frame, scopes };
+      const blocks: ToolBlock[] = [];
+      if (subject.jpegBase64) blocks.push({ kind: "image", base64: subject.jpegBase64, mediaType: "image/jpeg" });
+      if (a.referenceFrame !== undefined) {
+        const ref = await ctx.renderFrame(a.referenceFrame);
+        const refScopes = computeScopes(ref.rgba, ref.width, ref.height);
+        payload.reference = refScopes;
+        payload.gap = scopesGap(scopes, refScopes);
+        if (ref.jpegBase64) blocks.push({ kind: "image", base64: ref.jpegBase64, mediaType: "image/jpeg" });
+      }
+      blocks.push({ kind: "text", text: JSON.stringify(payload, null, 2) });
+      return { blocks, isError: false };
     },
   };
 }

@@ -1,5 +1,5 @@
 /**
- * buildCatalog assembles all 19 currently available tools.
+ * buildCatalog assembles all 20 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - import_media        — plan 6.2 (media import pipeline)
@@ -16,7 +16,7 @@ import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./propert
 import { removeTracksTool } from "./track-tools.js";
 import { generateImageTool } from "./generate-image-tool.js";
 import { rippleDeleteRangesTool, insertClipsTool } from "./ripple-tools.js";
-import { applyColorTool, applyEffectTool } from "./color-tools.js";
+import { applyColorTool, applyEffectTool, inspectColorTool } from "./color-tools.js";
 
 export function buildCatalog(): ToolSpec[] {
   return [
@@ -44,5 +44,6 @@ export function buildCatalog(): ToolSpec[] {
     // Color / effect tools
     applyColorTool(),
     applyEffectTool(),
+    inspectColorTool(),
   ];
 }
