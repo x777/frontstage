@@ -107,15 +107,37 @@ describe("rippleDeleteRangesOnTrack", () => {
     expect(out.timeline.tracks[1]!.clips.map((c) => c.startFrame).sort((x, y) => x - y)).toEqual([0, 40]);
   });
 
-  it("refuses when a non-ignored sync-locked track would collide", () => {
+  it("cuts a sync-locked follower's matching span even without a shift collision", () => {
+    // Master audio spanning the same range as the anchor video gets the cut, not just a shift.
+    const tl = timeline([
+      track("v", [clip("a", 0, 100)]),
+      track("aud", [clip("x", 0, 100)], { type: "audio", syncLocked: true }),
+    ]);
+    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 40, end: 50 }]);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.report.clearedTracks).toBe(2);
+    const spans = (t: Timeline["tracks"][number]) =>
+      t.clips.slice().sort((a, b) => a.startFrame - b.startFrame).map((c) => [c.startFrame, c.startFrame + c.durationFrames]);
+    expect(spans(out.timeline.tracks[0]!)).toEqual([[0, 40], [40, 90]]);
+    expect(spans(out.timeline.tracks[1]!)).toEqual([[0, 40], [40, 90]]);
+  });
+
+  it("sync-locked follower is cut, avoiding the shift collision", () => {
     const tl = timeline([
       track("v", [clip("a", 0, 100)]),
       track("a", [clip("x", 0, 50), clip("y", 70, 10)], { type: "audio", syncLocked: true }),
     ]);
-    // clearing [40,60) on v shifts y (70) left 20 -> 50, which touches x end (50) — adjacent is OK,
-    // so use a bigger removal to force overlap:
-    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 30, end: 70 }]); // 40 removed -> y 70->30 overlaps x [0,50)
-    expect(out.kind).toBe("refused");
+    // y shifting 70 -> 30 would overlap x [0,50) — but x is now cleared by the deleted range too,
+    // trimming it to [0,30) so the shift lands adjacent instead of colliding.
+    const out = rippleDeleteRangesOnTrack(tl, 0, [{ start: 30, end: 70 }]);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    const follower = out.timeline.tracks[1]!.clips.slice().sort((a, b) => a.startFrame - b.startFrame);
+    expect(follower.map((c) => [c.startFrame, c.startFrame + c.durationFrames])).toEqual([
+      [0, 30], // x: tail inside [30,70) removed
+      [30, 40], // y: shifted left 40 to close the gap, now adjacent to x
+    ]);
   });
 
   it("ignoreSyncLockTrackIndices skips that track entirely", () => {

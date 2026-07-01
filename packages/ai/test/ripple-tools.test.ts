@@ -48,15 +48,23 @@ describe("ripple_delete_ranges", () => {
     const text = block.kind === "text" ? block.text : "";
     expect(text).toContain("30 frame"); // 1s == 30 frames
   });
-  test("refuses when a sync-locked track would collide, and ignoreSyncLockedTracks bypasses it", async () => {
+  test("cuts a sync-locked track to avoid a shift collision, and ignoreSyncLockedTracks leaves it untouched", async () => {
     const base = () => tl([
       track("v", [makeClip("a", 0, 100)]),
       track("audio", [makeClip("x", 0, 50), makeClip("y", 70, 10)], { type: "audio", syncLocked: true }),
     ]);
-    const refused = await rippleDeleteRangesTool().run({ trackIndex: 0, ranges: [{ start: 30, end: 70 }] }, ctx(base()));
-    expect(refused.isError).toBe(true);
-    const ok = await rippleDeleteRangesTool().run({ trackIndex: 0, ranges: [{ start: 30, end: 70 }], ignoreSyncLockedTracks: true }, ctx(base()));
-    expect(ok.isError).toBe(false);
+    const cutCtx = ctx(base());
+    const cut = await rippleDeleteRangesTool().run({ trackIndex: 0, ranges: [{ start: 30, end: 70 }] }, cutCtx);
+    expect(cut.isError).toBe(false);
+    // x [0,50) trimmed to [0,30) by the cut, y shifted 70 -> 30 lands adjacent instead of colliding
+    const cutFollower = cutCtx.store.getSnapshot().timeline.tracks[1]!.clips.slice().sort((p, q) => p.startFrame - q.startFrame);
+    expect(cutFollower.map((c) => [c.startFrame, c.startFrame + c.durationFrames])).toEqual([[0, 30], [30, 40]]);
+
+    const ignoredCtx = ctx(base());
+    const ignored = await rippleDeleteRangesTool().run({ trackIndex: 0, ranges: [{ start: 30, end: 70 }], ignoreSyncLockedTracks: true }, ignoredCtx);
+    expect(ignored.isError).toBe(false);
+    const ignoredFollower = ignoredCtx.store.getSnapshot().timeline.tracks[1]!.clips.slice().sort((p, q) => p.startFrame - q.startFrame);
+    expect(ignoredFollower.map((c) => [c.startFrame, c.startFrame + c.durationFrames])).toEqual([[0, 50], [70, 80]]); // untouched
   });
   test("rejects out-of-range track / missing anchor", async () => {
     const c = ctx(tl([track("t", [makeClip("a", 0, 100)])]));

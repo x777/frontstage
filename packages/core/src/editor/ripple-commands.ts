@@ -103,6 +103,12 @@ export function rippleDeleteRangesOnTrack(
     [...ignoreSyncLockTrackIndices].map((i) => timeline.tracks[i]?.id).filter((id): id is string => id != null),
   );
 
+  // Sync-locked followers get the range cut out too, not just shifted — avoids refusing on collisions
+  // that clearing itself would have resolved.
+  for (const t of timeline.tracks) {
+    if (t.syncLocked && !ignoredIds.has(t.id)) clearTrackIds.add(t.id);
+  }
+
   // Pre-flight: any non-ignored, non-clear, sync-locked track that would collide refuses the whole op.
   for (const t of timeline.tracks) {
     if (clearTrackIds.has(t.id) || !t.syncLocked || ignoredIds.has(t.id)) continue;
