@@ -51,6 +51,24 @@ describe("setEffectParam", () => {
     const s = setEffectParam(undefined, "color.nope", "x", 1, nid);
     expect(s).toEqual([]);
   });
+  it("does not mutate the input array or its effect params", () => {
+    const orig: Effect[] = [{ id: "x", type: "color.exposure", enabled: true, params: { ev: { value: 1 } } }];
+    const origParams = orig[0]!.params;
+    setEffectParam(orig, "color.exposure", "ev", 2, nid);
+    expect(orig).toHaveLength(1);
+    expect(orig[0]!.params).toBe(origParams); // same nested object, untouched
+    expect(orig[0]!.params.ev!.value).toBe(1); // original value preserved
+  });
+  it("keeps an updated middle effect at its canonical slot (not appended)", () => {
+    let s = setEffectParam(undefined, "color.exposure", "ev", 1, nid); // idx 0
+    s = setEffectParam(s, "color.highlightsShadows", "highlights", 0.5, nid); // middle
+    s = setEffectParam(s, "color.saturation", "amount", 1.5, nid); // high idx
+    expect(s.map((e) => e.type)).toEqual(["color.exposure", "color.highlightsShadows", "color.saturation"]);
+    s = setEffectParam(s, "color.highlightsShadows", "shadows", 0.3, nid); // update the middle effect
+    expect(s.map((e) => e.type)).toEqual(["color.exposure", "color.highlightsShadows", "color.saturation"]);
+    expect(s[1]!.params.highlights!.value).toBe(0.5); // prior param carried
+    expect(s[1]!.params.shadows!.value).toBe(0.3);
+  });
 });
 
 describe("setEffectString", () => {
