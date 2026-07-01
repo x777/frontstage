@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, type FrameRange, type RippleInsertSpec } from "@palmier/core";
+import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, type FrameRange, type RippleInsertSpec } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -63,7 +63,7 @@ export function rippleDeleteRangesTool(): ToolSpec {
 export function insertClipsTool(): ToolSpec {
   return {
     name: "insert_clips",
-    description: "Ripple-inserts clips at a frame on a track: opens a gap (pushing later clips and sync-locked + linked-audio tracks right), then drops the clips in. Each references a media entry by id; durationFrames/trim are optional.",
+    description: "Ripple-inserts clips at a frame on a track: opens a gap (pushing later clips and sync-locked + linked-audio tracks right), then drops the clips in. Each references a media entry by id. durationFrames and trimStartFrame/trimEndFrame are optional: durationFrames is the timeline length, trimStartFrame/trimEndFrame trim the source's head/tail. Omit durationFrames to derive it from the source; durationFrames and trimEndFrame are mutually exclusive (both pin the clip's end). Omit all three to use the full source. Untrimmed source stays as headroom, so the clip can later be extended.",
     inputSchema: z.object({
       trackIndex: z.number().int(),
       atFrame: z.number().int(),
@@ -85,11 +85,14 @@ export function insertClipsTool(): ToolSpec {
 
       const manifest = ctx.getManifest();
       const specs: RippleInsertSpec[] = [];
-      for (const c of a.clips) {
+      for (let idx = 0; idx < a.clips.length; idx++) {
+        const c = a.clips[idx]!;
         const entry = manifest.entries.find((e) => e.id === c.mediaId);
         if (!entry) return errorResult(`unknown media: ${c.mediaId}`);
-        const durationFrames = c.durationFrames ?? Math.max(1, Math.round(entry.duration * fps));
-        specs.push({ entry, durationFrames, trimStartFrame: c.trimStartFrame, trimEndFrame: c.trimEndFrame });
+        const sourceLen = Math.round(entry.duration * fps);
+        const place = resolvePlacement(sourceLen, c.trimStartFrame ?? 0, c.durationFrames, c.trimEndFrame);
+        if ("error" in place) return errorResult(`clips[${idx}]: ${place.error}`);
+        specs.push({ entry, durationFrames: place.duration, trimStartFrame: place.trimStart, trimEndFrame: place.trimEnd });
       }
 
       const base = ctx.newId();

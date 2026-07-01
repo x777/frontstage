@@ -330,6 +330,47 @@ export interface RippleInsertSpec {
   trimEndFrame?: number;
 }
 
+export type ResolvePlacementOutcome =
+  | { trimStart: number; duration: number; trimEnd: number }
+  | { error: string };
+
+// Resolves the concrete (trimStart, duration, trimEnd) for a clip placement. trimStartFrame is the
+// in-point, trimEndFrame the out-point; durationFrames and trimEndFrame both pin the clip's end, so
+// they're mutually exclusive. Omitting durationFrames derives it from the trimmed source window,
+// which leaves the omitted end's real remaining source as headroom — the clip stays extendable.
+// Images/unbounded sources (sourceLenFrames <= 0) require an explicit durationFrames.
+export function resolvePlacement(
+  sourceLenFrames: number,
+  trimStartFrame: number,
+  durationFrames?: number,
+  trimEndFrame?: number,
+): ResolvePlacementOutcome {
+  if (trimStartFrame < 0) return { error: `trimStartFrame must be >= 0 (got ${trimStartFrame})` };
+  if (trimEndFrame !== undefined && trimEndFrame < 0) return { error: `trimEndFrame must be >= 0 (got ${trimEndFrame})` };
+  if (durationFrames !== undefined && durationFrames < 1) return { error: `durationFrames must be >= 1 (got ${durationFrames})` };
+  if (durationFrames !== undefined && trimEndFrame !== undefined) {
+    return { error: "set durationFrames OR trimEndFrame, not both — both define the clip's end" };
+  }
+
+  if (durationFrames !== undefined) {
+    if (sourceLenFrames > 0 && trimStartFrame + durationFrames > sourceLenFrames) {
+      return { error: `trimStartFrame ${trimStartFrame} + durationFrames ${durationFrames} exceed the source length (${sourceLenFrames} frames)` };
+    }
+    const trimEnd = sourceLenFrames > 0 ? sourceLenFrames - trimStartFrame - durationFrames : 0;
+    return { trimStart: trimStartFrame, duration: durationFrames, trimEnd };
+  }
+
+  if (sourceLenFrames <= 0) {
+    return { error: "durationFrames is required — this asset's source length is unknown" };
+  }
+  const trimEnd = trimEndFrame ?? 0;
+  const duration = sourceLenFrames - trimStartFrame - trimEnd;
+  if (duration < 1) {
+    return { error: `trimStartFrame ${trimStartFrame} + trimEndFrame ${trimEnd} leave no frames (source is ${sourceLenFrames})` };
+  }
+  return { trimStart: trimStartFrame, duration, trimEnd };
+}
+
 // Overwrite-place a single clip on a track (clears its [start,end) region first).
 function overwritePlaceClip(timeline: Timeline, trackIndex: number, clip: Clip): Timeline {
   const track = timeline.tracks[trackIndex]!;

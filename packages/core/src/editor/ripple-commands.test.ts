@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
 import type { MediaManifestEntry } from "../media.js";
-import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap, trimValues, rippleTrimDurationDelta, syncLockedLeftRoom, planRippleTrim, rippleTrimClip, rippleInsertClips, rippleInsertClipsSpecs } from "./ripple-commands.js";
+import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap, trimValues, rippleTrimDurationDelta, syncLockedLeftRoom, planRippleTrim, rippleTrimClip, rippleInsertClips, rippleInsertClipsSpecs, resolvePlacement } from "./ripple-commands.js";
 
 export function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {
   return {
@@ -321,5 +321,64 @@ describe("rippleInsertClipsSpecs (specs)", () => {
     const tl = timeline([track("t", [clip("a", 0, 10)])]);
     expect(rippleInsertClipsSpecs(tl, [], 0, 0, 30).timeline).toBe(tl);
     expect(rippleInsertClipsSpecs(tl, [{ entry: entry("n", 1), durationFrames: 10 }], 9, 0, 30).timeline).toBe(tl);
+  });
+});
+
+describe("resolvePlacement", () => {
+  it("explicit duration within source: derives the real remaining tail as trimEnd (extendable)", () => {
+    const out = resolvePlacement(100, 0, 40);
+    expect(out).toEqual({ trimStart: 0, duration: 40, trimEnd: 60 }); // 100 - 0 - 40
+  });
+
+  it("explicit duration with a nonzero trimStart: tail headroom accounts for the head trim too", () => {
+    const out = resolvePlacement(100, 10, 40);
+    expect(out).toEqual({ trimStart: 10, duration: 40, trimEnd: 50 }); // 100 - 10 - 40
+  });
+
+  it("duration omitted: derives duration from [trimStart, sourceLen - trimEnd]", () => {
+    const out = resolvePlacement(100, 10, undefined, 20);
+    expect(out).toEqual({ trimStart: 10, duration: 70, trimEnd: 20 }); // 100 - 10 - 20
+  });
+
+  it("duration and trimEnd both omitted: runs to the source end (trimEnd defaults to 0)", () => {
+    const out = resolvePlacement(100, 10);
+    expect(out).toEqual({ trimStart: 10, duration: 90, trimEnd: 0 });
+  });
+
+  it("rejects durationFrames AND trimEndFrame both set — they both define the clip's end", () => {
+    const out = resolvePlacement(100, 0, 40, 10);
+    expect("error" in out).toBe(true);
+  });
+
+  it("image (sourceLen 0) with an explicit duration: ok, unbounded, trimEnd 0", () => {
+    const out = resolvePlacement(0, 0, 40);
+    expect(out).toEqual({ trimStart: 0, duration: 40, trimEnd: 0 });
+  });
+
+  it("image (sourceLen 0) without a duration: durationFrames is required", () => {
+    const out = resolvePlacement(0, 0);
+    expect("error" in out).toBe(true);
+  });
+
+  it("rejects trimStart + duration exceeding the source length", () => {
+    const out = resolvePlacement(100, 70, 40); // 70 + 40 = 110 > 100
+    expect("error" in out).toBe(true);
+  });
+
+  it("rejects a derived duration below 1", () => {
+    const out = resolvePlacement(100, 60, undefined, 45); // 100 - 60 - 45 = -5
+    expect("error" in out).toBe(true);
+  });
+
+  it("rejects a negative trimStartFrame", () => {
+    expect("error" in resolvePlacement(100, -1, 40)).toBe(true);
+  });
+
+  it("rejects a negative trimEndFrame", () => {
+    expect("error" in resolvePlacement(100, 0, undefined, -1)).toBe(true);
+  });
+
+  it("rejects a durationFrames below 1", () => {
+    expect("error" in resolvePlacement(100, 0, 0)).toBe(true);
   });
 });

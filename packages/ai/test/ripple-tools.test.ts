@@ -104,4 +104,33 @@ describe("insert_clips", () => {
     expect((await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "nope" }] }, c)).isError).toBe(true);
     expect((await insertClipsTool().run({ trackIndex: 9, atFrame: 0, clips: [{ mediaId: "m1" }] }, c)).isError).toBe(true);
   });
+  test("trimStartFrame only: the placed clip stays extendable (trimEndFrame is the real remaining tail)", async () => {
+    // m1 is 2s @ 30fps = 60 frames. trimStartFrame 10, no durationFrames/trimEndFrame -> runs to the source end.
+    const c = ctxWithMedia(tl([track("t", [])]));
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", trimStartFrame: 10 }] }, c);
+    expect(res.isError).toBe(false);
+    const placed = c.store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(placed.trimStartFrame).toBe(10);
+    expect(placed.durationFrames).toBe(50); // 60 - 10 - 0
+    expect(placed.trimEndFrame).toBe(0);
+  });
+  test("explicit durationFrames within the source: trimEndFrame is derived, not zeroed, so the clip stays extendable", async () => {
+    // m1 is 2s @ 30fps = 60 frames; ask for a 20-frame clip -> 40 frames of real headroom on the tail.
+    const c = ctxWithMedia(tl([track("t", [])]));
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", durationFrames: 20 }] }, c);
+    expect(res.isError).toBe(false);
+    const placed = c.store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(placed.durationFrames).toBe(20);
+    expect(placed.trimEndFrame).toBe(40); // 60 - 0 - 20, not 0
+  });
+  test("rejects durationFrames AND trimEndFrame both set", async () => {
+    const c = ctxWithMedia(tl([track("t", [])]));
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", durationFrames: 20, trimEndFrame: 5 }] }, c);
+    expect(res.isError).toBe(true);
+  });
+  test("rejects a duration that exceeds the source length", async () => {
+    const c = ctxWithMedia(tl([track("t", [])]));
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", trimStartFrame: 50, durationFrames: 20 }] }, c); // 50+20 > 60
+    expect(res.isError).toBe(true);
+  });
 });
