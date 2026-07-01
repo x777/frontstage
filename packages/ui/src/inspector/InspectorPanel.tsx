@@ -23,6 +23,7 @@ import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
 import { CurvesSection } from "./adjust/CurvesSection.js";
 import { ColorWheelsSection } from "./adjust/ColorWheelsSection.js";
 import { HueCurvesSection } from "./adjust/HueCurvesSection.js";
+import { BlendControl } from "./adjust/BlendControl.js";
 import { computeFrameHistograms } from "./adjust/frame-histogram.js";
 
 interface MediaLibraryLike {
@@ -118,6 +119,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
           <CurvesSection store={store} clipIds={selIds} histogram={histogram} />
           <ColorWheelsSection store={store} clipIds={selIds} />
           <HueCurvesSection store={store} clipIds={selIds} hueHistogram={hueHistogram} />
+          <BlendControl store={store} clipIds={selIds} />
         </div>
       );
     }
@@ -413,6 +415,11 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
       {/* Hue Curves */}
       {isVisual && !isText && (
         <HueCurvesSection store={store} clipIds={[clipId]} hueHistogram={hueHistogram} />
+      )}
+
+      {/* Blend */}
+      {isVisual && !isText && (
+        <BlendControl store={store} clipIds={[clipId]} />
       )}
     </div>
   );

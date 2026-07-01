@@ -1,3 +1,7 @@
+export { Select } from "./Select.js";
+export type { SelectProps } from "./Select.js";
+export { BlendControl } from "./BlendControl.js";
+export type { BlendControlProps } from "./BlendControl.js";
 export { AdjustSlider } from "./AdjustSlider.js";
 export type { AdjustSliderProps } from "./AdjustSlider.js";
 export { ScrubbableNumberField } from "./ScrubbableNumberField.js";
