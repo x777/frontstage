@@ -219,6 +219,90 @@ async function main() {
       };
       await r.composite([layer], size);
       f.close();
+    } else if (useCase === "motion") {
+      // Horizontal step edge: left half black, right half white. Motion blur at angle=0, radius=20.
+      const o = new OffscreenCanvas(W, H);
+      const c2 = o.getContext("2d")!;
+      c2.fillStyle = "rgb(0,0,0)";
+      c2.fillRect(0, 0, W / 2, H);
+      c2.fillStyle = "rgb(255,255,255)";
+      c2.fillRect(W / 2, 0, W / 2, H);
+      const f = new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "blur.motion", enabled: true, params: { angle: { value: 0 }, radius: { value: 20 } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "sharpen") {
+      // Soft gradient: left-black to right-white; sharpen amount=1.5 increases edge contrast.
+      const o = new OffscreenCanvas(W, H);
+      const c2 = o.getContext("2d")!;
+      const grd = c2.createLinearGradient(0, 0, W, 0);
+      grd.addColorStop(0, "rgb(0,0,0)");
+      grd.addColorStop(1, "rgb(255,255,255)");
+      c2.fillStyle = grd;
+      c2.fillRect(0, 0, W, H);
+      const f = new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "blur.sharpen", enabled: true, params: { amount: { value: 1.5 } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "noisered") {
+      // Solid mid-grey; amount=0 is passthrough, amount=1 blurs (output same on solid, so we test both).
+      const f = solidFrame(W, H, "rgb(128,128,128)");
+      const amountStr = params.get("amount") ?? "0";
+      const amount = parseFloat(amountStr);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "blur.noiseReduction", enabled: true, params: { amount: { value: amount } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "clarity") {
+      // Solid mid-grey; clarity=0 is passthrough, clarity=0.8 enhances local contrast.
+      const f = solidFrame(W, H, "rgb(128,128,128)");
+      const clarityStr = params.get("clarity") ?? "0";
+      const clarity = parseFloat(clarityStr);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "detail.clarity", enabled: true, params: { clarity: { value: clarity }, dehaze: { value: 0 } } }],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "glow") {
+      // Small bright spot on black; glow at intensity=1, threshold=0.5, radius=15 bleeds around spot.
+      const intensityStr = params.get("intensity") ?? "1";
+      const intensity = parseFloat(intensityStr);
+      const o = new OffscreenCanvas(W, H);
+      const c2 = o.getContext("2d")!;
+      c2.fillStyle = "rgb(0,0,0)";
+      c2.fillRect(0, 0, W, H);
+      c2.fillStyle = "rgb(255,255,255)";
+      c2.fillRect(W / 2 - 2, H / 2 - 2, 4, 4); // 4×4 white spot at center
+      const f = new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "stylize.glow", enabled: true, params: {
+          intensity: { value: intensity }, threshold: { value: 0.5 }, radius: { value: 15 }, warmth: { value: 0 },
+        }}],
+      };
+      await r.composite([layer], size);
+      f.close();
+    } else if (useCase === "chain-exp-gauss") {
+      // Solid mid-grey with exposure ev=1 then gaussian radius=1. Exposure brightens; gaussian is no-op on solid color.
+      const f = solidFrame(W, H, "rgb(128,128,128)");
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [
+          { id: "e1", type: "color.exposure", enabled: true, params: { ev: { value: 1 } } },
+          { id: "e2", type: "blur.gaussian", enabled: true, params: { radius: { value: 1 } } },
+        ],
+      };
+      await r.composite([layer], size);
+      f.close();
     } else {
       // Parity tests: mid-color frame, one effect per case, CPU-expected exported to window.__expected.
       const frame = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);

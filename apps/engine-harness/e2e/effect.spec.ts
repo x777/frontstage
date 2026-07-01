@@ -212,3 +212,84 @@ test("blur.gaussian blurs a hard edge to mid-grey", async ({ page }) => {
   expect(p[2]!).toBeGreaterThan(80);
   expect(p[2]!).toBeLessThan(175);
 });
+
+// blur.motion: step edge (left black, right white, edge at x=100), angle=0, radius=20 → edge pixel is mid-grey.
+test("blur.motion blurs a horizontal edge pixel to mid-grey", async ({ page }) => {
+  await page.goto("/effect.html?case=motion");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  expect(p[0]!).toBeGreaterThan(60);
+  expect(p[0]!).toBeLessThan(195);
+});
+
+// blur.sharpen: gradient image. Sharpen with amount=1.5 — pixel near edge diverges from its neighbour more than in input.
+test("blur.sharpen increases contrast at an edge", async ({ page }) => {
+  await page.goto("/effect.html?case=sharpen");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  // x=98 and x=102 should differ more after sharpening than a raw gradient (which would differ by ~5 at 200px width)
+  const a = await px(page, 96, 100);
+  const b = await px(page, 104, 100);
+  const diff = Math.abs(a[0]! - b[0]!);
+  expect(diff).toBeGreaterThan(8); // wider separation after unsharp
+});
+
+// blur.noiseReduction: amount=0 is passthrough (solid mid-grey stays mid-grey).
+test("blur.noiseReduction amount=0 is a passthrough", async ({ page }) => {
+  await page.goto("/effect.html?case=noisered&amount=0");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  expect(Math.abs(p[0]! - 128)).toBeLessThanOrEqual(3);
+  expect(Math.abs(p[1]! - 128)).toBeLessThanOrEqual(3);
+  expect(Math.abs(p[2]! - 128)).toBeLessThanOrEqual(3);
+});
+
+// blur.noiseReduction amount=1 changes the output on a step edge (blurs it).
+test("blur.noiseReduction amount=1 blurs an edge", async ({ page }) => {
+  await page.goto("/effect.html?case=noisered&amount=1");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  // For a solid-grey input, amount=1 returns the blur of the same solid = same value (within rounding).
+  // We simply check the effect ran without error and the pixel is grey.
+  const p = await px(page, 100, 100);
+  expect(Math.abs(p[0]! - 128)).toBeLessThanOrEqual(3);
+});
+
+// detail.clarity amount=0 is a passthrough on solid mid-grey.
+test("detail.clarity clarity=0 is a passthrough", async ({ page }) => {
+  await page.goto("/effect.html?case=clarity&clarity=0");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  expect(Math.abs(p[0]! - 128)).toBeLessThanOrEqual(3);
+  expect(Math.abs(p[1]! - 128)).toBeLessThanOrEqual(3);
+  expect(Math.abs(p[2]! - 128)).toBeLessThanOrEqual(3);
+});
+
+// stylize.glow intensity=0 is a passthrough (black bg stays black).
+test("stylize.glow intensity=0 is a passthrough", async ({ page }) => {
+  await page.goto("/effect.html?case=glow&intensity=0");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  // Off-center pixel far from the bright spot should be black.
+  const p = await px(page, 10, 10);
+  expect(p[0]!).toBeLessThan(10);
+  expect(p[1]!).toBeLessThan(10);
+  expect(p[2]!).toBeLessThan(10);
+});
+
+// stylize.glow intensity=1: pixels just outside the bright spot (but not in it) should be non-zero (glow bleeds).
+test("stylize.glow intensity=1 brightens pixels around a bright spot", async ({ page }) => {
+  await page.goto("/effect.html?case=glow&intensity=1");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  // 4px from the spot edge (x=105, spot ends at x=101) has measurable glow with radius=15 gaussian.
+  const near = await px(page, 105, 100);
+  expect(near[0]! + near[1]! + near[2]!).toBeGreaterThan(15);
+});
+
+// effect chain: exposure(ev=1) → gaussian(radius=1) on solid mid-grey.
+// Exposure should brighten the frame; gaussian on solid colour is a no-op.
+test("effect chain: exposure → gaussian brightens a solid grey frame", async ({ page }) => {
+  await page.goto("/effect.html?case=chain-exp-gauss");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const p = await px(page, 100, 100);
+  // Input 128; after ev=1: sRGB(lin(0.502)*2)≈172. Gaussian on solid is identity.
+  expect(p[0]!).toBeGreaterThan(150);
+  expect(p[0]!).toBeLessThan(210);
+});

@@ -548,6 +548,113 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: blur.motion — single directional-blur pass; uniform {angle(deg), radius, resX, resY}.
+const WGSL_MOTION = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct MotionU { angle: f32, radius: f32, resX: f32, resY: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: MotionU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let taps = i32(min(32.0, max(1.0, u.radius)));
+  let dir = vec2f(cos(radians(u.angle)), sin(radians(u.angle))) / vec2f(u.resX, u.resY);
+  var sum = vec4f(0.0);
+  for (var i = -taps; i <= taps; i = i + 1) {
+    sum = sum + textureSample(src, samp, uv + dir * f32(i));
+  }
+  return sum / f32(2 * taps + 1);
+}
+`;
+
+// fx2 combine for blur.sharpen (unsharp mask): texA=blurred, texB=orig, uniform {amount}.
+const WGSL_SHARPEN_FX2 = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct SharpenU { amount: f32 };
+
+@group(0) @binding(0) var texA: texture_2d<f32>;
+@group(0) @binding(1) var texB: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+@group(0) @binding(3) var<uniform> u: SharpenU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let blur = textureSample(texA, samp, uv);
+  let orig = textureSample(texB, samp, uv);
+  return vec4f(clamp(orig.rgb + (orig.rgb - blur.rgb) * u.amount, vec3f(0.0), vec3f(1.0)), orig.a);
+}
+`;
+
+// fx2 mix for blur.noiseReduction: texA=blurred, texB=orig, uniform {amount}. amount=0→passthrough.
+const WGSL_NOISE_RED_FX2 = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct NrU { amount: f32 };
+
+@group(0) @binding(0) var texA: texture_2d<f32>;
+@group(0) @binding(1) var texB: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+@group(0) @binding(3) var<uniform> u: NrU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let blur = textureSample(texA, samp, uv);
+  let orig = textureSample(texB, samp, uv);
+  return vec4f(mix(orig.rgb, blur.rgb, u.amount), orig.a);
+}
+`;
+
+// fx2 combine for detail.clarity (large-radius local contrast + dehaze): texA=localAvg, texB=orig.
+const WGSL_CLARITY_FX2 = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct ClarityU { clarity: f32, dehaze: f32 };
+
+@group(0) @binding(0) var texA: texture_2d<f32>;
+@group(0) @binding(1) var texB: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+@group(0) @binding(3) var<uniform> u: ClarityU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let avg = textureSample(texA, samp, uv);
+  let orig = textureSample(texB, samp, uv);
+  var rgb = orig.rgb + (orig.rgb - avg.rgb) * u.clarity;
+  rgb = (rgb - vec3f(0.5)) * (1.0 + u.dehaze * 0.5) + vec3f(0.5);
+  return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), orig.a);
+}
+`;
+
+// Threshold-extract bright pixels for stylize.glow; uniform {threshold}.
+const WGSL_GLOW_THRESH = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct GlowThreshU { threshold: f32 };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: GlowThreshU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  let b = max(vec3f(0.0), c.rgb - vec3f(u.threshold)) / max(0.001, 1.0 - u.threshold);
+  return vec4f(b, c.a);
+}
+`;
+
+// fx2 add for stylize.glow: texA=blurred-bright, texB=orig, uniform {intensity, warmth}. intensity=0→passthrough.
+const WGSL_GLOW_FX2 = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct GlowFx2U { intensity: f32, warmth: f32 };
+
+@group(0) @binding(0) var texA: texture_2d<f32>;
+@group(0) @binding(1) var texB: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+@group(0) @binding(3) var<uniform> u: GlowFx2U;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let glow = textureSample(texA, samp, uv).rgb;
+  let orig = textureSample(texB, samp, uv);
+  let warm = mix(glow, glow * vec3f(1.1, 1.0, 0.85), u.warmth);
+  return vec4f(clamp(orig.rgb + warm * u.intensity, vec3f(0.0), vec3f(1.0)), orig.a);
+}
+`;
+
 // Normal-blend composite of an effected layer into the accumulator (opacity applied via alpha, ALPHA_BLEND state).
 const WGSL_COMPOSITE = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Comp { opacity: f32 };
@@ -654,7 +761,16 @@ interface EffectStep {
   uBuf?: GPUBuffer;
   lutTex?: GPUTexture;
   lut3dTex?: GPUTexture;
-  gaussRadius?: number; // blur.gaussian only — resolved radius stored for Phase 2 dispatch
+  gaussRadius?: number; // blur.gaussian
+  // T3 multi-pass params (Phase 1 → Phase 2)
+  sharpenAmount?: number;
+  noiseRedAmount?: number;
+  clarityClarity?: number;
+  clarityDehaze?: number;
+  glowThreshold?: number;
+  glowRadius?: number;
+  glowIntensity?: number;
+  glowWarmth?: number;
 }
 
 type LayerPlan =
@@ -686,6 +802,12 @@ interface RendererResources {
   vignetteModule: GPUShaderModule;
   grainModule: GPUShaderModule;
   gaussModule: GPUShaderModule;
+  motionModule: GPUShaderModule;
+  sharpenFx2Module: GPUShaderModule;
+  noiseRedFx2Module: GPUShaderModule;
+  clarityFx2Module: GPUShaderModule;
+  glowThreshModule: GPUShaderModule;
+  glowFx2Module: GPUShaderModule;
   // bind group layouts
   extBgl: GPUBindGroupLayout;
   copyBgl: GPUBindGroupLayout;
@@ -703,9 +825,10 @@ interface RendererResources {
   fxLut3dLayout: GPUPipelineLayout;
   blendBgl: GPUBindGroupLayout;
   blendLayout: GPUPipelineLayout;
-  // eager blit pipelines (always used)
+  // eager blit/copy pipelines
   blitCanvasPipeline: GPURenderPipeline;
   blitReadbackPipeline: GPURenderPipeline;
+  copyFxPipeline: GPURenderPipeline; // blit into rgba16float intermediate (copy ping→fxScratch)
   // textures
   readbackTex: GPUTexture;
   fxPing: GPUTexture;
@@ -748,6 +871,12 @@ export class FrameRenderer {
   private vignetteModule: GPUShaderModule;
   private grainModule: GPUShaderModule;
   private gaussModule: GPUShaderModule;
+  private motionModule: GPUShaderModule;
+  private sharpenFx2Module: GPUShaderModule;
+  private noiseRedFx2Module: GPUShaderModule;
+  private clarityFx2Module: GPUShaderModule;
+  private glowThreshModule: GPUShaderModule;
+  private glowFx2Module: GPUShaderModule;
   // bind group layouts
   private extBgl: GPUBindGroupLayout;
   private copyBgl: GPUBindGroupLayout;
@@ -766,9 +895,10 @@ export class FrameRenderer {
   private blendBgl: GPUBindGroupLayout;
   private blendLayout: GPUPipelineLayout;
   cubeLUTs = new Map<string, CubeLUT>();
-  // blit pipelines (copy accumulator → canvas or readbackTex, no blend)
+  // blit/copy pipelines
   private blitCanvasPipeline: GPURenderPipeline;
   private blitReadbackPipeline: GPURenderPipeline;
+  private copyFxPipeline: GPURenderPipeline;
   // lazily-compiled capture/simple/effect/composite pipelines
   private pipelineCache = new Map<string, GPURenderPipeline>();
   // canvas-sized textures (recreated on resize)
@@ -803,6 +933,12 @@ export class FrameRenderer {
     this.vignetteModule = r.vignetteModule;
     this.grainModule = r.grainModule;
     this.gaussModule = r.gaussModule;
+    this.motionModule = r.motionModule;
+    this.sharpenFx2Module = r.sharpenFx2Module;
+    this.noiseRedFx2Module = r.noiseRedFx2Module;
+    this.clarityFx2Module = r.clarityFx2Module;
+    this.glowThreshModule = r.glowThreshModule;
+    this.glowFx2Module = r.glowFx2Module;
     this.extBgl = r.extBgl;
     this.copyBgl = r.copyBgl;
     this.blitBgl = r.blitBgl;
@@ -820,6 +956,7 @@ export class FrameRenderer {
     this.blendLayout = r.blendLayout;
     this.blitCanvasPipeline = r.blitCanvasPipeline;
     this.blitReadbackPipeline = r.blitReadbackPipeline;
+    this.copyFxPipeline = r.copyFxPipeline;
     this.readbackTex = r.readbackTex;
     this.fxPing = r.fxPing;
     this.fxPong = r.fxPong;
@@ -859,6 +996,12 @@ export class FrameRenderer {
     const vignetteModule = device.createShaderModule({ code: WGSL_VIGNETTE });
     const grainModule = device.createShaderModule({ code: WGSL_GRAIN });
     const gaussModule = device.createShaderModule({ code: WGSL_GAUSS });
+    const motionModule = device.createShaderModule({ code: WGSL_MOTION });
+    const sharpenFx2Module = device.createShaderModule({ code: WGSL_SHARPEN_FX2 });
+    const noiseRedFx2Module = device.createShaderModule({ code: WGSL_NOISE_RED_FX2 });
+    const clarityFx2Module = device.createShaderModule({ code: WGSL_CLARITY_FX2 });
+    const glowThreshModule = device.createShaderModule({ code: WGSL_GLOW_THRESH });
+    const glowFx2Module = device.createShaderModule({ code: WGSL_GLOW_FX2 });
 
     const extBgl = device.createBindGroupLayout({
       entries: [
@@ -955,6 +1098,13 @@ export class FrameRenderer {
       primitive: { topology: "triangle-strip" },
     });
 
+    const copyFxPipeline = device.createRenderPipeline({
+      layout: blitLayout,
+      vertex: { module: blitModule, entryPoint: "vs" },
+      fragment: { module: blitModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    });
+
     const sampler = device.createSampler({ minFilter: "linear", magFilter: "linear" });
 
     const cw = canvas.width;
@@ -968,9 +1118,10 @@ export class FrameRenderer {
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
       extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule, chromaModule, vignetteModule, grainModule, gaussModule,
+      motionModule, sharpenFx2Module, noiseRedFx2Module, clarityFx2Module, glowThreshModule, glowFx2Module,
       extBgl, copyBgl, blitBgl, fxBgl, fx2Bgl,
       extLayout, copyLayout, fxLayout, fx2Layout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout, blendBgl, blendLayout,
-      blitCanvasPipeline, blitReadbackPipeline,
+      blitCanvasPipeline, blitReadbackPipeline, copyFxPipeline,
       readbackTex,
       fxPing: makeFxTexture(device, cw, ch),
       fxPong: makeFxTexture(device, cw, ch),
@@ -1144,6 +1295,13 @@ export class FrameRenderer {
           fragment: { module: this.grainModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
+      case "blur.motion":
+        return this.pipelineFor("effect:blur.motion", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.motionModule, entryPoint: "vs" },
+          fragment: { module: this.motionModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
       default:
         return null;
     }
@@ -1154,6 +1312,51 @@ export class FrameRenderer {
       layout: this.fxLayout,
       vertex: { module: this.gaussModule, entryPoint: "vs" },
       fragment: { module: this.gaussModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private sharpenFx2Pipeline(): GPURenderPipeline {
+    return this.pipelineFor("effect:blur.sharpen-fx2", () => this.device.createRenderPipeline({
+      layout: this.fx2Layout,
+      vertex: { module: this.sharpenFx2Module, entryPoint: "vs" },
+      fragment: { module: this.sharpenFx2Module, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private noiseRedFx2Pipeline(): GPURenderPipeline {
+    return this.pipelineFor("effect:blur.noiseReduction-fx2", () => this.device.createRenderPipeline({
+      layout: this.fx2Layout,
+      vertex: { module: this.noiseRedFx2Module, entryPoint: "vs" },
+      fragment: { module: this.noiseRedFx2Module, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private clarityFx2Pipeline(): GPURenderPipeline {
+    return this.pipelineFor("effect:detail.clarity-fx2", () => this.device.createRenderPipeline({
+      layout: this.fx2Layout,
+      vertex: { module: this.clarityFx2Module, entryPoint: "vs" },
+      fragment: { module: this.clarityFx2Module, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private glowThreshPipeline(): GPURenderPipeline {
+    return this.pipelineFor("effect:stylize.glow-thresh", () => this.device.createRenderPipeline({
+      layout: this.fxLayout,
+      vertex: { module: this.glowThreshModule, entryPoint: "vs" },
+      fragment: { module: this.glowThreshModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private glowFx2Pipeline(): GPURenderPipeline {
+    return this.pipelineFor("effect:stylize.glow-fx2", () => this.device.createRenderPipeline({
+      layout: this.fx2Layout,
+      vertex: { module: this.glowFx2Module, entryPoint: "vs" },
+      fragment: { module: this.glowFx2Module, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
       primitive: { topology: "triangle-strip" },
     }));
   }
@@ -1209,6 +1412,13 @@ export class FrameRenderer {
         return new Float32Array([
           resolveParam(eff.params.amount, 0, 0),
           resolveParam(eff.params.size, 0, 1.5),
+          rw,
+          rh,
+        ]);
+      case "blur.motion":
+        return new Float32Array([
+          resolveParam(eff.params.angle, 0, 0),
+          resolveParam(eff.params.radius, 0, 0),
           rw,
           rh,
         ]);
@@ -1408,6 +1618,28 @@ export class FrameRenderer {
               steps.push({ type: eff.type, lut3dTex, uBuf });
               continue;
             }
+            if (eff.type === "blur.sharpen") {
+              steps.push({ type: eff.type, sharpenAmount: resolveParam(eff.params.amount, 0, 0.4) });
+              continue;
+            }
+            if (eff.type === "blur.noiseReduction") {
+              steps.push({ type: eff.type, noiseRedAmount: resolveParam(eff.params.amount, 0, 0) });
+              continue;
+            }
+            if (eff.type === "detail.clarity") {
+              steps.push({ type: eff.type, clarityClarity: resolveParam(eff.params.clarity, 0, 0), clarityDehaze: resolveParam(eff.params.dehaze, 0, 0) });
+              continue;
+            }
+            if (eff.type === "stylize.glow") {
+              steps.push({
+                type: eff.type,
+                glowThreshold: resolveParam(eff.params.threshold, 0, 0.6),
+                glowRadius: resolveParam(eff.params.radius, 0, 20),
+                glowIntensity: resolveParam(eff.params.intensity, 0, 0),
+                glowWarmth: resolveParam(eff.params.warmth, 0, 0),
+              });
+              continue;
+            }
             const data = this.effectStepData(eff, rw, rh);
             if (!data) continue; // unimplemented effect type this milestone
             steps.push({ type: eff.type, uBuf: uniformBuffer(data, Math.max(16, data.byteLength)) });
@@ -1541,6 +1773,187 @@ export class FrameRenderer {
             vPass.draw(4);
             vPass.end();
             const tmp = ping; ping = pong; pong = tmp;
+            continue;
+          }
+
+          // blur.sharpen: copy ping→fxScratch (orig), H:ping→pong, V:pong→ping (blur), fx2 combine.
+          if (step.type === "blur.sharpen") {
+            const cpPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: this.fxScratch.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            cpPass.setPipeline(this.copyFxPipeline);
+            cpPass.setBindGroup(0, device.createBindGroup({
+              layout: this.blitBgl,
+              entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }],
+            }));
+            cpPass.draw(4); cpPass.end();
+            const sRadius = 2;
+            const shData = new Float32Array([1 / rw, 0, sRadius, 0]);
+            const shBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(shBuf, 0, shData); tempBuffers.push(shBuf);
+            const shH = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            shH.setPipeline(this.gaussPipeline());
+            shH.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: shBuf } }] }));
+            shH.draw(4); shH.end();
+            const svData = new Float32Array([0, 1 / rh, sRadius, 0]);
+            const svBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(svBuf, 0, svData); tempBuffers.push(svBuf);
+            const shV = encoder.beginRenderPass({
+              colorAttachments: [{ view: ping.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            shV.setPipeline(this.gaussPipeline());
+            shV.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: pong.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: svBuf } }] }));
+            shV.draw(4); shV.end();
+            const sfData = new Float32Array([step.sharpenAmount ?? 0.4]);
+            const sfBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(sfBuf, 0, sfData); tempBuffers.push(sfBuf);
+            const sfPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            sfPass.setPipeline(this.sharpenFx2Pipeline());
+            sfPass.setBindGroup(0, device.createBindGroup({ layout: this.fx2Bgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.fxScratch.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: sfBuf } }] }));
+            sfPass.draw(4); sfPass.end();
+            const stmp = ping; ping = pong; pong = stmp;
+            continue;
+          }
+
+          // blur.noiseReduction: copy ping→fxScratch, H:ping→pong, V:pong→ping (blur), fx2 mix.
+          if (step.type === "blur.noiseReduction") {
+            const cpPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: this.fxScratch.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            cpPass.setPipeline(this.copyFxPipeline);
+            cpPass.setBindGroup(0, device.createBindGroup({
+              layout: this.blitBgl,
+              entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }],
+            }));
+            cpPass.draw(4); cpPass.end();
+            const nRadius = 2;
+            const nhData = new Float32Array([1 / rw, 0, nRadius, 0]);
+            const nhBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(nhBuf, 0, nhData); tempBuffers.push(nhBuf);
+            const nrH = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            nrH.setPipeline(this.gaussPipeline());
+            nrH.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: nhBuf } }] }));
+            nrH.draw(4); nrH.end();
+            const nvData = new Float32Array([0, 1 / rh, nRadius, 0]);
+            const nvBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(nvBuf, 0, nvData); tempBuffers.push(nvBuf);
+            const nrV = encoder.beginRenderPass({
+              colorAttachments: [{ view: ping.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            nrV.setPipeline(this.gaussPipeline());
+            nrV.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: pong.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: nvBuf } }] }));
+            nrV.draw(4); nrV.end();
+            const nfData = new Float32Array([step.noiseRedAmount ?? 0]);
+            const nfBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(nfBuf, 0, nfData); tempBuffers.push(nfBuf);
+            const nfPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            nfPass.setPipeline(this.noiseRedFx2Pipeline());
+            nfPass.setBindGroup(0, device.createBindGroup({ layout: this.fx2Bgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.fxScratch.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: nfBuf } }] }));
+            nfPass.draw(4); nfPass.end();
+            const ntmp = ping; ping = pong; pong = ntmp;
+            continue;
+          }
+
+          // detail.clarity: copy ping→fxScratch, H:ping→pong, V:pong→ping (localAvg), fx2 combine.
+          if (step.type === "detail.clarity") {
+            const cpPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: this.fxScratch.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            cpPass.setPipeline(this.copyFxPipeline);
+            cpPass.setBindGroup(0, device.createBindGroup({
+              layout: this.blitBgl,
+              entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }],
+            }));
+            cpPass.draw(4); cpPass.end();
+            const clRadius = 20;
+            const clhData = new Float32Array([1 / rw, 0, clRadius, 0]);
+            const clhBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(clhBuf, 0, clhData); tempBuffers.push(clhBuf);
+            const clH = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            clH.setPipeline(this.gaussPipeline());
+            clH.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: clhBuf } }] }));
+            clH.draw(4); clH.end();
+            const clvData = new Float32Array([0, 1 / rh, clRadius, 0]);
+            const clvBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(clvBuf, 0, clvData); tempBuffers.push(clvBuf);
+            const clV = encoder.beginRenderPass({
+              colorAttachments: [{ view: ping.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            clV.setPipeline(this.gaussPipeline());
+            clV.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: pong.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: clvBuf } }] }));
+            clV.draw(4); clV.end();
+            const clfData = new Float32Array([step.clarityClarity ?? 0, step.clarityDehaze ?? 0]);
+            const clfBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(clfBuf, 0, clfData); tempBuffers.push(clfBuf);
+            const clfPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            clfPass.setPipeline(this.clarityFx2Pipeline());
+            clfPass.setBindGroup(0, device.createBindGroup({ layout: this.fx2Bgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.fxScratch.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: clfBuf } }] }));
+            clfPass.draw(4); clfPass.end();
+            const cltmp = ping; ping = pong; pong = cltmp;
+            continue;
+          }
+
+          // stylize.glow: copy ping→fxScratch, thresh:ping→pong, H:pong→ping, V:ping→pong (blurred-bright), fx2 add.
+          if (step.type === "stylize.glow") {
+            const cpPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: this.fxScratch.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            cpPass.setPipeline(this.copyFxPipeline);
+            cpPass.setBindGroup(0, device.createBindGroup({
+              layout: this.blitBgl,
+              entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }],
+            }));
+            cpPass.draw(4); cpPass.end();
+            const gtData = new Float32Array([step.glowThreshold ?? 0.6]);
+            const gtBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(gtBuf, 0, gtData); tempBuffers.push(gtBuf);
+            const gtPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            gtPass.setPipeline(this.glowThreshPipeline());
+            gtPass.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: gtBuf } }] }));
+            gtPass.draw(4); gtPass.end();
+            const gRadius = step.glowRadius ?? 20;
+            const ghData = new Float32Array([1 / rw, 0, gRadius, 0]);
+            const ghBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(ghBuf, 0, ghData); tempBuffers.push(ghBuf);
+            const gH = encoder.beginRenderPass({
+              colorAttachments: [{ view: ping.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            gH.setPipeline(this.gaussPipeline());
+            gH.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: pong.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: ghBuf } }] }));
+            gH.draw(4); gH.end();
+            const gvData = new Float32Array([0, 1 / rh, gRadius, 0]);
+            const gvBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(gvBuf, 0, gvData); tempBuffers.push(gvBuf);
+            const gV = encoder.beginRenderPass({
+              colorAttachments: [{ view: pong.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            gV.setPipeline(this.gaussPipeline());
+            gV.setBindGroup(0, device.createBindGroup({ layout: this.fxBgl, entries: [{ binding: 0, resource: ping.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: gvBuf } }] }));
+            gV.draw(4); gV.end();
+            const gfData = new Float32Array([step.glowIntensity ?? 0, step.glowWarmth ?? 0]);
+            const gfBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            device.queue.writeBuffer(gfBuf, 0, gfData); tempBuffers.push(gfBuf);
+            const gfPass = encoder.beginRenderPass({
+              colorAttachments: [{ view: ping.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+            });
+            gfPass.setPipeline(this.glowFx2Pipeline());
+            gfPass.setBindGroup(0, device.createBindGroup({ layout: this.fx2Bgl, entries: [{ binding: 0, resource: pong.createView() }, { binding: 1, resource: this.fxScratch.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: gfBuf } }] }));
+            gfPass.draw(4); gfPass.end();
+            const gtmp = ping; ping = pong; pong = gtmp;
             continue;
           }
 
