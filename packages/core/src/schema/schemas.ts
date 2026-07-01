@@ -106,6 +106,9 @@ export const GenerationInputSchema = z.object({
   referenceVideoAssetIds: z.array(z.string()).optional(),
   referenceAudioAssetIds: z.array(z.string()).optional(),
   createdAt: z.string().optional(),
+  backendJobId: z.string().optional(),
+  outputIndex: z.number().optional(),
+  resultURLs: z.array(z.string()).optional(),
 });
 
 export const MediaManifestEntrySchema = z.object({
@@ -122,6 +125,7 @@ export const MediaManifestEntrySchema = z.object({
   folderId: z.string().optional(),
   cachedRemoteURL: z.string().optional(),
   cachedRemoteURLExpiresAt: z.string().optional(),
+  generationStatus: z.string().optional(),
 });
 
 export const MediaFolderSchema = z.object({

@@ -26,6 +26,9 @@ export interface GenerationInput {
   referenceVideoAssetIds?: string[];
   referenceAudioAssetIds?: string[];
   createdAt?: string; // ISO 8601
+  backendJobId?: string;
+  outputIndex?: number;
+  resultURLs?: string[];
 }
 
 export interface MediaManifestEntry {
@@ -42,6 +45,7 @@ export interface MediaManifestEntry {
   folderId?: string;
   cachedRemoteURL?: string;
   cachedRemoteURLExpiresAt?: string; // ISO 8601
+  generationStatus?: string; // serialized GenerationStatus; see media/generation-status.ts
 }
 
 export interface MediaFolder {
