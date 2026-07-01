@@ -54,3 +54,4 @@ export * from "./color/color-math.js";
 export * from "./color/lut.js";
 export * from "./color/scopes.js";
 export * from "./color/color-tools.js";
+export * from "./color/adjust-control.js";
