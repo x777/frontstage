@@ -5,6 +5,8 @@ import { createProxyServer } from "./server.js";
 //   OPENROUTER_API_KEY  [required]  Upstream API key forwarded to OpenRouter.
 //   ALLOW_ORIGIN        [required]  Exact origin the proxy allows, e.g. https://app.example.com.
 //   PROXY_TOKEN         [recommended] Shared secret; clients send Authorization: Bearer <token>.
+//   FAL_KEY             [optional]  fal.ai queue API key; enables the /fal/* routes.
+//   FAL_UPSTREAM        [optional]  fal queue base URL (default: https://queue.fal.run).
 //   HOST                [optional]  Bind address (default: 127.0.0.1).
 //   PORT                [optional]  Bind port (default: 8787).
 
@@ -25,10 +27,13 @@ if (!proxyToken) {
   console.warn("Warning: PROXY_TOKEN is not set — the proxy is unauthenticated. Only bind to localhost or a trusted network.");
 }
 
+const falKey = process.env["FAL_KEY"];
+const falUpstream = process.env["FAL_UPSTREAM"];
+
 const port = Number(process.env["PORT"] ?? 8787);
 const host = process.env["HOST"] ?? "127.0.0.1";
 
-const server = createProxyServer({ apiKey, allowOrigin, proxyToken });
+const server = createProxyServer({ apiKey, allowOrigin, proxyToken, falKey, falUpstream });
 server.listen(port, host, () => {
   console.log(`Proxy listening on http://${host}:${port}`);
 });

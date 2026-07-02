@@ -1,5 +1,5 @@
 import http from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createProxyServer } from "../src/server.js";
 
 const TEST_ORIGIN = "https://app.example.com";
@@ -287,6 +287,303 @@ describe("createProxyServer — proxyToken auth", () => {
     );
     expect(res.status).toBe(401);
     expect(res.headers["access-control-allow-origin"]).toBe(TEST_ORIGIN);
+  });
+});
+
+// ── fal.ai upstream routes ───────────────────────────────────────────────────
+
+function startFakeFalUpstream(): Promise<{
+  server: http.Server;
+  port: number;
+  lastAuthHeader: () => string | undefined;
+  lastPath: () => string | undefined;
+  statusSequence: string[];
+}> {
+  return new Promise((resolve) => {
+    let lastAuth: string | undefined;
+    let lastPath: string | undefined;
+    const statusSequence = ["IN_PROGRESS", "COMPLETED"];
+    let statusCallCount = 0;
+    const server = http.createServer((req, res) => {
+      lastAuth = req.headers["authorization"];
+      lastPath = req.url;
+
+      if (req.method === "POST" && req.url === "/fal-ai/veo3/fast") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ request_id: "job-123" }));
+        return;
+      }
+      if (req.method === "GET" && req.url === "/fal-ai/veo3/fast/requests/job-123/status") {
+        const status = statusSequence[Math.min(statusCallCount, statusSequence.length - 1)];
+        statusCallCount++;
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status }));
+        return;
+      }
+      if (req.method === "GET" && req.url === "/fal-ai/veo3/fast/requests/job-123") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ video: { url: "https://v3.fal.media/files/result.mp4" } }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address() as { port: number };
+      resolve({
+        server,
+        port: addr.port,
+        lastAuthHeader: () => lastAuth,
+        lastPath: () => lastPath,
+        statusSequence,
+      });
+    });
+  });
+}
+
+describe("createProxyServer — fal routes", () => {
+  let falUpstream: Awaited<ReturnType<typeof startFakeFalUpstream>>;
+  let proxy: { server: http.Server; port: number };
+
+  beforeAll(async () => {
+    falUpstream = await startFakeFalUpstream();
+    proxy = await new Promise((resolve) => {
+      const server = createProxyServer({
+        apiKey: "secret-xyz",
+        allowOrigin: TEST_ORIGIN,
+        falKey: "fal-secret-key",
+        falUpstream: `http://127.0.0.1:${falUpstream.port}`,
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as { port: number };
+        resolve({ server, port: addr.port });
+      });
+    });
+  });
+
+  afterAll(() => {
+    proxy.server.close();
+    falUpstream.server.close();
+  });
+
+  it("GET /fal/enabled → {enabled:true} when falKey configured", async () => {
+    const res = await httpRequest({ host: "127.0.0.1", port: proxy.port, path: "/fal/enabled", method: "GET" });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ enabled: true });
+  });
+
+  it("POST /fal/submit → forwards to falUpstream/{modelEndpoint} with Authorization: Key <falKey>", async () => {
+    const body = JSON.stringify({ modelEndpoint: "fal-ai/veo3/fast", input: { prompt: "a cat" } });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/submit",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      },
+      body,
+    );
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ request_id: "job-123" });
+    expect(falUpstream.lastAuthHeader()).toBe("Key fal-secret-key");
+    expect(falUpstream.lastPath()).toBe("/fal-ai/veo3/fast");
+  });
+
+  it("POST /fal/submit with '..' in modelEndpoint → 400, upstream NOT called", async () => {
+    const body = JSON.stringify({ modelEndpoint: "../../etc/passwd", input: {} });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/submit",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      },
+      body,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /fal/status → {status} for IN_PROGRESS (one upstream call)", async () => {
+    const res = await httpRequest({
+      host: "127.0.0.1",
+      port: proxy.port,
+      path: "/fal/status?model=fal-ai%2Fveo3%2Ffast&job=job-123",
+      method: "GET",
+    });
+    expect(res.status).toBe(200);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.status).toEqual({ status: "IN_PROGRESS" });
+    expect(parsed.resultJson).toBeUndefined();
+  });
+
+  it("GET /fal/status → {status, resultJson} for COMPLETED (two upstream calls)", async () => {
+    const res = await httpRequest({
+      host: "127.0.0.1",
+      port: proxy.port,
+      path: "/fal/status?model=fal-ai%2Fveo3%2Ffast&job=job-123",
+      method: "GET",
+    });
+    expect(res.status).toBe(200);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.status).toEqual({ status: "COMPLETED" });
+    expect(parsed.resultJson).toEqual({ video: { url: "https://v3.fal.media/files/result.mp4" } });
+  });
+
+  describe("GET /fal/download — SSRF guard", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("https://evil.com/x → 400, no upstream fetch attempted", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await httpRequest({
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/download?url=" + encodeURIComponent("https://evil.com/x"),
+        method: "GET",
+      });
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("http://fal.media/x (not https) → 400, no upstream fetch attempted", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await httpRequest({
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/download?url=" + encodeURIComponent("http://fal.media/x"),
+        method: "GET",
+      });
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("https://v3.fal.media/files/x.mp4 → allowed host, piped through with upstream content-type", async () => {
+      let capturedUrl: string | undefined;
+      vi.stubGlobal("fetch", async (url: string) => {
+        capturedUrl = url;
+        return {
+          status: 200,
+          headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "video/mp4" : null) },
+          body: (async function* () {
+            yield new TextEncoder().encode("fake-video-bytes");
+          })(),
+        };
+      });
+      const res = await httpRequest({
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/download?url=" + encodeURIComponent("https://v3.fal.media/files/x.mp4"),
+        method: "GET",
+      });
+      expect(capturedUrl).toBe("https://v3.fal.media/files/x.mp4");
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toBe("video/mp4");
+      expect(res.body).toBe("fake-video-bytes");
+    });
+  });
+
+  it("auth gate: bad proxyToken → 401 on /fal/submit (upstream not called)", async () => {
+    const gated = await new Promise<{ server: http.Server; port: number }>((resolve) => {
+      const server = createProxyServer({
+        apiKey: "secret-xyz",
+        allowOrigin: TEST_ORIGIN,
+        falKey: "fal-secret-key",
+        falUpstream: `http://127.0.0.1:${falUpstream.port}`,
+        proxyToken: "right-token",
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as { port: number };
+        resolve({ server, port: addr.port });
+      });
+    });
+    try {
+      const body = JSON.stringify({ modelEndpoint: "fal-ai/veo3/fast", input: {} });
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: gated.port,
+          path: "/fal/submit",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body),
+            Authorization: "Bearer wrong-token",
+          },
+        },
+        body,
+      );
+      expect(res.status).toBe(401);
+    } finally {
+      gated.server.close();
+    }
+  });
+});
+
+describe("createProxyServer — fal routes without falKey configured", () => {
+  let proxy: { server: http.Server; port: number };
+
+  beforeAll(async () => {
+    proxy = await new Promise((resolve) => {
+      const server = createProxyServer({
+        apiKey: "secret-xyz",
+        allowOrigin: TEST_ORIGIN,
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as { port: number };
+        resolve({ server, port: addr.port });
+      });
+    });
+  });
+
+  afterAll(() => {
+    proxy.server.close();
+  });
+
+  it("GET /fal/enabled → {enabled:false}", async () => {
+    const res = await httpRequest({ host: "127.0.0.1", port: proxy.port, path: "/fal/enabled", method: "GET" });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ enabled: false });
+  });
+
+  it("POST /fal/submit → 503 {error}", async () => {
+    const body = JSON.stringify({ modelEndpoint: "fal-ai/veo3/fast", input: {} });
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/submit",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      },
+      body,
+    );
+    expect(res.status).toBe(503);
+    expect(JSON.parse(res.body)).toHaveProperty("error");
+  });
+
+  it("GET /fal/status → 503", async () => {
+    const res = await httpRequest({
+      host: "127.0.0.1",
+      port: proxy.port,
+      path: "/fal/status?model=fal-ai%2Fveo3%2Ffast&job=job-123",
+      method: "GET",
+    });
+    expect(res.status).toBe(503);
+  });
+
+  it("GET /fal/download → 503", async () => {
+    const res = await httpRequest({
+      host: "127.0.0.1",
+      port: proxy.port,
+      path: "/fal/download?url=" + encodeURIComponent("https://v3.fal.media/files/x.mp4"),
+      method: "GET",
+    });
+    expect(res.status).toBe(503);
   });
 });
 

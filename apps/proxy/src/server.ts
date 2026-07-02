@@ -6,6 +6,8 @@ export interface ProxyServerOptions {
   upstreamBaseUrl?: string;
   allowOrigin: string;
   proxyToken?: string;
+  falKey?: string;
+  falUpstream?: string;
 }
 
 function corsHeaders(origin: string): Record<string, string> {
@@ -14,6 +16,10 @@ function corsHeaders(origin: string): Record<string, string> {
     "Access-Control-Allow-Methods": "POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
   };
+}
+
+function jsonHeaders(origin: string): Record<string, string> {
+  return { "Content-Type": "application/json", ...corsHeaders(origin) };
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -26,6 +32,45 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aPad, bPad) && aBytes.length === bBytes.length;
 }
 
+function isAuthorized(req: http.IncomingMessage, proxyToken: string | undefined): boolean {
+  if (!proxyToken) return true;
+  const inbound = req.headers["authorization"] ?? "";
+  return timingSafeEqual(inbound, "Bearer " + proxyToken);
+}
+
+function writeUnauthorized(res: http.ServerResponse, origin: string): void {
+  res.writeHead(401, { "Content-Type": "text/plain", ...corsHeaders(origin) });
+  res.end("Unauthorized");
+}
+
+// Path-safety for both the fal modelEndpoint and jobId — they get spliced into the
+// upstream URL, so no ".." / leading slash / unexpected characters.
+const MODEL_ENDPOINT_RE = /^[a-zA-Z0-9._\/-]+$/;
+const JOB_ID_RE = /^[a-zA-Z0-9._-]+$/;
+
+function isSafeModelEndpoint(modelEndpoint: string): boolean {
+  return MODEL_ENDPOINT_RE.test(modelEndpoint) && !modelEndpoint.includes("..") && !modelEndpoint.startsWith("/");
+}
+
+function isSafeJobId(jobId: string): boolean {
+  return JOB_ID_RE.test(jobId);
+}
+
+// SSRF guard for /fal/download: only the fal result CDN, over https.
+function isAllowedFalDownloadHost(url: URL): boolean {
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname;
+  return host === "fal.media" || host.endsWith(".fal.media") || host.endsWith(".fal.run");
+}
+
+function readBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+  });
+}
+
 export function createProxyServer(opts: ProxyServerOptions): http.Server {
   if (!opts.allowOrigin || opts.allowOrigin === "*") {
     throw new Error("allowOrigin must be a specific origin (not '*')");
@@ -33,6 +78,8 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
   const origin = opts.allowOrigin;
   const upstream = (opts.upstreamBaseUrl ?? "https://openrouter.ai/api/v1").replace(/\/+$/, "");
   const proxyToken = opts.proxyToken;
+  const falKey = opts.falKey;
+  const falUpstream = (opts.falUpstream ?? "https://queue.fal.run").replace(/\/+$/, "");
 
   return http.createServer((req, res) => {
     if (req.method === "OPTIONS") {
@@ -41,30 +88,73 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
       return;
     }
 
-    if (req.method === "GET" && req.url === "/healthz") {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const pathname = url.pathname;
+
+    if (req.method === "GET" && pathname === "/healthz") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end("ok");
       return;
     }
 
-    if (req.method === "POST" && req.url === "/v1/chat/completions") {
-      // Inbound token auth when proxyToken is configured.
-      if (proxyToken) {
-        const inbound = req.headers["authorization"] ?? "";
-        const expected = "Bearer " + proxyToken;
-        if (!timingSafeEqual(inbound, expected)) {
-          res.writeHead(401, { "Content-Type": "text/plain", ...corsHeaders(origin) });
-          res.end("Unauthorized");
-          return;
-        }
+    if (req.method === "POST" && pathname === "/v1/chat/completions") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
       }
+      void readBody(req).then((body) => forward(body, upstream, opts.apiKey, origin, res));
+      return;
+    }
 
-      const chunks: Buffer[] = [];
-      req.on("data", (c: Buffer) => chunks.push(c));
-      req.on("end", () => {
-        const body = Buffer.concat(chunks).toString("utf-8");
-        forward(body, upstream, opts.apiKey, origin, res);
-      });
+    if (req.method === "GET" && pathname === "/fal/enabled") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
+      }
+      res.writeHead(200, jsonHeaders(origin));
+      res.end(JSON.stringify({ enabled: !!falKey }));
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/fal/submit") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
+      }
+      if (!falKey) {
+        res.writeHead(503, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "fal not configured" }));
+        return;
+      }
+      void readBody(req).then((body) => handleFalSubmit(body, falUpstream, falKey, origin, res));
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/fal/status") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
+      }
+      if (!falKey) {
+        res.writeHead(503, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "fal not configured" }));
+        return;
+      }
+      void handleFalStatus(url.searchParams, falUpstream, falKey, origin, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/fal/download") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
+      }
+      if (!falKey) {
+        res.writeHead(503, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "fal not configured" }));
+        return;
+      }
+      void handleFalDownload(url.searchParams, origin, res);
       return;
     }
 
@@ -109,5 +199,122 @@ async function forward(body: string, upstream: string, apiKey: string, origin: s
       res.writeHead(502, { "Content-Type": "text/plain", "Access-Control-Allow-Origin": origin });
     }
     res.end("Bad gateway");
+  }
+}
+
+async function handleFalSubmit(rawBody: string, falUpstream: string, falKey: string, origin: string, res: http.ServerResponse): Promise<void> {
+  let parsed: { modelEndpoint?: unknown; input?: unknown };
+  try {
+    parsed = JSON.parse(rawBody) as { modelEndpoint?: unknown; input?: unknown };
+  } catch {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "invalid JSON body" }));
+    return;
+  }
+
+  const modelEndpoint = parsed.modelEndpoint;
+  if (typeof modelEndpoint !== "string" || !isSafeModelEndpoint(modelEndpoint)) {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "invalid modelEndpoint" }));
+    return;
+  }
+  const input = parsed.input && typeof parsed.input === "object" ? parsed.input : {};
+
+  try {
+    const upstreamRes = await fetch(`${falUpstream}/${modelEndpoint}`, {
+      method: "POST",
+      headers: { Authorization: `Key ${falKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const text = await upstreamRes.text();
+    res.writeHead(upstreamRes.status, jsonHeaders(origin));
+    res.end(text);
+  } catch {
+    res.writeHead(502, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "fal upstream error" }));
+  }
+}
+
+async function handleFalStatus(params: URLSearchParams, falUpstream: string, falKey: string, origin: string, res: http.ServerResponse): Promise<void> {
+  const model = params.get("model");
+  const job = params.get("job");
+  if (!model || !job || !isSafeModelEndpoint(model) || !isSafeJobId(job)) {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "invalid model or job" }));
+    return;
+  }
+
+  try {
+    const statusRes = await fetch(`${falUpstream}/${model}/requests/${job}/status`, {
+      headers: { Authorization: `Key ${falKey}` },
+    });
+    const statusJson: unknown = await statusRes.json();
+    if (!statusRes.ok) {
+      res.writeHead(statusRes.status, jsonHeaders(origin));
+      res.end(JSON.stringify({ status: statusJson }));
+      return;
+    }
+
+    if ((statusJson as { status?: unknown } | null)?.status === "COMPLETED") {
+      const resultRes = await fetch(`${falUpstream}/${model}/requests/${job}`, {
+        headers: { Authorization: `Key ${falKey}` },
+      });
+      const resultJson: unknown = await resultRes.json();
+      res.writeHead(200, jsonHeaders(origin));
+      res.end(JSON.stringify({ status: statusJson, resultJson }));
+      return;
+    }
+
+    res.writeHead(200, jsonHeaders(origin));
+    res.end(JSON.stringify({ status: statusJson }));
+  } catch {
+    res.writeHead(502, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "fal upstream error" }));
+  }
+}
+
+async function handleFalDownload(params: URLSearchParams, origin: string, res: http.ServerResponse): Promise<void> {
+  const raw = params.get("url");
+  if (!raw) {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "missing url" }));
+    return;
+  }
+
+  let target: URL;
+  try {
+    target = new URL(raw);
+  } catch {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "invalid url" }));
+    return;
+  }
+
+  if (!isAllowedFalDownloadHost(target)) {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "url host not allowed" }));
+    return;
+  }
+
+  try {
+    const upstreamRes = await fetch(target.toString());
+    const headers: Record<string, string> = { ...corsHeaders(origin) };
+    const ct = upstreamRes.headers.get("content-type");
+    if (ct) headers["Content-Type"] = ct;
+    res.writeHead(upstreamRes.status, headers);
+
+    if (!upstreamRes.body) {
+      res.end();
+      return;
+    }
+    for await (const chunk of upstreamRes.body as AsyncIterable<Uint8Array>) {
+      res.write(chunk);
+    }
+    res.end();
+  } catch {
+    if (!res.headersSent) {
+      res.writeHead(502, jsonHeaders(origin));
+    }
+    res.end(JSON.stringify({ error: "fal download error" }));
   }
 }
