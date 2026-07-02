@@ -5,7 +5,7 @@ import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
-import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
+import type { KeyConfig, FalKeyConfig, GenerationFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
 import type { GenerationHost } from "@palmier/ai";
 import { App } from "./App.js";
@@ -29,9 +29,10 @@ interface PalmierAppProps {
   engineRef: { current: PlaybackEngine | null };
   getGenerationLog: () => GenerationLogEntry[];
   genGateway: WebGenGateway;
+  generationFacade: GenerationFacade;
 }
 
-function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
@@ -82,7 +83,8 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
         model: agentModel,
         sessionStore,
         mentionItems,
-        imageGenerator,
+        generation: generationFacade,
+        newId: () => crypto.randomUUID(),
         settings: {
           keyConfig,
           falKeyConfig,
@@ -168,6 +170,14 @@ async function bootstrap() {
     generationServiceRef.current.resumePending();
   };
 
+  // SAME object threaded into the ToolExecutor context and the manual GenerationPanel — one facade, two callers.
+  const generationFacade: GenerationFacade = {
+    hasKey: () => genGateway.hasKey(),
+    addPlaceholder: (entry) => library.addPlaceholder(entry),
+    startJob: (args) => generationServiceRef.current.startJob(args),
+    confirmThreshold: 50,
+  };
+
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {
     store,
@@ -181,12 +191,7 @@ async function bootstrap() {
       const rgba = await engine.readRGBA();
       return { rgba, width: engine.width, height: engine.height };
     },
-    generation: {
-      hasKey: () => genGateway.hasKey(),
-      addPlaceholder: (entry) => library.addPlaceholder(entry),
-      startJob: (args) => generationServiceRef.current.startJob(args),
-      confirmThreshold: 50,
-    },
+    generation: generationFacade,
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -231,6 +236,7 @@ async function bootstrap() {
         engineRef={engineRef}
         getGenerationLog={getGenerationLog}
         genGateway={genGateway}
+        generationFacade={generationFacade}
       />
     </StrictMode>,
   );

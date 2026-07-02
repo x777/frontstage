@@ -105,7 +105,7 @@ test("agent: generate_image tool adds an image entry to the media library", asyn
   expect(newEntry.generationInput?.prompt).toBe("a sunset");
 });
 
-test("generation-panel: generate-toggle opens panel; prompt+submit adds image entry", async ({ page }) => {
+test("generation-panel: generate-toggle opens the per-kind panel; no fal key honest-disables Generate", async ({ page }) => {
   await page.addInitScript(FAKE_GENERATE_IMAGE_SCRIPT);
   await page.goto("/");
 
@@ -115,34 +115,18 @@ test("generation-panel: generate-toggle opens panel; prompt+submit adds image en
     { timeout: 15_000 },
   );
 
-  const beforeCount = await page.evaluate(() => {
-    return (window as any).__mediaLibrary?.getManifest()?.entries?.length ?? 0;
-  });
-
   // Open the generation panel via the toggle button
   const toggle = page.locator('[data-testid="generate-toggle"]');
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   await toggle.click();
   await expect(page.locator('[data-testid="generation-panel"]')).toBeVisible({ timeout: 5_000 });
 
-  // Type a prompt and submit
+  // No fal.ai key is configured in this e2e environment (no proxy running) — the panel
+  // honest-disables Generate with a hint, rather than silently falling back.
   const promptArea = page.locator('[data-testid="gen-prompt"]');
   await expect(promptArea).toBeVisible({ timeout: 3_000 });
   await promptArea.fill("a golden hour landscape");
 
-  const submitBtn = page.locator('[data-testid="gen-submit"]');
-  await expect(submitBtn).toBeEnabled({ timeout: 3_000 });
-  await submitBtn.click();
-
-  // Wait for the success status
-  await expect(page.locator('[data-testid="gen-status"]')).toContainText("Generated:", { timeout: 15_000 });
-
-  // A new image entry should be in the media library
-  const newEntry = await page.evaluate((before) => {
-    const entries: any[] = (window as any).__mediaLibrary?.getManifest()?.entries ?? [];
-    return entries.slice(before).find((e: any) => e.type === "image") ?? null;
-  }, beforeCount);
-
-  expect(newEntry).not.toBeNull();
-  expect(newEntry.type).toBe("image");
+  await expect(page.locator('[data-testid="gen-key-hint"]')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('[data-testid="gen-submit"]')).toBeDisabled();
 });

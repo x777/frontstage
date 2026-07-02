@@ -38,7 +38,7 @@ export type { ExportState } from "./editor/use-export-command.js";
 export { AgentPanel } from "./agent/AgentPanel.js";
 export type { AgentPanelProps } from "./agent/AgentPanel.js";
 export { GenerationPanel } from "./agent/GenerationPanel.js";
-export type { GenerationPanelProps } from "./agent/GenerationPanel.js";
+export type { GenerationPanelProps, GenerationFacade } from "./agent/GenerationPanel.js";
 export { SessionSwitcher } from "./agent/SessionSwitcher.js";
 export { MentionInput } from "./agent/MentionInput.js";
 export type { MentionItem } from "./agent/MentionInput.js";

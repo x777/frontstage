@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, GenerationLogEntry, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
-import type { AgentSession, ChatSessionStore, ImageGenerator, ModelEntry } from "@palmier/ai";
+import type { AgentSession, ChatSessionStore, ModelEntry } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
 import type { KeyConfig, FalKeyConfig, McpSettings } from "../agent/SettingsPanel.js";
@@ -28,6 +28,7 @@ import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { FileMenu } from "./FileMenu.js";
 import { AgentPanel } from "../agent/AgentPanel.js";
 import { GenerationPanel } from "../agent/GenerationPanel.js";
+import type { GenerationFacade } from "../agent/GenerationPanel.js";
 import { useStore } from "../store/use-store.js";
 import { useExportCommand } from "./use-export-command.js";
 import { ExportProgress } from "./ExportProgress.js";
@@ -57,7 +58,8 @@ export interface EditorProps {
     model?: string;
     sessionStore?: ChatSessionStore;
     mentionItems?: MentionItem[];
-    imageGenerator?: ImageGenerator;
+    generation?: GenerationFacade;
+    newId?: () => string;
     settings?: {
       keyConfig: KeyConfig;
       falKeyConfig?: FalKeyConfig;
@@ -396,7 +398,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
                   Agent
                 </button>
               )}
-              {agent?.imageGenerator && (
+              {agent?.generation && (
                 <button
                   data-testid="generate-toggle"
                   onClick={() => setGenerateVisible((v) => !v)}
@@ -455,13 +457,11 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
 
       <ExportProgress state={exportState} />
 
-      {generateVisible && agent?.imageGenerator && (
+      {generateVisible && agent?.generation && (
         <GenerationPanel
-          generate={(i) => agent.imageGenerator!.generate(i)}
-          model={agent.settings?.imageModel ?? agent.model}
-          imageModels={agent.settings?.imageModels}
-          imageModel={agent.settings?.imageModel}
-          onImageModelChange={agent.settings?.onImageModelChange}
+          generation={agent.generation}
+          newId={agent.newId ?? (() => crypto.randomUUID())}
+          entries={() => library.getSnapshot().entries}
           onClose={() => setGenerateVisible(false)}
         />
       )}

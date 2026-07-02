@@ -1,11 +1,12 @@
 import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
+import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG } from "@palmier/ai";
-import type { GenerationHost } from "@palmier/ai";
+import type { GenerationHost, StartJobArgs } from "@palmier/ai";
 
 declare global {
   interface Window {
@@ -73,6 +74,14 @@ session.onOpened = () => {
   generationServiceRef.current.resumePending();
 };
 
+// SAME object threaded into the ToolExecutor context and the manual GenerationPanel — one facade, two callers.
+const generationFacade = {
+  hasKey: () => genGateway.hasKey(),
+  addPlaceholder: (entry: MediaManifestEntry) => library.addPlaceholder(entry),
+  startJob: (args: StartJobArgs) => generationServiceRef.current.startJob(args),
+  confirmThreshold: 50,
+};
+
 const executor = new ToolExecutor(buildCatalog(), {
   store,
   getManifest: () => library.getManifest(),
@@ -85,12 +94,7 @@ const executor = new ToolExecutor(buildCatalog(), {
     const rgba = await engine.readRGBA();
     return { rgba, width: engine.width, height: engine.height };
   },
-  generation: {
-    hasKey: () => genGateway.hasKey(),
-    addPlaceholder: (entry) => library.addPlaceholder(entry),
-    startJob: (args) => generationServiceRef.current.startJob(args),
-    confirmThreshold: 50,
-  },
+  generation: generationFacade,
 });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -225,7 +229,8 @@ function PalmierDesktopApp() {
         model: agentModelId,
         sessionStore,
         mentionItems,
-        imageGenerator,
+        generation: generationFacade,
+        newId: () => crypto.randomUUID(),
         settings: {
           keyConfig,
           falKeyConfig,

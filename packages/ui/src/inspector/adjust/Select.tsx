@@ -5,11 +5,15 @@ export interface SelectProps<T extends string> {
   options: readonly { value: T; label: string }[];
   placeholder?: string;
   onChange: (v: T) => void;
+  testid?: string;
+  disabled?: boolean;
 }
 
-export function Select<T extends string>({ value, options, placeholder, onChange }: SelectProps<T>) {
+export function Select<T extends string>({ value, options, placeholder, onChange, testid, disabled }: SelectProps<T>) {
   return (
     <select
+      data-testid={testid}
+      disabled={disabled}
       value={value ?? ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -23,7 +27,8 @@ export function Select<T extends string>({ value, options, placeholder, onChange
         fontSize: theme.fontSize.xs,
         padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
         width: "100%",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? theme.opacity.disabled : theme.opacity.opaque,
       }}
     >
       {value === null && (
