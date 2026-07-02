@@ -12,6 +12,8 @@ export * from "./media/generation-recovery.js";
 export * from "./media/transcript.js";
 export * from "./media/timeline-words.js";
 export * from "./media/word-cut-planner.js";
+export * from "./captions/caption-builder.js";
+export * from "./captions/caption-mapper.js";
 export * from "./generation-log.js";
 export * from "./volume-scale.js";
 export * from "./clip.js";
