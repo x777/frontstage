@@ -483,7 +483,61 @@ describe("createProxyServer — fal routes", () => {
       expect(capturedUrl).toBe("https://v3.fal.media/files/x.mp4");
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toBe("video/mp4");
+      expect(res.headers["content-disposition"]).toBe("attachment");
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
       expect(res.body).toBe("fake-video-bytes");
+    });
+
+    it("a redirect to an off-allowlist host → 400 (per-hop SSRF re-validation)", async () => {
+      const fetched: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        fetched.push(url);
+        return {
+          status: 302,
+          headers: { get: (k: string) => (k.toLowerCase() === "location" ? "https://169.254.169.254/latest/meta-data" : null) },
+          body: null,
+        };
+      });
+      const res = await httpRequest({
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/download?url=" + encodeURIComponent("https://v3.fal.media/files/x.mp4"),
+        method: "GET",
+      });
+      expect(res.status).toBe(400);
+      expect(fetched).toHaveLength(1); // the redirect target was never fetched
+    });
+
+    it("an allowlisted redirect hop is followed; a non-media content-type is neutralized", async () => {
+      const fetched: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        fetched.push(url);
+        if (fetched.length === 1) {
+          return {
+            status: 302,
+            headers: { get: (k: string) => (k.toLowerCase() === "location" ? "https://cdn.fal.media/real.bin" : null) },
+            body: null,
+          };
+        }
+        return {
+          status: 200,
+          headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "text/html" : null) },
+          body: (async function* () {
+            yield new TextEncoder().encode("<script>boom</script>");
+          })(),
+        };
+      });
+      const res = await httpRequest({
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/download?url=" + encodeURIComponent("https://v3.fal.media/files/x.mp4"),
+        method: "GET",
+      });
+      expect(fetched).toEqual(["https://v3.fal.media/files/x.mp4", "https://cdn.fal.media/real.bin"]);
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toBe("application/octet-stream"); // text/html neutralized
+      expect(res.headers["content-disposition"]).toBe("attachment");
+      expect(res.body).toBe("<script>boom</script>");
     });
   });
 

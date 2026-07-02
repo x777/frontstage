@@ -297,10 +297,32 @@ async function handleFalDownload(params: URLSearchParams, origin: string, res: h
   }
 
   try {
-    const upstreamRes = await fetch(target.toString());
+    // Follow redirects manually so every hop stays on the allowlist (SSRF guard).
+    let upstreamRes = await fetch(target.toString(), { redirect: "manual" });
+    for (let hop = 0; hop < 3 && upstreamRes.status >= 300 && upstreamRes.status < 400; hop++) {
+      const loc = upstreamRes.headers.get("location");
+      if (!loc) break;
+      const next = new URL(loc, target);
+      if (!isAllowedFalDownloadHost(next)) {
+        res.writeHead(400, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "redirect host not allowed" }));
+        return;
+      }
+      target = next;
+      upstreamRes = await fetch(target.toString(), { redirect: "manual" });
+    }
+    if (upstreamRes.status >= 300 && upstreamRes.status < 400) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "too many redirects" }));
+      return;
+    }
     const headers: Record<string, string> = { ...corsHeaders(origin) };
-    const ct = upstreamRes.headers.get("content-type");
-    if (ct) headers["Content-Type"] = ct;
+    // Media types only; anything else downloads as opaque bytes. Never render in the proxy's origin.
+    const ct = upstreamRes.headers.get("content-type") ?? "";
+    headers["Content-Type"] = /^(video|audio|image)\//.test(ct) ? ct : "application/octet-stream";
+    headers["Content-Disposition"] = "attachment";
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
     res.writeHead(upstreamRes.status, headers);
 
     if (!upstreamRes.body) {
