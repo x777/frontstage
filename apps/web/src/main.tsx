@@ -1,11 +1,11 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
-import type { KeyConfig } from "@palmier/ui";
+import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
 import type { GenerationHost } from "@palmier/ai";
 import { App } from "./App.js";
@@ -28,12 +28,18 @@ interface PalmierAppProps {
   aiProxyUrl: string;
   engineRef: { current: PlaybackEngine | null };
   getGenerationLog: () => GenerationLogEntry[];
+  genGateway: WebGenGateway;
 }
 
-function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
+  const [falEnabled, setFalEnabled] = useState(false);
+
+  useEffect(() => {
+    genGateway.hasKey().then(setFalEnabled).catch(() => setFalEnabled(false));
+  }, [genGateway]);
 
   function onAgentModelChange(id: string) {
     setAgentModel(id);
@@ -60,6 +66,8 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
     },
   };
 
+  const falKeyConfig: FalKeyConfig = { kind: "proxyInfo", enabled: falEnabled };
+
   return (
     <App
       store={store}
@@ -77,6 +85,7 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
         imageGenerator,
         settings: {
           keyConfig,
+          falKeyConfig,
           llmModels: listLLMModels(),
           imageModels: listImageModels(),
           agentModel,
@@ -221,6 +230,7 @@ async function bootstrap() {
         aiProxyUrl={aiProxyUrl}
         engineRef={engineRef}
         getGenerationLog={getGenerationLog}
+        genGateway={genGateway}
       />
     </StrictMode>,
   );

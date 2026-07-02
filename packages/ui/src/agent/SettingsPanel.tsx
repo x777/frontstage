@@ -7,6 +7,16 @@ export type KeyConfig =
   | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => Promise<void>; onClearKey: () => Promise<void> }
   | { kind: "proxy"; proxyUrl: string; proxyToken?: string; onSave: (url: string, token?: string) => void };
 
+export type FalKeyConfig =
+  | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => void | Promise<void>; onClearKey: () => void | Promise<void> }
+  | { kind: "proxyInfo"; enabled: boolean };
+
+interface KeychainLike {
+  hasKey: boolean;
+  onSetKey: (k: string) => void | Promise<void>;
+  onClearKey: () => void | Promise<void>;
+}
+
 export interface McpSettings {
   getStatus: () => Promise<{ enabled: boolean; running: boolean; url: string; token: string }>;
   setEnabled: (on: boolean) => Promise<{ enabled: boolean }>;
@@ -15,6 +25,7 @@ export interface McpSettings {
 
 export interface SettingsPanelProps {
   keyConfig: KeyConfig;
+  falKeyConfig?: FalKeyConfig;
   llmModels: ModelEntry[];
   imageModels: ModelEntry[];
   agentModel: string;
@@ -25,7 +36,15 @@ export interface SettingsPanelProps {
   mcp?: McpSettings;
 }
 
-function KeychainConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "keychain" }> }) {
+function KeychainConfig({
+  cfg,
+  testidPrefix = "settings-key",
+  placeholder = "Paste OpenRouter key…",
+}: {
+  cfg: KeychainLike;
+  testidPrefix?: string;
+  placeholder?: string;
+}) {
   const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -44,17 +63,17 @@ function KeychainConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "keychain" }>
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
       <span
-        data-testid="settings-key-status"
+        data-testid={`${testidPrefix}-status`}
         style={{ fontSize: theme.fontSize.xs, color: cfg.hasKey ? theme.text.secondary : theme.text.muted }}
       >
         {cfg.hasKey ? "Key configured" : "No key set"}
       </span>
       <input
         type="password"
-        data-testid="settings-key"
+        data-testid={testidPrefix}
         value={keyInput}
         onChange={(e) => setKeyInput(e.target.value)}
-        placeholder="Paste OpenRouter key…"
+        placeholder={placeholder}
         style={{
           background: theme.bg.surface,
           border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
@@ -70,7 +89,7 @@ function KeychainConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "keychain" }>
       />
       <div style={{ display: "flex", gap: theme.spacing.xs }}>
         <button
-          data-testid="settings-key-save"
+          data-testid={`${testidPrefix}-save`}
           disabled={!keyInput.trim() || busy}
           onClick={handleSave}
           style={{
@@ -89,7 +108,7 @@ function KeychainConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "keychain" }>
         </button>
         {cfg.hasKey && (
           <button
-            data-testid="settings-key-remove"
+            data-testid={`${testidPrefix}-remove`}
             disabled={busy}
             onClick={handleRemove}
             style={{
@@ -185,6 +204,17 @@ function ProxyConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "proxy" }> }) {
         Save
       </button>
     </div>
+  );
+}
+
+function FalProxyInfo({ cfg }: { cfg: Extract<FalKeyConfig, { kind: "proxyInfo" }> }) {
+  return (
+    <span
+      data-testid="settings-fal-proxy-status"
+      style={{ fontSize: theme.fontSize.xs, color: cfg.enabled ? theme.text.secondary : theme.text.muted }}
+    >
+      {cfg.enabled ? "fal.ai: configured on proxy ✓" : "fal.ai: not configured — set FAL_KEY on your proxy"}
+    </span>
   );
 }
 
@@ -293,6 +323,7 @@ function McpConfig({ cfg }: { cfg: McpSettings }) {
 
 export function SettingsPanel({
   keyConfig,
+  falKeyConfig,
   llmModels,
   imageModels,
   agentModel,
@@ -356,6 +387,28 @@ export function SettingsPanel({
           <KeychainConfig cfg={keyConfig} />
         ) : (
           <ProxyConfig cfg={keyConfig} />
+        )}
+
+        {falKeyConfig && (
+          <section
+            data-testid="settings-fal"
+            style={{
+              borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+              paddingTop: theme.spacing.sm,
+              display: "flex",
+              flexDirection: "column",
+              gap: theme.spacing.sm,
+            }}
+          >
+            <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
+              fal.ai
+            </span>
+            {falKeyConfig.kind === "keychain" ? (
+              <KeychainConfig cfg={falKeyConfig} testidPrefix="settings-fal-key" placeholder="Paste fal.ai key…" />
+            ) : (
+              <FalProxyInfo cfg={falKeyConfig} />
+            )}
+          </section>
         )}
 
         <div

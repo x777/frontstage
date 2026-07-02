@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
-import type { KeyConfig } from "@palmier/ui";
+import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG } from "@palmier/ai";
 import type { GenerationHost } from "@palmier/ai";
 
@@ -161,9 +161,11 @@ function PalmierDesktopApp() {
   const [agentModelId, setAgentModelId] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModelId, setImageModelId] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [hasKey, setHasKey] = useState(false);
+  const [falHasKey, setFalHasKey] = useState(false);
 
   useEffect(() => {
     window.desktopAI?.hasKey().then(setHasKey).catch(() => {});
+    window.desktopAI?.hasKey("fal").then(setFalHasKey).catch(() => {});
   }, []);
 
   function onAgentModelChange(id: string) {
@@ -193,6 +195,21 @@ function PalmierDesktopApp() {
     },
   };
 
+  const falKeyConfig: FalKeyConfig = {
+    kind: "keychain",
+    hasKey: falHasKey,
+    onSetKey: async (k) => {
+      if (!window.desktopAI) return;
+      await window.desktopAI.setKey(k, "fal");
+      setFalHasKey(true);
+    },
+    onClearKey: async () => {
+      if (!window.desktopAI) return;
+      await window.desktopAI.clearKey("fal");
+      setFalHasKey(false);
+    },
+  };
+
   return (
     <Editor
       store={store}
@@ -211,6 +228,7 @@ function PalmierDesktopApp() {
         imageGenerator,
         settings: {
           keyConfig,
+          falKeyConfig,
           llmModels: listLLMModels(),
           imageModels: listImageModels(),
           agentModel: agentModelId,

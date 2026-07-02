@@ -156,3 +156,67 @@ test("SettingsPanel mcp: Regenerate button calls regenerateToken", async () => {
   });
   expect(mcp.regenerateToken).toHaveBeenCalledTimes(1);
 });
+
+// --- fal.ai key section tests ---
+
+test("SettingsPanel fal keychain: renders both the OpenRouter and fal.ai key sections", () => {
+  const props = makeKeychainProps(false);
+  render(
+    <SettingsPanel
+      {...props}
+      falKeyConfig={{ kind: "keychain", hasKey: false, onSetKey: vi.fn(), onClearKey: vi.fn() }}
+    />,
+  );
+  // OpenRouter section (regression)
+  expect(screen.getByTestId("settings-key-status").textContent).toContain("No key set");
+  expect(screen.getByTestId("settings-key")).toBeTruthy();
+  // fal.ai section
+  expect(screen.getByTestId("settings-fal")).toBeTruthy();
+  expect(screen.getByTestId("settings-fal-key-status").textContent).toContain("No key set");
+});
+
+test("SettingsPanel fal keychain: typing a key and clicking Save calls the fal onSetKey", async () => {
+  const onSetKey = vi.fn();
+  const props = makeKeychainProps(false);
+  render(
+    <SettingsPanel
+      {...props}
+      falKeyConfig={{ kind: "keychain", hasKey: false, onSetKey, onClearKey: vi.fn() }}
+    />,
+  );
+  fireEvent.change(screen.getByTestId("settings-fal-key"), { target: { value: "fal-test-456" } });
+  await act(async () => { fireEvent.click(screen.getByTestId("settings-fal-key-save")); });
+  expect(onSetKey).toHaveBeenCalledWith("fal-test-456");
+  // OpenRouter's onSetKey must be untouched
+  expect(props.keyConfig.onSetKey).not.toHaveBeenCalled();
+});
+
+test("SettingsPanel fal keychain: Remove button calls the fal onClearKey", async () => {
+  const onClearKey = vi.fn();
+  const props = makeKeychainProps(false);
+  render(
+    <SettingsPanel
+      {...props}
+      falKeyConfig={{ kind: "keychain", hasKey: true, onSetKey: vi.fn(), onClearKey }}
+    />,
+  );
+  await act(async () => { fireEvent.click(screen.getByTestId("settings-fal-key-remove")); });
+  expect(onClearKey).toHaveBeenCalledTimes(1);
+});
+
+test("SettingsPanel fal proxyInfo: enabled shows the configured line", () => {
+  const props = makeKeychainProps(false);
+  render(<SettingsPanel {...props} falKeyConfig={{ kind: "proxyInfo", enabled: true }} />);
+  expect(screen.getByTestId("settings-fal-proxy-status").textContent).toContain("configured on proxy");
+});
+
+test("SettingsPanel fal proxyInfo: disabled shows the hint to set FAL_KEY on the proxy", () => {
+  const props = makeKeychainProps(false);
+  render(<SettingsPanel {...props} falKeyConfig={{ kind: "proxyInfo", enabled: false }} />);
+  expect(screen.getByTestId("settings-fal-proxy-status").textContent).toContain("set FAL_KEY on your proxy");
+});
+
+test("SettingsPanel: fal.ai section absent when falKeyConfig prop is not provided", () => {
+  render(<SettingsPanel {...makeKeychainProps()} />);
+  expect(screen.queryByTestId("settings-fal")).toBeNull();
+});

@@ -4,7 +4,7 @@ import type { ProjectSession } from "@palmier/core";
 import type { AgentSession, ChatSessionStore, ImageGenerator, ModelEntry } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
-import type { KeyConfig, McpSettings } from "../agent/SettingsPanel.js";
+import type { KeyConfig, FalKeyConfig, McpSettings } from "../agent/SettingsPanel.js";
 import { ProjectActivityButton } from "./ProjectActivityView.js";
 import {
   addClipCommand,
@@ -60,6 +60,7 @@ export interface EditorProps {
     imageGenerator?: ImageGenerator;
     settings?: {
       keyConfig: KeyConfig;
+      falKeyConfig?: FalKeyConfig;
       llmModels: ModelEntry[];
       imageModels: ModelEntry[];
       agentModel: string;
@@ -468,6 +469,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
       {settingsVisible && agent?.settings && (
         <SettingsPanel
           keyConfig={agent.settings.keyConfig}
+          falKeyConfig={agent.settings.falKeyConfig}
           llmModels={agent.settings.llmModels}
           imageModels={agent.settings.imageModels}
           agentModel={agent.settings.agentModel}
