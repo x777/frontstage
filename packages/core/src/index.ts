@@ -15,6 +15,7 @@ export * from "./media/word-cut-planner.js";
 export * from "./generation-log.js";
 export * from "./volume-scale.js";
 export * from "./clip.js";
+export * from "./text-animation.js";
 export * from "./timeline.js";
 export * from "./clip-mutations.js";
 export * from "./schema/schemas.js";

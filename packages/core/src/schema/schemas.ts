@@ -79,6 +79,22 @@ export const TextStyleSchema = z.object({
   border: FillSchema.default({ enabled: false, color: { r: 0, g: 0, b: 0, a: 1 } }),
 });
 
+// Swift: Models/TextAnimation.swift TextAnimation.Preset (CaseIterable order) — kept literal here
+// per this file's convention (BlendModeSchema etc. also re-list rather than import).
+export const TextAnimationPresetSchema = z.enum([
+  "none", "fadeIn", "popIn", "slideUp", "typewriter",
+  "wordReveal", "wordSlide", "wordPop", "wordCycle", "highlightPop", "highlightBlock",
+]);
+export const TextAnimationSchema = z.object({
+  preset: TextAnimationPresetSchema,
+  highlightColor: RGBASchema.optional(),
+});
+export const WordTimingSchema = z.object({
+  text: z.string(),
+  startFrame: z.number().int(),
+  endFrame: z.number().int(),
+});
+
 export const MediaSourceSchema = z.union([
   z.object({ kind: z.literal("external"), absolutePath: z.string() }),
   z.object({ kind: z.literal("project"), relativePath: z.string() }),
@@ -193,6 +209,8 @@ export const ClipSchema = z.object({
   captionGroupId: z.string().optional(),
   textContent: z.string().optional(),
   textStyle: TextStyleSchema.optional(),
+  textAnimation: TextAnimationSchema.optional(),
+  wordTimings: z.array(WordTimingSchema).optional(),
   effects: z.array(EffectSchema).optional(),
   blendMode: BlendModeSchema.optional(),
   opacityTrack: KeyframeNumberTrackSchema.optional(),

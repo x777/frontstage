@@ -3,9 +3,38 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { decodeProjectFiles, encodeProjectFiles, PROJECT_FILES, type ProjectDoc } from "../src/schema/serialize.js";
 import { defaultTimeline } from "../src/timeline.js";
+import type { Track } from "../src/timeline.js";
+import type { Clip } from "../src/clip.js";
+import { defaultCrop, defaultTransform } from "../src/transform.js";
+import { defaultTextStyle } from "../src/text-style.js";
 import { emptyMediaManifest, type MediaManifestEntry } from "../src/media.js";
 import { emptyGenerationLog } from "../src/generation-log.js";
 import { createPlaceholderEntry, normalizeEntryForSave } from "../src/media/generation-status.js";
+
+function makeTextClip(overrides: Partial<Clip> = {}): Clip {
+  return {
+    id: "text-1",
+    mediaRef: "",
+    mediaType: "text",
+    sourceClipType: "text",
+    startFrame: 0,
+    durationFrames: 60,
+    trimStartFrame: 0,
+    trimEndFrame: 0,
+    speed: 1,
+    volume: 1,
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+    fadeInInterpolation: "linear",
+    fadeOutInterpolation: "linear",
+    opacity: 1,
+    transform: defaultTransform(),
+    crop: defaultCrop(),
+    textContent: "Hello brave world",
+    textStyle: defaultTextStyle(),
+    ...overrides,
+  };
+}
 
 const legacy = readFileSync(fileURLToPath(new URL("./fixtures/legacy-project.json", import.meta.url)), "utf8");
 
@@ -88,6 +117,47 @@ describe("serialize", () => {
     expect(back.manifestUnreadable).toBe(false);
     expect(back.manifest.entries).toHaveLength(1);
     expect(back.manifest.entries[0]!.generationStatus).toBeUndefined();
+  });
+
+  test("a text clip carrying textAnimation + wordTimings survives the encode->decode round trip", () => {
+    const clip = makeTextClip({
+      textAnimation: { preset: "highlightPop", highlightColor: { r: 1, g: 0.85, b: 0, a: 1 } },
+      wordTimings: [
+        { text: "Hello", startFrame: 0, endFrame: 10 },
+        { text: "brave", startFrame: 10, endFrame: 20 },
+        { text: "world", startFrame: 20, endFrame: 30 },
+      ],
+    });
+    const track: Track = { id: "t1", type: "text", muted: false, hidden: false, syncLocked: true, clips: [clip] };
+    const doc: ProjectDoc = {
+      timeline: { ...defaultTimeline(), tracks: [track] },
+      manifest: emptyMediaManifest(),
+      generationLog: emptyGenerationLog(),
+    };
+    const files = encodeProjectFiles(doc);
+    const back = decodeProjectFiles({
+      timeline: files[PROJECT_FILES.timeline]!,
+      manifest: files[PROJECT_FILES.manifest]!,
+      generationLog: files[PROJECT_FILES.generationLog]!,
+    });
+    const backClip = back.timeline.tracks[0]!.clips[0]!;
+    expect(backClip.textAnimation).toEqual({ preset: "highlightPop", highlightColor: { r: 1, g: 0.85, b: 0, a: 1 } });
+    expect(backClip.wordTimings).toEqual(clip.wordTimings);
+  });
+
+  test("a clip without textAnimation/wordTimings (old project shape) still decodes with both fields undefined", () => {
+    const clip = makeTextClip();
+    const track: Track = { id: "t1", type: "text", muted: false, hidden: false, syncLocked: true, clips: [clip] };
+    const doc: ProjectDoc = {
+      timeline: { ...defaultTimeline(), tracks: [track] },
+      manifest: emptyMediaManifest(),
+      generationLog: emptyGenerationLog(),
+    };
+    const files = encodeProjectFiles(doc);
+    const back = decodeProjectFiles({ timeline: files[PROJECT_FILES.timeline]! });
+    const backClip = back.timeline.tracks[0]!.clips[0]!;
+    expect(backClip.textAnimation).toBeUndefined();
+    expect(backClip.wordTimings).toBeUndefined();
   });
 
   test("decodes a legacy macOS project (x/y transform, missing fields, no manifest)", () => {

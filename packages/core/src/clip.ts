@@ -2,9 +2,10 @@ import { type AnimPair, type KeyframeTrack, lerpAnimPair, lerpNumber, sampleTrac
 import { type Crop, type Transform, lerpCrop } from "./transform.js";
 import { linearFromDb } from "./volume-scale.js";
 import type { ClipType } from "./clip-type.js";
-import type { TextStyle } from "./text-style.js";
+import type { RGBA, TextStyle } from "./text-style.js";
 import type { Effect } from "./color/effect.js";
 import type { BlendMode } from "./color/blend-mode.js";
+import type { TextAnimationPreset, TextWordTiming } from "./text-animation.js";
 
 export interface Clip {
   id: string;
@@ -28,6 +29,9 @@ export interface Clip {
   captionGroupId?: string;
   textContent?: string;
   textStyle?: TextStyle;
+  textAnimation?: { preset: TextAnimationPreset; highlightColor?: RGBA };
+  /** Clip-relative frames (unlike Swift's WordTiming, which TextFrameRenderer reads the same way per clip). */
+  wordTimings?: TextWordTiming[];
   effects?: Effect[];
   blendMode?: BlendMode;
   opacityTrack?: KeyframeTrack<number>;
