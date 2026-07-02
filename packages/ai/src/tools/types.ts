@@ -1,6 +1,7 @@
 import type { ZodType } from "zod";
 import type { EditorStore, MediaManifest, MediaManifestEntry } from "@palmier/core";
 import type { ImageGenInput } from "../agent/image-generator.js";
+import type { StartJobArgs } from "../generation/generation-service.js";
 
 export type ToolBlock =
   | { kind: "text"; text: string }
@@ -17,6 +18,14 @@ export interface ToolContext {
   newId: () => string;
   generateImage?: (input: ImageGenInput) => Promise<MediaManifestEntry>;
   renderFrame?: (atFrame: number) => Promise<{ rgba: Uint8Array; width: number; height: number; jpegBase64?: string }>;
+  generation?: {
+    hasKey(): Promise<boolean>;
+    addPlaceholder(entry: MediaManifestEntry): void;
+    startJob(args: StartJobArgs): Promise<{ jobId: string } | { error: string }>;
+    // Resolves a library media ref to a URL fal can fetch (data URI or hosted). Optional in v1.
+    entryUrl?(mediaRef: string): Promise<string | undefined>;
+    confirmThreshold: number;
+  };
 }
 
 export interface ToolSpec {

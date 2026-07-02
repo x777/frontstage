@@ -85,6 +85,12 @@ const executor = new ToolExecutor(buildCatalog(), {
     const rgba = await engine.readRGBA();
     return { rgba, width: engine.width, height: engine.height };
   },
+  generation: {
+    hasKey: () => genGateway.hasKey(),
+    addPlaceholder: (entry) => library.addPlaceholder(entry),
+    startJob: (args) => generationServiceRef.current.startJob(args),
+    confirmThreshold: 50,
+  },
 });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

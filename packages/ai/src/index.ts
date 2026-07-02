@@ -8,6 +8,7 @@ export { removeTracksTool } from "./tools/track-tools.js";
 export { applyColorTool, applyEffectTool, inspectColorTool } from "./tools/color-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";
+export { generateVideoTool, upscaleMediaTool } from "./tools/generate-tools.js";
 export { ImageGenerator } from "./agent/image-generator.js";
 export type { ModelEntry } from "./agent/model-catalog.js";
 export { MODEL_CATALOG, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "./agent/model-catalog.js";
