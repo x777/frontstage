@@ -93,6 +93,9 @@ function makeGateway(opts: {
       if (opts.download) return opts.download(url);
       return new Uint8Array([1, 2, 3]);
     },
+    async uploadFile() {
+      return "https://v3.fal.media/files/uploaded";
+    },
     async hasKey() {
       return true;
     },
@@ -349,6 +352,9 @@ describe("GenerationService.dispose", () => {
       },
       async downloadResult() {
         return new Uint8Array();
+      },
+      async uploadFile() {
+        return "https://v3.fal.media/files/uploaded";
       },
       async hasKey() {
         return true;

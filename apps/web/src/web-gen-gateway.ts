@@ -46,6 +46,19 @@ export class WebGenGateway implements GenJobGateway {
     return new Uint8Array(await res.arrayBuffer());
   }
 
+  async uploadFile(bytes: Uint8Array, contentType: string, fileName: string): Promise<string> {
+    const url = this.proxyUrl + "/fal/upload?filename=" + encodeURIComponent(fileName);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.headers({ "Content-Type": contentType }),
+      body: bytes as BodyInit,
+    });
+    const json = (await res.json()) as { url?: string; error?: string };
+    if (!res.ok || json.error) throw new Error(json.error ?? "fal proxy error: " + res.status);
+    if (typeof json.url !== "string") throw new Error("fal proxy error: missing url");
+    return json.url;
+  }
+
   async hasKey(): Promise<boolean> {
     try {
       const res = await fetch(this.proxyUrl + "/fal/enabled", { headers: this.headers() });

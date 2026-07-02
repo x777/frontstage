@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld("desktopGen", {
   falSubmit: (modelEndpoint, input) => ipcRenderer.invoke("gen:falSubmit", { modelEndpoint, input }),
   falStatus: (modelEndpoint, jobId) => ipcRenderer.invoke("gen:falStatus", { modelEndpoint, jobId }),
   falDownload: (url) => ipcRenderer.invoke("gen:falDownload", { url }),
+  falUpload: (bytes, contentType, fileName) => ipcRenderer.invoke("gen:falUpload", { bytes, contentType, fileName }),
 });
 
 contextBridge.exposeInMainWorld("desktopMedia", {

@@ -117,6 +117,35 @@ describe("WebGenGateway", () => {
     });
   });
 
+  describe("uploadFile", () => {
+    it("POSTs raw bytes to /fal/upload?filename=... with Content-Type + proxy token", async () => {
+      stubFetch(() => ({ ok: true, status: 200, json: async () => ({ url: "https://v3.fal.media/files/x.png" }) }));
+      const gw = new WebGenGateway("http://localhost:8787", "my-tok");
+      const bytes = new Uint8Array([1, 2, 3]);
+      const url = await gw.uploadFile(bytes, "image/png", "a.png");
+
+      expect(url).toBe("https://v3.fal.media/files/x.png");
+      expect(capturedUrl).toBe("http://localhost:8787/fal/upload?filename=a.png");
+      expect((capturedInit as { method: string }).method).toBe("POST");
+      const headers = capturedInit?.headers as Record<string, string>;
+      expect(headers["Content-Type"]).toBe("image/png");
+      expect(headers["Authorization"]).toBe("Bearer my-tok");
+      expect(capturedInit?.body).toBe(bytes);
+    });
+
+    it("rejects when the response carries an error field", async () => {
+      stubFetch(() => ({ ok: true, status: 200, json: async () => ({ error: "too large" }) }));
+      const gw = new WebGenGateway("http://localhost:8787");
+      await expect(gw.uploadFile(new Uint8Array([1]), "image/png", "a.png")).rejects.toThrow(/too large/);
+    });
+
+    it("rejects when the response is not ok", async () => {
+      stubFetch(() => ({ ok: false, status: 413, json: async () => ({ error: "upload exceeds 50MB limit" }) }));
+      const gw = new WebGenGateway("http://localhost:8787");
+      await expect(gw.uploadFile(new Uint8Array([1]), "image/png", "a.png")).rejects.toThrow(/50MB/);
+    });
+  });
+
   describe("hasKey", () => {
     it("returns true when the proxy reports fal enabled", async () => {
       stubFetch(() => ({ ok: true, status: 200, json: async () => ({ enabled: true }) }));

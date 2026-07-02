@@ -68,3 +68,43 @@ export function extractResultError(json: unknown): string | undefined {
   }
   return undefined;
 }
+
+// Storage upload contract — verified 2026-07 against the official @fal-ai/client (fal-js) source
+// (github.com/fal-ai/fal-js, libs/client/src/storage.ts + config.ts): initiate is
+// POST {FAL_REST_BASE}/storage/upload/initiate?storage_type=fal-cdn-v3, Authorization: Key <falKey>,
+// body {content_type, file_name} -> {upload_url, file_url}; then PUT upload_url with the raw
+// bytes + a Content-Type header, no auth (it's a signed URL). The usable URL is file_url.
+// DEVIATION: an earlier draft of this plan assumed rest.fal.run — fal-js's actual default REST
+// host is rest.fal.ai. Kept as a constant (not hardcoded inline) so a future host change stays
+// a one-file fix; callers that can't import ESM (desktop main, the proxy) re-inline this and
+// must be kept in sync, same as FAL_QUEUE_BASE above.
+export const FAL_REST_BASE = "https://rest.fal.ai";
+
+export function falUploadInitiateRequest(contentType: string, fileName: string): { url: string; body: string } {
+  return {
+    url: `${FAL_REST_BASE}/storage/upload/initiate?storage_type=fal-cdn-v3`,
+    body: JSON.stringify({ content_type: contentType, file_name: fileName }),
+  };
+}
+
+export function parseFalUploadInitiate(json: unknown): { uploadUrl: string; fileUrl: string } | { error: string } {
+  const obj = json as Record<string, unknown> | null;
+  const uploadUrl = obj?.["upload_url"];
+  const fileUrl = obj?.["file_url"];
+  if (typeof uploadUrl === "string" && uploadUrl.length > 0 && typeof fileUrl === "string" && fileUrl.length > 0) {
+    return { uploadUrl, fileUrl };
+  }
+  return { error: "fal upload/initiate response missing upload_url/file_url" };
+}
+
+// SSRF allowlist for fal-controlled hosts: the REST/queue APIs and the signed storage URLs
+// they hand back (which land on a CDN subdomain, e.g. v3.fal.media).
+export function isAllowedFalHost(url: URL): boolean {
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname;
+  return (
+    host === "fal.ai" || host.endsWith(".fal.ai") ||
+    host === "fal.run" || host.endsWith(".fal.run") ||
+    host === "fal.media" || host.endsWith(".fal.media")
+  );
+}

@@ -6,7 +6,7 @@ import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl } from "@palmier/ai";
 import type { GenerationHost } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
@@ -170,11 +170,22 @@ async function bootstrap() {
     generationServiceRef.current.resumePending();
   };
 
+  // Resolves a library media ref to a fal-fetchable URL — cache-first (6-day TTL), else uploads.
+  const entryUrl = makeEntryUrl({
+    entries: () => library.getSnapshot().entries,
+    patchEntry: (id, patch) => library.patchEntry(id, patch),
+    bytesFor: (entry) => library.bytesFor(entry),
+    readMedia: (relativePath) => library.readMedia(relativePath),
+    uploadFile: (bytes, contentType, fileName) => genGateway.uploadFile(bytes, contentType, fileName),
+    now: () => Date.now(),
+  });
+
   // SAME object threaded into the ToolExecutor context and the manual GenerationPanel — one facade, two callers.
   const generationFacade: GenerationFacade = {
     hasKey: () => genGateway.hasKey(),
     addPlaceholder: (entry) => library.addPlaceholder(entry),
     startJob: (args) => generationServiceRef.current.startJob(args),
+    entryUrl,
     confirmThreshold: 50,
   };
 

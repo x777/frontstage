@@ -27,6 +27,7 @@ export interface GenerationFacade {
   hasKey(): Promise<boolean>;
   addPlaceholder(entry: MediaManifestEntry): void;
   startJob(args: StartJobArgs): Promise<{ jobId: string } | { error: string }>;
+  entryUrl?(mediaRef: string): Promise<string | undefined>;
   confirmThreshold: number;
 }
 

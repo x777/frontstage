@@ -5,6 +5,7 @@ interface DesktopGenBridge {
   falSubmit(modelEndpoint: string, input: Record<string, unknown>): Promise<{ jobId: string } | { error: string }>;
   falStatus(modelEndpoint: string, jobId: string): Promise<{ status: unknown; resultJson?: unknown } | { error: string }>;
   falDownload(url: string): Promise<{ data: ArrayBuffer } | { error: string }>;
+  falUpload(bytes: ArrayBuffer, contentType: string, fileName: string): Promise<{ url: string } | { error: string }>;
 }
 
 declare global {
@@ -40,6 +41,13 @@ export class DesktopGenGateway implements GenJobGateway {
     const res = await window.desktopGen.falDownload(url);
     if ("error" in res) throw new Error(res.error);
     return new Uint8Array(res.data);
+  }
+
+  async uploadFile(bytes: Uint8Array, contentType: string, fileName: string): Promise<string> {
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const res = await window.desktopGen.falUpload(buffer, contentType, fileName);
+    if ("error" in res) throw new Error(res.error);
+    return res.url;
   }
 
   async hasKey(): Promise<boolean> {

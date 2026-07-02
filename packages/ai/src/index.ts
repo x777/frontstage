@@ -39,6 +39,10 @@ export {
   mapFalStatus,
   extractResultUrls,
   extractResultError,
+  FAL_REST_BASE,
+  falUploadInitiateRequest,
+  parseFalUploadInitiate,
+  isAllowedFalHost,
 } from "./generation/fal-wire.js";
 export { nextPollDelay } from "./generation/poll-schedule.js";
 export type { GenerationHost, GenerationServiceOptions, StartJobArgs } from "./generation/generation-service.js";
@@ -46,3 +50,5 @@ export { GenerationService } from "./generation/generation-service.js";
 export type { GenModelKind, GenModelCaps, GenPricing, GenModelEntry, GenToolParams } from "./generation/gen-catalog.js";
 export { genModel, listGenModels, validateGenParams } from "./generation/gen-catalog.js";
 export { estimateCredits, formatCredits } from "./generation/cost-estimator.js";
+export type { EntryUrlDeps } from "./generation/entry-url.js";
+export { makeEntryUrl, mimeForEntry } from "./generation/entry-url.js";

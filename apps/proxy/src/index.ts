@@ -7,6 +7,7 @@ import { createProxyServer } from "./server.js";
 //   PROXY_TOKEN         [recommended] Shared secret; clients send Authorization: Bearer <token>.
 //   FAL_KEY             [optional]  fal.ai queue API key; enables the /fal/* routes.
 //   FAL_UPSTREAM        [optional]  fal queue base URL (default: https://queue.fal.run).
+//   FAL_REST_UPSTREAM   [optional]  fal REST base URL for storage uploads (default: https://rest.fal.ai).
 //   HOST                [optional]  Bind address (default: 127.0.0.1).
 //   PORT                [optional]  Bind port (default: 8787).
 
@@ -29,11 +30,12 @@ if (!proxyToken) {
 
 const falKey = process.env["FAL_KEY"];
 const falUpstream = process.env["FAL_UPSTREAM"];
+const falRestUpstream = process.env["FAL_REST_UPSTREAM"];
 
 const port = Number(process.env["PORT"] ?? 8787);
 const host = process.env["HOST"] ?? "127.0.0.1";
 
-const server = createProxyServer({ apiKey, allowOrigin, proxyToken, falKey, falUpstream });
+const server = createProxyServer({ apiKey, allowOrigin, proxyToken, falKey, falUpstream, falRestUpstream });
 server.listen(port, host, () => {
   console.log(`Proxy listening on http://${host}:${port}`);
 });

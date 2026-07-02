@@ -8,6 +8,10 @@ import {
   mapFalStatus,
   extractResultUrls,
   extractResultError,
+  FAL_REST_BASE,
+  falUploadInitiateRequest,
+  parseFalUploadInitiate,
+  isAllowedFalHost,
 } from "../src/generation/fal-wire.js";
 import { nextPollDelay } from "../src/generation/poll-schedule.js";
 
@@ -136,6 +140,62 @@ describe("extractResultError", () => {
 
   test("non-object json yields undefined", () => {
     expect(extractResultError(null)).toBeUndefined();
+  });
+});
+
+describe("FAL_REST_BASE", () => {
+  test("is the fal REST host", () => {
+    expect(FAL_REST_BASE).toBe("https://rest.fal.ai");
+  });
+});
+
+describe("falUploadInitiateRequest", () => {
+  test("builds the initiate URL with the fal-cdn-v3 storage_type", () => {
+    const req = falUploadInitiateRequest("image/png", "a.png");
+    expect(req.url).toBe("https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3");
+  });
+
+  test("body carries content_type and file_name", () => {
+    const req = falUploadInitiateRequest("image/png", "a.png");
+    expect(req.body).toBe(JSON.stringify({ content_type: "image/png", file_name: "a.png" }));
+  });
+});
+
+describe("parseFalUploadInitiate", () => {
+  test("reads upload_url/file_url", () => {
+    const result = parseFalUploadInitiate({ upload_url: "https://u", file_url: "https://f" });
+    expect(result).toEqual({ uploadUrl: "https://u", fileUrl: "https://f" });
+  });
+
+  test("missing upload_url yields an error", () => {
+    expect("error" in parseFalUploadInitiate({ file_url: "https://f" })).toBe(true);
+  });
+
+  test("missing file_url yields an error", () => {
+    expect("error" in parseFalUploadInitiate({ upload_url: "https://u" })).toBe(true);
+  });
+
+  test("non-object input yields an error", () => {
+    expect("error" in parseFalUploadInitiate(null)).toBe(true);
+  });
+});
+
+describe("isAllowedFalHost", () => {
+  test("accepts fal.ai, fal.run, fal.media and their subdomains over https", () => {
+    expect(isAllowedFalHost(new URL("https://rest.fal.ai/x"))).toBe(true);
+    expect(isAllowedFalHost(new URL("https://fal.ai/x"))).toBe(true);
+    expect(isAllowedFalHost(new URL("https://queue.fal.run/x"))).toBe(true);
+    expect(isAllowedFalHost(new URL("https://fal.run/x"))).toBe(true);
+    expect(isAllowedFalHost(new URL("https://v3.fal.media/x"))).toBe(true);
+    expect(isAllowedFalHost(new URL("https://fal.media/x"))).toBe(true);
+  });
+
+  test("rejects an off-allowlist host", () => {
+    expect(isAllowedFalHost(new URL("https://evil.com/x"))).toBe(false);
+  });
+
+  test("rejects http (non-https)", () => {
+    expect(isAllowedFalHost(new URL("http://fal.media/x"))).toBe(false);
   });
 });
 

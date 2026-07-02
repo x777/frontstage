@@ -77,6 +77,17 @@ export class MediaLibrary {
     this._gateway = gateway;
   }
 
+  // In-memory bytes for an entry, if still held (unsaved / pending-persist) — no gateway I/O.
+  bytesFor(entry: MediaManifestEntry): Uint8Array | undefined {
+    return entry.source.kind === "project" ? this._bytes.get(entry.source.relativePath) : undefined;
+  }
+
+  // Gateway fallback for bytesFor misses (already-persisted media, not held in memory).
+  async readMedia(relativePath: string): Promise<Uint8Array> {
+    if (!this._gateway) throw new Error("no gateway configured");
+    return this._gateway.readMedia(relativePath);
+  }
+
   get byteSource(): MediaByteSource {
     return {
       open: async (ref: string) => {

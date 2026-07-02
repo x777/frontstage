@@ -8,6 +8,7 @@ export interface ProxyServerOptions {
   proxyToken?: string;
   falKey?: string;
   falUpstream?: string;
+  falRestUpstream?: string;
 }
 
 function corsHeaders(origin: string): Record<string, string> {
@@ -63,11 +64,59 @@ function isAllowedFalDownloadHost(url: URL): boolean {
   return host === "fal.media" || host.endsWith(".fal.media") || host.endsWith(".fal.run");
 }
 
+// SSRF guard for the fal storage upload PUT: the signed URL fal hands back must stay on a
+// fal-controlled host (queue/rest API domains plus the CDN subdomains they redirect uploads to).
+function isAllowedFalUploadHost(url: URL): boolean {
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname;
+  return (
+    host === "fal.ai" || host.endsWith(".fal.ai") ||
+    host === "fal.run" || host.endsWith(".fal.run") ||
+    host === "fal.media" || host.endsWith(".fal.media")
+  );
+}
+
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const UPLOAD_CONTENT_TYPE_RE = /^(audio|image|video)\//;
+
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+  });
+}
+
+// Enforces the cap WHILE buffering (aborts on the chunk that crosses it), not after reading
+// the whole body — a client can't force us to hold 50MB+ in memory before we say no.
+function readBodyCapped(req: http.IncomingMessage, maxBytes: number): Promise<Buffer | { tooLarge: true }> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    req.on("data", (c: Buffer) => {
+      if (settled) return;
+      total += c.length;
+      if (total > maxBytes) {
+        settled = true;
+        // Stop accumulating (never hold 50MB+ in memory) but leave the socket alone —
+        // destroying it here races the 413 response the caller is about to write.
+        req.pause();
+        resolve({ tooLarge: true });
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    });
+    req.on("error", () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    });
   });
 }
 
@@ -80,6 +129,8 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
   const proxyToken = opts.proxyToken;
   const falKey = opts.falKey;
   const falUpstream = (opts.falUpstream ?? "https://queue.fal.run").replace(/\/+$/, "");
+  // Storage upload initiate lives on the REST host, not the queue host — see fal-wire.ts FAL_REST_BASE.
+  const falRestUpstream = (opts.falRestUpstream ?? "https://rest.fal.ai").replace(/\/+$/, "");
 
   return http.createServer((req, res) => {
     if (req.method === "OPTIONS") {
@@ -155,6 +206,27 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
         return;
       }
       void handleFalDownload(url.searchParams, origin, res);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/fal/upload") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
+      }
+      if (!falKey) {
+        res.writeHead(503, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "fal not configured" }));
+        return;
+      }
+      const contentType = req.headers["content-type"];
+      if (typeof contentType !== "string" || !UPLOAD_CONTENT_TYPE_RE.test(contentType)) {
+        res.writeHead(400, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "content-type must be audio/*, image/*, or video/*" }));
+        return;
+      }
+      const fileName = url.searchParams.get("filename") || "upload.bin";
+      void handleFalUpload(req, contentType, fileName, falRestUpstream, falKey, origin, res);
       return;
     }
 
@@ -338,5 +410,82 @@ async function handleFalDownload(params: URLSearchParams, origin: string, res: h
       res.writeHead(502, jsonHeaders(origin));
     }
     res.end(JSON.stringify({ error: "fal download error" }));
+  }
+}
+
+// URL shape mirrors packages/ai/src/generation/fal-wire.ts (falUploadInitiateRequest /
+// parseFalUploadInitiate / isAllowedFalHost) — this app has no runtime dep on @palmier/ai, kept
+// in sync manually, same as the desktop main-process re-inlining noted there.
+async function handleFalUpload(
+  req: http.IncomingMessage,
+  contentType: string,
+  fileName: string,
+  falRestUpstream: string,
+  falKey: string,
+  origin: string,
+  res: http.ServerResponse,
+): Promise<void> {
+  const body = await readBodyCapped(req, MAX_UPLOAD_BYTES);
+  if ("tooLarge" in body) {
+    // Connection: close — the request body wasn't fully drained, so the socket isn't safe to
+    // reuse for the client's next keep-alive request.
+    res.writeHead(413, { ...jsonHeaders(origin), Connection: "close" });
+    res.end(JSON.stringify({ error: "upload exceeds 50MB limit" }));
+    return;
+  }
+
+  try {
+    const initiateRes = await fetch(`${falRestUpstream}/storage/upload/initiate?storage_type=fal-cdn-v3`, {
+      method: "POST",
+      headers: { Authorization: `Key ${falKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content_type: contentType, file_name: fileName }),
+    });
+    if (!initiateRes.ok) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "fal upload/initiate error: " + initiateRes.status }));
+      return;
+    }
+
+    const initJson = (await initiateRes.json()) as { upload_url?: unknown; file_url?: unknown };
+    const uploadUrl = typeof initJson.upload_url === "string" ? initJson.upload_url : undefined;
+    const fileUrl = typeof initJson.file_url === "string" ? initJson.file_url : undefined;
+    if (!uploadUrl || !fileUrl) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "fal upload/initiate response missing upload_url/file_url" }));
+      return;
+    }
+
+    let uploadTarget: URL;
+    let fileTarget: URL;
+    try {
+      uploadTarget = new URL(uploadUrl);
+      fileTarget = new URL(fileUrl);
+    } catch {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "fal upload/initiate returned an invalid URL" }));
+      return;
+    }
+    if (!isAllowedFalUploadHost(uploadTarget) || !isAllowedFalUploadHost(fileTarget)) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "fal upload URL host not allowed" }));
+      return;
+    }
+
+    const putRes = await fetch(uploadTarget.toString(), {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body,
+    });
+    if (!putRes.ok) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "fal storage PUT failed: " + putRes.status }));
+      return;
+    }
+
+    res.writeHead(200, jsonHeaders(origin));
+    res.end(JSON.stringify({ url: fileUrl }));
+  } catch {
+    res.writeHead(502, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "fal upload error" }));
   }
 }

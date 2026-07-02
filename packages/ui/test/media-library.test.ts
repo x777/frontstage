@@ -124,3 +124,47 @@ test("markGenerationFailed: stamps the message on all listed ids in one emit", (
   expect(snap.entries.find((e) => e.id === "c")?.generationStatus).toBe("preparing");
   expect(calls).toBe(1);
 });
+
+test("bytesFor: returns in-memory bytes for a project-source entry added via addEntry", () => {
+  const lib = new MediaLibrary();
+  const entry = realEntry("a");
+  const bytes = new Uint8Array([1, 2, 3]);
+  lib.addEntry(entry, bytes);
+
+  expect(lib.bytesFor(entry)).toEqual(bytes);
+});
+
+test("bytesFor: undefined for an entry with no in-memory bytes (placeholder, not yet finalized)", () => {
+  const lib = new MediaLibrary();
+  const entry = placeholderEntry("a");
+  lib.addPlaceholder(entry);
+
+  expect(lib.bytesFor(entry)).toBeUndefined();
+});
+
+test("bytesFor: undefined for a non-project source", () => {
+  const lib = new MediaLibrary();
+  const entry: MediaManifestEntry = { id: "x", name: "ext.mp4", type: "video", source: { kind: "external", absolutePath: "/tmp/x.mp4" }, duration: 1 };
+
+  expect(lib.bytesFor(entry)).toBeUndefined();
+});
+
+test("readMedia: delegates to the configured gateway", async () => {
+  const lib = new MediaLibrary();
+  const reads: string[] = [];
+  lib.setGateway({
+    writeMedia: async () => {},
+    readMedia: async (rel) => { reads.push(rel); return new Uint8Array([9, 9]); },
+    hasMedia: async () => true,
+  });
+
+  const bytes = await lib.readMedia("media/a.mp4");
+
+  expect(bytes).toEqual(new Uint8Array([9, 9]));
+  expect(reads).toEqual(["media/a.mp4"]);
+});
+
+test("readMedia: throws when no gateway is configured", async () => {
+  const lib = new MediaLibrary();
+  await expect(lib.readMedia("media/a.mp4")).rejects.toThrow(/gateway/);
+});

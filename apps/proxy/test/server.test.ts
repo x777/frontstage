@@ -50,7 +50,7 @@ function startProxy(upstreamPort: number, extra?: Partial<Parameters<typeof crea
   });
 }
 
-function httpRequest(options: http.RequestOptions, body?: string): Promise<{ status: number; headers: http.IncomingMessage["headers"]; body: string }> {
+function httpRequest(options: http.RequestOptions, body?: string | Buffer): Promise<{ status: number; headers: http.IncomingMessage["headers"]; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(options, (res) => {
       const chunks: Buffer[] = [];
@@ -541,6 +541,122 @@ describe("createProxyServer — fal routes", () => {
     });
   });
 
+  describe("POST /fal/upload", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("happy path: initiates on the REST host with Key auth, PUTs bytes to the signed URL, returns {url}", async () => {
+      const bytes = Buffer.from([1, 2, 3, 4, 5]);
+      const calls: { url: string; init: { method?: string; headers?: Record<string, string>; body?: unknown } }[] = [];
+      vi.stubGlobal("fetch", async (url: string, init: { method?: string; headers?: Record<string, string>; body?: unknown }) => {
+        calls.push({ url, init });
+        if (url === "https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ upload_url: "https://v3.fal.media/upload/xyz", file_url: "https://v3.fal.media/files/xyz" }),
+          };
+        }
+        if (url === "https://v3.fal.media/upload/xyz") {
+          return { ok: true, status: 200 };
+        }
+        throw new Error("unexpected fetch url: " + url);
+      });
+
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: proxy.port,
+          path: "/fal/upload?filename=a.png",
+          method: "POST",
+          headers: { "Content-Type": "image/png", "Content-Length": bytes.length },
+        },
+        bytes,
+      );
+
+      expect(res.status).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ url: "https://v3.fal.media/files/xyz" });
+
+      const initiateCall = calls.find((c) => c.url.startsWith("https://rest.fal.ai/storage/upload/initiate"));
+      expect(initiateCall?.init.headers?.["Authorization"]).toBe("Key fal-secret-key");
+      expect(JSON.parse(initiateCall!.init.body as string)).toEqual({ content_type: "image/png", file_name: "a.png" });
+
+      const putCall = calls.find((c) => c.url === "https://v3.fal.media/upload/xyz");
+      expect(putCall?.init.method).toBe("PUT");
+      expect(putCall?.init.headers?.["Content-Type"]).toBe("image/png");
+      expect(Buffer.from(putCall!.init.body as Buffer)).toEqual(bytes);
+    });
+
+    it("over the 50MB cap → 413, upstream never called (enforced while buffering)", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const bytes = Buffer.alloc(50 * 1024 * 1024 + 1024, 1);
+
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: proxy.port,
+          path: "/fal/upload?filename=big.png",
+          method: "POST",
+          headers: { "Content-Type": "image/png", "Content-Length": bytes.length },
+        },
+        bytes,
+      );
+
+      expect(res.status).toBe(413);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("bad content-type → 400, upstream never called", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: proxy.port,
+          path: "/fal/upload?filename=a.txt",
+          method: "POST",
+          headers: { "Content-Type": "text/plain", "Content-Length": 3 },
+        },
+        Buffer.from("abc"),
+      );
+
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("initiate returns an off-allowlist signed URL → refused, PUT never attempted", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        calls.push(url);
+        if (url.startsWith("https://rest.fal.ai/storage/upload/initiate")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ upload_url: "https://evil.com/steal", file_url: "https://evil.com/files/x" }),
+          };
+        }
+        throw new Error("unexpected fetch: " + url);
+      });
+
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: proxy.port,
+          path: "/fal/upload?filename=a.png",
+          method: "POST",
+          headers: { "Content-Type": "image/png", "Content-Length": 3 },
+        },
+        Buffer.from([1, 2, 3]),
+      );
+
+      expect(res.status).toBe(502);
+      expect(calls).toHaveLength(1); // the off-allowlist URL was never fetched
+    });
+  });
+
   it("auth gate: bad proxyToken → 401 on /fal/submit (upstream not called)", async () => {
     const gated = await new Promise<{ server: http.Server; port: number }>((resolve) => {
       const server = createProxyServer({
@@ -573,6 +689,41 @@ describe("createProxyServer — fal routes", () => {
       );
       expect(res.status).toBe(401);
     } finally {
+      gated.server.close();
+    }
+  });
+
+  it("auth gate: bad proxyToken → 401 on /fal/upload (upstream not called)", async () => {
+    const gated = await new Promise<{ server: http.Server; port: number }>((resolve) => {
+      const server = createProxyServer({
+        apiKey: "secret-xyz",
+        allowOrigin: TEST_ORIGIN,
+        falKey: "fal-secret-key",
+        falUpstream: `http://127.0.0.1:${falUpstream.port}`,
+        proxyToken: "right-token",
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as { port: number };
+        resolve({ server, port: addr.port });
+      });
+    });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: gated.port,
+          path: "/fal/upload?filename=a.png",
+          method: "POST",
+          headers: { "Content-Type": "image/png", "Content-Length": 3, Authorization: "Bearer wrong-token" },
+        },
+        Buffer.from([1, 2, 3]),
+      );
+      expect(res.status).toBe(401);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
       gated.server.close();
     }
   });
@@ -637,6 +788,20 @@ describe("createProxyServer — fal routes without falKey configured", () => {
       path: "/fal/download?url=" + encodeURIComponent("https://v3.fal.media/files/x.mp4"),
       method: "GET",
     });
+    expect(res.status).toBe(503);
+  });
+
+  it("POST /fal/upload → 503", async () => {
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/fal/upload?filename=a.png",
+        method: "POST",
+        headers: { "Content-Type": "image/png", "Content-Length": 3 },
+      },
+      Buffer.from([1, 2, 3]),
+    );
     expect(res.status).toBe(503);
   });
 });

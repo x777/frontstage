@@ -812,6 +812,21 @@ const falSubmitUrl = (modelEndpoint) => `${FAL_QUEUE_BASE}/${modelEndpoint}`;
 const falStatusUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}/status`;
 const falResultUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}`;
 
+// Storage upload — REST host, not the queue host (verified against fal-js; see FAL_REST_BASE
+// in fal-wire.ts for the full contract note).
+const FAL_REST_BASE = "https://rest.fal.ai";
+const falUploadInitiateUrl = () => `${FAL_REST_BASE}/storage/upload/initiate?storage_type=fal-cdn-v3`;
+
+function isAllowedFalHost(url) {
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname;
+  return (
+    host === "fal.ai" || host.endsWith(".fal.ai") ||
+    host === "fal.run" || host.endsWith(".fal.run") ||
+    host === "fal.media" || host.endsWith(".fal.media")
+  );
+}
+
 ipcMain.handle("gen:falSubmit", async (_e, { modelEndpoint, input }) => {
   const key = loadKey("fal");
   if (!key) return { error: "fal key not configured" };
@@ -852,6 +867,44 @@ ipcMain.handle("gen:falDownload", async (_e, { url }) => {
     const res = await fetch(url);
     if (!res.ok) return { error: res.status + " " + (await res.text()) };
     return { data: await res.arrayBuffer() };
+  } catch (err) {
+    return { error: String(err) };
+  }
+});
+
+ipcMain.handle("gen:falUpload", async (_e, { bytes, contentType, fileName }) => {
+  const key = loadKey("fal");
+  if (!key) return { error: "fal key not configured" };
+  try {
+    const initiateRes = await fetch(falUploadInitiateUrl(), {
+      method: "POST",
+      headers: { Authorization: "Key " + key, "Content-Type": "application/json" },
+      body: JSON.stringify({ content_type: contentType, file_name: fileName }),
+    });
+    if (!initiateRes.ok) return { error: initiateRes.status + " " + (await initiateRes.text()) };
+    const initJson = await initiateRes.json();
+    const uploadUrl = initJson && typeof initJson.upload_url === "string" ? initJson.upload_url : null;
+    const fileUrl = initJson && typeof initJson.file_url === "string" ? initJson.file_url : null;
+    if (!uploadUrl || !fileUrl) return { error: "fal upload/initiate response missing upload_url/file_url" };
+
+    let uploadTarget, fileTarget;
+    try {
+      uploadTarget = new URL(uploadUrl);
+      fileTarget = new URL(fileUrl);
+    } catch {
+      return { error: "fal upload/initiate returned an invalid URL" };
+    }
+    if (!isAllowedFalHost(uploadTarget) || !isAllowedFalHost(fileTarget)) {
+      return { error: "fal upload URL host not allowed" };
+    }
+
+    const putRes = await fetch(uploadTarget.toString(), {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: Buffer.from(bytes),
+    });
+    if (!putRes.ok) return { error: "fal storage PUT failed: " + putRes.status };
+    return { url: fileUrl };
   } catch (err) {
     return { error: String(err) };
   }
