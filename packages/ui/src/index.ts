@@ -29,6 +29,8 @@ export { Editor } from "./editor/Editor.js";
 export type { EditorProps, EditorLibrary } from "./editor/Editor.js";
 export { FileMenu } from "./editor/FileMenu.js";
 export type { FileMenuProps } from "./editor/FileMenu.js";
+export { ProjectActivityView, ProjectActivityButton, relativeTime } from "./editor/ProjectActivityView.js";
+export type { ProjectActivityViewProps, ProjectActivityButtonProps } from "./editor/ProjectActivityView.js";
 export { createEditorHost } from "./editor/editor-host.js";
 export type { EditorMediaHost, EditorHostResult } from "./editor/editor-host.js";
 export type { ExportGateway, ExportTarget, ExportProgressFn } from "./editor/export-gateway.js";

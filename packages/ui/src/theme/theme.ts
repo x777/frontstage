@@ -126,6 +126,7 @@ export const theme = {
     sessionListMax: "var(--size-session-list-max)",
     generationPanelMin: "var(--size-generation-panel-min)",
     settingsPanelMin: "var(--size-settings-panel-min)",
+    activityMax: "var(--size-activity-max)",
     adjustTrack: "var(--size-adjust-track)",
     adjustThumb: "var(--size-adjust-thumb)",
     colorWheelPad: "var(--size-color-wheel-pad)",

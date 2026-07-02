@@ -28,7 +28,7 @@ const engineRef: { current: PlaybackEngine | null } = { current: null };
 const store = new EditorStore(defaultTimeline());
 const library = new MediaLibrary();
 const gateway = new DesktopGateway();
-const { host, wrappedGateway, appendGenerationLog } = createEditorHost(store, library, gateway);
+const { host, wrappedGateway, appendGenerationLog, getGenerationLog } = createEditorHost(store, library, gateway);
 const session = new ProjectSession(host, wrappedGateway);
 const exportGateway = new DesktopExportGateway();
 
@@ -202,6 +202,7 @@ function PalmierDesktopApp() {
       nativeFileMenu={isMac}
       exportGateway={exportGateway}
       engineRef={engineRef}
+      getGenerationLog={getGenerationLog}
       agent={{
         session: agentSession,
         model: agentModelId,

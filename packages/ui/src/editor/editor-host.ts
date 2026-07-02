@@ -22,6 +22,7 @@ export interface EditorHostResult {
   host: ProjectHost;
   wrappedGateway: WrappedGateway;
   appendGenerationLog: (entry: GenerationLogEntry) => void;
+  getGenerationLog: () => GenerationLogEntry[];
 }
 
 export function createEditorHost(
@@ -95,5 +96,10 @@ export function createEditorHost(
     _genLog.push(entry);
   }
 
-  return { host, wrappedGateway, appendGenerationLog };
+  // UI-facing read accessor — unwraps host.getGenerationLog()'s persist-shaped {version, entries}.
+  function getGenerationLog(): GenerationLogEntry[] {
+    return host.getGenerationLog().entries;
+  }
+
+  return { host, wrappedGateway, appendGenerationLog, getGenerationLog };
 }

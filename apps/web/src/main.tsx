@@ -1,6 +1,7 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession } from "@palmier/core";
+import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
@@ -26,9 +27,10 @@ interface PalmierAppProps {
   mentionItems: { id: string; label: string; kind: "media"; contextText: string }[];
   aiProxyUrl: string;
   engineRef: { current: PlaybackEngine | null };
+  getGenerationLog: () => GenerationLogEntry[];
 }
 
-function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
@@ -66,6 +68,7 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
       session={session}
       exportGateway={exportGateway}
       engineRef={engineRef}
+      getGenerationLog={getGenerationLog}
       agent={{
         session: agentSession,
         model: agentModel,
@@ -97,7 +100,7 @@ async function bootstrap() {
     | ((opts?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle | null>)
     | undefined;
   const gateway = new WebGateway(pickDirectory ? { pickDirectory } : undefined);
-  const { host, wrappedGateway, appendGenerationLog } = createEditorHost(store, library, gateway);
+  const { host, wrappedGateway, appendGenerationLog, getGenerationLog } = createEditorHost(store, library, gateway);
   const session = new ProjectSession(host, wrappedGateway);
 
   // Construct WebAiGateway; proxy URL from test-seam or env.
@@ -217,6 +220,7 @@ async function bootstrap() {
         mentionItems={mentionItems}
         aiProxyUrl={aiProxyUrl}
         engineRef={engineRef}
+        getGenerationLog={getGenerationLog}
       />
     </StrictMode>,
   );

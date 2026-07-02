@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { EditorStore, MediaManifestEntry, ProjectRef } from "@palmier/core";
+import type { EditorStore, GenerationLogEntry, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
 import type { AgentSession, ChatSessionStore, ImageGenerator, ModelEntry } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
 import type { KeyConfig, McpSettings } from "../agent/SettingsPanel.js";
+import { ProjectActivityButton } from "./ProjectActivityView.js";
 import {
   addClipCommand,
   dropTargetAt,
@@ -49,6 +50,7 @@ export interface EditorProps {
   nativeFileMenu?: boolean;
   exportGateway?: ExportGateway;
   engineRef?: { current: PlaybackEngine | null };
+  getGenerationLog?: () => GenerationLogEntry[];
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
   agent?: {
     session: AgentSession;
@@ -75,7 +77,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, engineRef, onReady, agent }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, engineRef, onReady, agent, getGenerationLog }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
@@ -429,6 +431,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
                   ⚙
                 </button>
               )}
+              {getGenerationLog && <ProjectActivityButton getGenerationLog={getGenerationLog} />}
             </>
           ) : undefined
         }
