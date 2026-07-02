@@ -7,6 +7,7 @@ test("generatingLabel maps each status kind", () => {
   expect(generatingLabel({ kind: "downloading" })).toBe("Downloading...");
   expect(generatingLabel({ kind: "rendering" })).toBe("Rendering...");
   expect(generatingLabel({ kind: "generating" })).toBe("Generating...");
+  expect(generatingLabel({ kind: "transcribing" })).toBe("Transcribing...");
   expect(generatingLabel({ kind: "failed", message: "boom" } satisfies GenerationStatus)).toBe("Generating...");
 });
 

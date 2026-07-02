@@ -46,6 +46,7 @@ export interface MediaManifestEntry {
   cachedRemoteURL?: string;
   cachedRemoteURLExpiresAt?: string; // ISO 8601
   generationStatus?: string; // serialized GenerationStatus; see media/generation-status.ts
+  transcriptPath?: string; // relative path of the cached TranscriptRecord; see media/transcript.ts
 }
 
 export interface MediaFolder {

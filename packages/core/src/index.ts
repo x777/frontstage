@@ -9,6 +9,7 @@ export * from "./text-style.js";
 export * from "./media.js";
 export * from "./media/generation-status.js";
 export * from "./media/generation-recovery.js";
+export * from "./media/transcript.js";
 export * from "./generation-log.js";
 export * from "./volume-scale.js";
 export * from "./clip.js";

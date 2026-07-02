@@ -53,6 +53,30 @@ describe("serialize", () => {
     expect(back.manifest.entries[0]!.generationInput?.backendJobId).toBe("job-1");
   });
 
+  test("a manifest entry with transcriptPath + a transcribing status survives the encode→decode round trip", () => {
+    const entry: MediaManifestEntry = {
+      id: "abc", name: "clip.mp4", type: "video", duration: 3,
+      source: { kind: "project", relativePath: "media/abc.mp4" },
+      transcriptPath: "media/abc.transcript.json",
+      generationStatus: "transcribing",
+    };
+    const doc: ProjectDoc = {
+      timeline: defaultTimeline(),
+      manifest: { ...emptyMediaManifest(), entries: [entry] },
+      generationLog: emptyGenerationLog(),
+    };
+    const files = encodeProjectFiles(doc);
+    const back = decodeProjectFiles({
+      timeline: files[PROJECT_FILES.timeline]!,
+      manifest: files[PROJECT_FILES.manifest]!,
+      generationLog: files[PROJECT_FILES.generationLog]!,
+    });
+    expect(back.manifestUnreadable).toBe(false);
+    expect(back.manifest.entries).toHaveLength(1);
+    expect(back.manifest.entries[0]!.transcriptPath).toBe("media/abc.transcript.json");
+    expect(back.manifest.entries[0]!.generationStatus).toBe("transcribing"); // persisted: not preparing/none
+  });
+
   test("an old-shape manifest entry (no generation fields) still parses", () => {
     const manifest = JSON.stringify({
       version: 2,

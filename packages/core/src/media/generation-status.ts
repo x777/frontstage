@@ -7,6 +7,7 @@ export type GenerationStatus =
   | { kind: "generating" }
   | { kind: "downloading" }
   | { kind: "rendering" }
+  | { kind: "transcribing" }
   | { kind: "failed"; message: string };
 
 const FAILED_PREFIX = "failed: ";
@@ -19,6 +20,8 @@ export function serializeGenerationStatus(status: GenerationStatus): string | un
       return undefined;
     case "failed":
       return `${FAILED_PREFIX}${status.message}`;
+    case "transcribing":
+      return "transcribing";
     default:
       return status.kind;
   }
@@ -34,6 +37,8 @@ export function parseGenerationStatus(raw: string | undefined): GenerationStatus
     case "downloading":
     case "rendering":
       return { kind: raw };
+    case "transcribing":
+      return { kind: "transcribing" };
     default:
       return raw.startsWith(FAILED_PREFIX)
         ? { kind: "failed", message: raw.slice(FAILED_PREFIX.length) }

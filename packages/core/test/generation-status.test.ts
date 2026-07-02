@@ -32,6 +32,10 @@ describe("status serialization", () => {
     expect(parseGenerationStatus(undefined)).toEqual({ kind: "none" });
     expect(parseGenerationStatus("weird")).toEqual({ kind: "none" });
   });
+  it("transcribing round-trips explicitly (not via the parse default)", () => {
+    expect(serializeGenerationStatus({ kind: "transcribing" })).toBe("transcribing");
+    expect(parseGenerationStatus("transcribing")).toEqual({ kind: "transcribing" });
+  });
 });
 
 describe("resume predicates", () => {
@@ -47,6 +51,10 @@ describe("resume predicates", () => {
     expect(isRecoveringGeneration(base({ generationInput: job, generationStatus: "failed: net" }))).toBe(false);
     expect(isRecoveringGeneration(base({ generationInput: gin({ backendJobId: "j1", resultURLs: ["u"] }), generationStatus: "failed: net" }))).toBe(true);
     expect(isRecoveringGeneration(base({ generationStatus: "generating" }))).toBe(false); // no job id
+  });
+  it("isRecoveringGeneration excludes transcribing (not resumable, even with a job id)", () => {
+    const job = gin({ backendJobId: "j1" });
+    expect(isRecoveringGeneration(base({ generationInput: job, generationStatus: "transcribing" }))).toBe(false);
   });
 });
 
@@ -70,5 +78,13 @@ describe("placeholder factory + normalize", () => {
     expect(normalizeEntryOnLoad(resumable).generationStatus).toBe("generating");
     const failed = base({ generationStatus: "failed: boom" }); // failed always survives load (visible error)
     expect(normalizeEntryOnLoad(failed).generationStatus).toBe("failed: boom");
+  });
+  it("normalizeEntryForSave keeps transcribing (persisted, unlike preparing)", () => {
+    const transcribing = base({ generationStatus: "transcribing" });
+    expect(normalizeEntryForSave(transcribing).generationStatus).toBe("transcribing");
+  });
+  it("normalizeEntryOnLoad clears a stuck transcribing status (no backendJobId → the generic stuck-reset)", () => {
+    const stuck = base({ generationStatus: "transcribing" }); // no backendJobId: transcribed entries never carry one
+    expect(normalizeEntryOnLoad(stuck).generationStatus).toBeUndefined();
   });
 });

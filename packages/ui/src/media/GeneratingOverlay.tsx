@@ -9,6 +9,8 @@ export function generatingLabel(status: GenerationStatus): string {
       return "Downloading...";
     case "rendering":
       return "Rendering...";
+    case "transcribing":
+      return "Transcribing...";
     default:
       return "Generating...";
   }
