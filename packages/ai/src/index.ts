@@ -40,3 +40,5 @@ export {
   extractResultError,
 } from "./generation/fal-wire.js";
 export { nextPollDelay } from "./generation/poll-schedule.js";
+export type { GenerationHost, GenerationServiceOptions, StartJobArgs } from "./generation/generation-service.js";
+export { GenerationService } from "./generation/generation-service.js";
