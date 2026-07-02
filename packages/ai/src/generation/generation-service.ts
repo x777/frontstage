@@ -74,8 +74,11 @@ export class GenerationService {
     }
 
     for (const placeholder of args.placeholders) {
+      // Re-read from the host: the submit await is a real gap, and a stale merge would drop fields.
+      const current = this.host.entries().find((e) => e.id === placeholder.id);
+      const genInput = (current?.generationInput ?? placeholder.generationInput) as GenerationInput;
       this.host.patchEntry(placeholder.id, {
-        generationInput: { ...(placeholder.generationInput as GenerationInput), backendJobId: jobId },
+        generationInput: { ...genInput, backendJobId: jobId },
         generationStatus: serializeGenerationStatus({ kind: "generating" }),
       });
     }
@@ -123,6 +126,10 @@ export class GenerationService {
       if (inFlight.length === 0) continue;
 
       const modelEndpoint = inFlight[0]!.generationInput!.model;
+      if (!modelEndpoint) {
+        console.warn(`generation resume: job ${job.backendJobId} has no model endpoint, skipping`);
+        continue;
+      }
       const group: JobGroup = {
         jobId: job.backendJobId,
         modelEndpoint,

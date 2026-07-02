@@ -333,4 +333,64 @@ describe("GenerationService.dispose", () => {
     const callsLater = gwEvents.filter((e) => e.startsWith("jobStatus")).length;
     expect(callsLater).toBe(2);
   });
+
+  test("the generating stamp merges from the HOST's current entry, not the caller's stale snapshot", async () => {
+    const placeholder = makePlaceholder("p1");
+    const { host, store } = makeHost([placeholder]);
+    // A concurrent host-side write lands during the submit await; it must survive the stamp.
+    const gateway: GenJobGateway = {
+      async submitJob() {
+        const cur = store.get("p1")!;
+        store.set("p1", { ...cur, generationInput: { ...cur.generationInput!, voice: "raced-in" } });
+        return { jobId: "job-1" };
+      },
+      async jobStatus() {
+        return { status: "running" };
+      },
+      async downloadResult() {
+        return new Uint8Array();
+      },
+      async hasKey() {
+        return true;
+      },
+    };
+    const svc = new GenerationService(gateway, host, { sleep: async () => {}, pollDelay: () => 0 });
+    await svc.startJob({ modelEndpoint: "fal-ai/model", input: {}, placeholders: [placeholder], model: "m" });
+    svc.dispose();
+    await flush();
+    const stamped = store.get("p1")!;
+    expect(stamped.generationInput?.backendJobId).toBe("job-1");
+    expect(stamped.generationInput?.voice).toBe("raced-in");
+  });
+
+  test("notifyComplete is NOT called when zero placeholders finalize", async () => {
+    const placeholder = makePlaceholder("p1");
+    const { host, events } = makeHost([placeholder]);
+    const { gateway } = makeGateway({
+      statuses: [{ status: "succeeded", resultUrls: ["https://x/f.png"] }],
+      download: async () => {
+        throw new Error("net down");
+      },
+    });
+    const svc = new GenerationService(gateway, host, { sleep: async () => {}, pollDelay: () => 0 });
+    await svc.startJob({ modelEndpoint: "fal-ai/model", input: {}, placeholders: [placeholder], model: "m" });
+    await flush();
+    await flush();
+    expect(events.some((e) => e.startsWith("failed:p1"))).toBe(true);
+    expect(events.some((e) => e.startsWith("notify:"))).toBe(false);
+  });
+
+  test("resumePending skips an in-flight group whose model endpoint is empty", async () => {
+    const stuck = makePlaceholder("p1");
+    stuck.generationStatus = "generating";
+    stuck.generationInput = { ...stuck.generationInput!, model: "", backendJobId: "job-x" };
+    const { host } = makeHost([stuck]);
+    const { gateway, events: gwEvents } = makeGateway({ statuses: [{ status: "running" }] });
+    const svc = new GenerationService(gateway, host, { sleep: async () => {}, pollDelay: () => 0 });
+    svc.resumePending();
+    await flush();
+    await flush();
+    expect(gwEvents.filter((e) => e.startsWith("jobStatus"))).toHaveLength(0);
+    svc.dispose();
+  });
 });
