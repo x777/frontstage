@@ -44,6 +44,8 @@ export class ProjectSession {
   // (non-empty, while failed) manifest is actually written.
   private manifestLoadFailed = false;
   private preservedManifestText: string | null = null;
+  /** Fires after a successful open(), once the doc is loaded — e.g. to resume pending generations. */
+  onOpened?: () => void;
 
   constructor(host: ProjectHost, gateway: ProjectGateway, untitledName = "Untitled") {
     this.host = host;
@@ -107,6 +109,7 @@ export class ProjectSession {
     this.advanceSaved();
     await this.gateway.addRecent(r);
     this.emit();
+    this.onOpened?.();
     return true;
   }
 

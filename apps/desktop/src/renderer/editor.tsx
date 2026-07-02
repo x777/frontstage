@@ -65,17 +65,12 @@ const generationServiceRef: { current: GenerationService } = {
 };
 (window as unknown as Record<string, unknown>).__generationService = generationServiceRef;
 
-// Wrap session.open so every successful open resumes in-flight jobs from the loaded manifest;
-// dispose+recreate first since there's no separate "close project" action to hook.
-const sessionOpen = session.open.bind(session);
-session.open = async (...args: Parameters<typeof sessionOpen>) => {
-  const ok = await sessionOpen(...args);
-  if (ok) {
-    generationServiceRef.current.dispose();
-    generationServiceRef.current = new GenerationService(genGateway, generationHost);
-    generationServiceRef.current.resumePending();
-  }
-  return ok;
+// Every successful open resumes in-flight jobs from the loaded manifest;
+// dispose+recreate first since there's no separate "close project" action.
+session.onOpened = () => {
+  generationServiceRef.current.dispose();
+  generationServiceRef.current = new GenerationService(genGateway, generationHost);
+  generationServiceRef.current.resumePending();
 };
 
 const executor = new ToolExecutor(buildCatalog(), {
