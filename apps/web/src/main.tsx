@@ -6,14 +6,15 @@ import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl } from "@palmier/ai";
-import type { GenerationHost } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService } from "@palmier/ai";
+import type { GenerationHost, TranscriptionHost } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
 import { WebExportGateway } from "./web-export.js";
 import { WebAiGateway } from "./web-ai-gateway.js";
 import { WebGenGateway } from "./web-gen-gateway.js";
+import { makeWebAudioExtractor } from "./web-audio-extract.js";
 import "./web-fs-test-entry.js";
 
 interface PalmierAppProps {
@@ -179,6 +180,19 @@ async function bootstrap() {
     uploadFile: (bytes, contentType, fileName) => genGateway.uploadFile(bytes, contentType, fileName),
     now: () => Date.now(),
   });
+
+  // Transcription orchestrator (fal-ai/wizper) — the M11B tools + M11D Captions tab consume this ref.
+  const transcriptionHost: TranscriptionHost = {
+    entries: () => library.getSnapshot().entries,
+    patchEntry: (id, patch) => library.patchEntry(id, patch),
+    writeDerived: (relativePath, bytes) => library.writeDerived(relativePath, bytes),
+    readDerived: (relativePath) => library.readDerived(relativePath),
+  };
+  const audioExtractor = makeWebAudioExtractor({ openBlob: (mediaRef) => library.byteSource.open(mediaRef) });
+  const transcriptionServiceRef: { current: TranscriptionService } = {
+    current: new TranscriptionService(genGateway, transcriptionHost, audioExtractor),
+  };
+  (window as unknown as Record<string, unknown>).__transcriptionService = transcriptionServiceRef;
 
   // SAME object threaded into the ToolExecutor context and the manual GenerationPanel — one facade, two callers.
   const generationFacade: GenerationFacade = {

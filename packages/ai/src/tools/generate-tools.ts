@@ -173,13 +173,17 @@ export function listModelsTool(): ToolSpec {
     }),
     run(args, _ctx) {
       const a = args as { kind?: GenModelKind };
-      const models = listGenModels(a.kind).map((entry) => ({
-        id: entry.id,
-        kind: entry.kind,
-        displayName: entry.displayName,
-        capabilities: entry.caps,
-        estimatedCost: representativeCost(entry),
-      }));
+      // "transcribe" (wizper) isn't a generate_*/upscale_media model choice — it's driven by its
+      // own TranscriptionService orchestration (M11B's transcript tools), so it's excluded here.
+      const models = listGenModels(a.kind)
+        .filter((entry) => entry.kind !== "transcribe")
+        .map((entry) => ({
+          id: entry.id,
+          kind: entry.kind,
+          displayName: entry.displayName,
+          capabilities: entry.caps,
+          estimatedCost: representativeCost(entry),
+        }));
       const payload = {
         note: "generate_video, generate_audio, generate_image, and upscale_media take the `id` field below as their `model` parameter.",
         models,

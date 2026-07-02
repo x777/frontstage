@@ -2,6 +2,10 @@ export interface JobStatus {
   status: "queued" | "running" | "succeeded" | "failed";
   resultUrls?: string[];
   errorMessage?: string;
+  // The raw succeeded-status result payload — orchestrators that read the JSON directly
+  // (transcription: the transcript IS the result, not a downloadable URL) consume this instead
+  // of resultUrls/downloadResult.
+  resultJson?: unknown;
 }
 
 export interface GenJobGateway {

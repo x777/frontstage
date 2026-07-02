@@ -29,9 +29,14 @@ export class DesktopGenGateway implements GenJobGateway {
     if (mapped === "queued" || mapped === "running") return { status: mapped };
 
     if (mapped === "completed") {
-      const urls = extractResultUrls(res.resultJson);
-      if (urls.length > 0) return { status: "succeeded", resultUrls: urls };
-      return { status: "failed", errorMessage: extractResultError(res.resultJson) ?? "Generation failed" };
+      // A COMPLETED fal job with no error field is a success even when its payload has no
+      // known *_url shape (extractResultUrls) — that shape sniffing only covers downloadable-media
+      // results; wizper's transcript-JSON result never matches it. resultJson is always attached
+      // so a resultUrls-shaped consumer (GenerationService) still fails per-placeholder on an empty
+      // resultUrls, while a resultJson-shaped consumer (TranscriptionService) reads the payload directly.
+      const error = extractResultError(res.resultJson);
+      if (error) return { status: "failed", errorMessage: error };
+      return { status: "succeeded", resultUrls: extractResultUrls(res.resultJson), resultJson: res.resultJson };
     }
 
     return { status: "failed", errorMessage: "Unknown fal status" };

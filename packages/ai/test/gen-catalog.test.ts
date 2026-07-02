@@ -14,8 +14,8 @@ describe("gen-catalog: lookups", () => {
     expect(genModel("does-not-exist")).toBeUndefined();
   });
 
-  test("listGenModels() returns all 8 curated entries", () => {
-    expect(listGenModels()).toHaveLength(8);
+  test("listGenModels() returns all 9 curated entries", () => {
+    expect(listGenModels()).toHaveLength(9);
   });
 
   test("listGenModels(kind) filters by kind", () => {
@@ -25,6 +25,7 @@ describe("gen-catalog: lookups", () => {
     expect(listGenModels("image").map((e) => e.id).sort()).toEqual(["flux-dev", "nano-banana"].sort());
     expect(listGenModels("audio").map((e) => e.id).sort()).toEqual(["elevenlabs-tts", "minimax-music"].sort());
     expect(listGenModels("upscale").map((e) => e.id)).toEqual(["seedvr-upscale"]);
+    expect(listGenModels("transcribe").map((e) => e.id)).toEqual(["wizper"]);
   });
 
   test("every entry has a non-empty id, endpoint, and displayName", () => {
@@ -107,6 +108,17 @@ describe("validateGenParams: naming allowed values", () => {
     expect(err).toBe("SeedVR Upscale requires a source video URL.");
   });
 
+  test("rejects transcribe params missing a source URL", () => {
+    const entry = genModel("wizper")!;
+    const err = validateGenParams(entry, { language: "en" });
+    expect(err).toBe("Wizper (Whisper v3) requires a source audio URL.");
+  });
+
+  test("accepts transcribe params with a source URL (returns null)", () => {
+    const entry = genModel("wizper")!;
+    expect(validateGenParams(entry, { sourceUrl: "https://example.com/a.wav" })).toBeNull();
+  });
+
   test("accepts a fully valid param set (returns null)", () => {
     const entry = genModel("veo3.1-fast")!;
     const err = validateGenParams(entry, { prompt: "x", duration: 8, aspectRatio: "16:9", resolution: "1080p" });
@@ -187,6 +199,12 @@ describe("estimateCredits: audio + flat + upscale", () => {
   test("upscalePerSecond clamps duration to a minimum of 1 second", () => {
     const entry = genModel("seedvr-upscale")!;
     expect(estimateCredits(entry, {})).toBe(5);
+  });
+
+  test("wizper's audioPerSecond rate ceils the source duration", () => {
+    const entry = genModel("wizper")!;
+    // 0.01 cr/s * 130s = 1.3 -> ceil 2.
+    expect(estimateCredits(entry, { duration: 130 })).toBe(2);
   });
 });
 
@@ -284,6 +302,27 @@ describe("buildInput: every entry maps normalized params to its fal body", () =>
       video_url: "https://example.com/video.mp4",
       upscale_mode: "target",
       target_resolution: "1440p",
+    });
+  });
+
+  test("wizper without a language override omits the field (auto-detect)", () => {
+    const entry = genModel("wizper")!;
+    expect(entry.buildInput({ sourceUrl: "https://example.com/a.wav" })).toEqual({
+      audio_url: "https://example.com/a.wav",
+      task: "transcribe",
+      chunk_level: "segment",
+      merge_chunks: false,
+    });
+  });
+
+  test("wizper with a language override adds the field", () => {
+    const entry = genModel("wizper")!;
+    expect(entry.buildInput({ sourceUrl: "https://example.com/a.wav", language: "fr" })).toEqual({
+      audio_url: "https://example.com/a.wav",
+      task: "transcribe",
+      chunk_level: "segment",
+      merge_chunks: false,
+      language: "fr",
     });
   });
 });

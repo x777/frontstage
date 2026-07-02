@@ -20,6 +20,7 @@ const PROMPT_PLACEHOLDER: Record<GenModelKind, string> = {
   image: "Describe the image…",
   audio: "Text to speak, or a style description…",
   upscale: "",
+  transcribe: "", // no tab for this kind yet — the Captions tab (M11D) owns transcription UI
 };
 
 // The exact ToolContext["generation"] shape — the manual panel submits through the same facade the tools use.
@@ -179,6 +180,9 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
         const srcDuration = source ? (source.type === "image" ? 1 : source.duration) : 1;
         return { duration: srcDuration, resolution: effResolution };
       }
+      case "transcribe":
+        // not reachable via this panel yet — no KIND_TABS entry (M11D's Captions tab owns this)
+        return {};
     }
   }, [entry, prompt, duration, effAspect, effResolution, effVoice, lyrics, instrumental, numImages, upscaleMediaId, upscaleCandidates]);
 

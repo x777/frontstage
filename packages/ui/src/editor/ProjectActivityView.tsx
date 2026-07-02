@@ -18,7 +18,7 @@ export function relativeTime(iso: string | null, now: Date): string {
   return `${Math.floor(seconds / DAY_S)}d ago`;
 }
 
-const KIND_GLYPH: Record<GenModelKind, string> = { video: "V", image: "I", audio: "A", upscale: "U" };
+const KIND_GLYPH: Record<GenModelKind, string> = { video: "V", image: "I", audio: "A", upscale: "U", transcribe: "T" };
 
 function kindGlyph(modelId: string): string {
   const kind = genModel(modelId)?.kind;

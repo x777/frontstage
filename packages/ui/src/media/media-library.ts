@@ -88,6 +88,26 @@ export class MediaLibrary {
     return this._gateway.readMedia(relativePath);
   }
 
+  // Derived-data write (transcripts, etc.): rides the same _bytes/pending-persist flow as real
+  // media — the project save picks it up like any other unpersisted path.
+  writeDerived(relativePath: string, bytes: Uint8Array): void {
+    this._bytes.set(relativePath, bytes);
+    this.emit();
+  }
+
+  // In-memory bytes if still held, else the gateway; null (not a throw) on either miss — callers
+  // treat a miss as "not cached yet", not an error.
+  async readDerived(relativePath: string): Promise<Uint8Array | null> {
+    const bytes = this._bytes.get(relativePath);
+    if (bytes) return bytes;
+    if (!this._gateway) return null;
+    try {
+      return await this._gateway.readMedia(relativePath);
+    } catch {
+      return null;
+    }
+  }
+
   get byteSource(): MediaByteSource {
     return {
       open: async (ref: string) => {

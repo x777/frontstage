@@ -74,15 +74,30 @@ describe("WebGenGateway", () => {
       expect(status.resultUrls).toEqual(["https://v3.fal.media/files/x.mp4"]);
     });
 
-    it("maps completed without urls to failed", async () => {
+    it("maps completed without urls to succeeded with empty resultUrls (e.g. wizper's transcript JSON has no *_url shape)", async () => {
       stubFetch(() => ({
         ok: true,
         status: 200,
-        json: async () => ({ status: { status: "COMPLETED" }, resultJson: {} }),
+        json: async () => ({ status: { status: "COMPLETED" }, resultJson: { text: "hello" } }),
       }));
       const gw = new WebGenGateway("http://localhost:8787");
       const status = await gw.jobStatus("fal-ai/veo3/fast", "job-1");
-      expect(status.status).toBe("failed");
+      expect(status.status).toBe("succeeded");
+      expect(status.resultUrls).toEqual([]);
+      expect(status.resultJson).toEqual({ text: "hello" });
+    });
+
+    it("always attaches resultJson on a succeeded status, even when urls are present", async () => {
+      stubFetch(() => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: { status: "COMPLETED" }, resultJson: { video: { url: "https://v3.fal.media/files/x.mp4" } } }),
+      }));
+      const gw = new WebGenGateway("http://localhost:8787");
+      const status = await gw.jobStatus("fal-ai/veo3/fast", "job-1");
+      expect(status.status).toBe("succeeded");
+      expect(status.resultUrls).toEqual(["https://v3.fal.media/files/x.mp4"]);
+      expect(status.resultJson).toEqual({ video: { url: "https://v3.fal.media/files/x.mp4" } });
     });
 
     it("maps completed with an error field to failed + errorMessage", async () => {

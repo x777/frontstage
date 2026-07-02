@@ -168,3 +168,68 @@ test("readMedia: throws when no gateway is configured", async () => {
   const lib = new MediaLibrary();
   await expect(lib.readMedia("media/a.mp4")).rejects.toThrow(/gateway/);
 });
+
+test("writeDerived: lands bytes in pendingMedia at the given path and emits", () => {
+  const lib = new MediaLibrary();
+  let calls = 0;
+  lib.subscribe(() => calls++);
+
+  const bytes = new Uint8Array([1, 2, 3]);
+  lib.writeDerived("media/a.transcript.json", bytes);
+
+  expect(lib.pendingMedia().get("media/a.transcript.json")).toEqual(bytes);
+  expect(calls).toBe(1);
+});
+
+test("writeDerived: overwrites a prior write at the same path", () => {
+  const lib = new MediaLibrary();
+  lib.writeDerived("media/a.transcript.json", new Uint8Array([1]));
+  lib.writeDerived("media/a.transcript.json", new Uint8Array([2, 2]));
+
+  expect(lib.pendingMedia().get("media/a.transcript.json")).toEqual(new Uint8Array([2, 2]));
+});
+
+test("readDerived: returns in-memory bytes written via writeDerived without touching the gateway", async () => {
+  const lib = new MediaLibrary();
+  const reads: string[] = [];
+  lib.setGateway({
+    writeMedia: async () => {},
+    readMedia: async (rel) => { reads.push(rel); return new Uint8Array([9]); },
+    hasMedia: async () => true,
+  });
+  lib.writeDerived("media/a.transcript.json", new Uint8Array([1, 2, 3]));
+
+  const bytes = await lib.readDerived("media/a.transcript.json");
+
+  expect(bytes).toEqual(new Uint8Array([1, 2, 3]));
+  expect(reads).toEqual([]);
+});
+
+test("readDerived: falls back to the gateway when not held in memory", async () => {
+  const lib = new MediaLibrary();
+  lib.setGateway({
+    writeMedia: async () => {},
+    readMedia: async () => new Uint8Array([7, 7]),
+    hasMedia: async () => true,
+  });
+
+  const bytes = await lib.readDerived("media/a.transcript.json");
+
+  expect(bytes).toEqual(new Uint8Array([7, 7]));
+});
+
+test("readDerived: null (not a throw) when neither in-memory bytes nor a gateway are available", async () => {
+  const lib = new MediaLibrary();
+  await expect(lib.readDerived("media/missing.transcript.json")).resolves.toBeNull();
+});
+
+test("readDerived: null when the gateway rejects (e.g. file not found)", async () => {
+  const lib = new MediaLibrary();
+  lib.setGateway({
+    writeMedia: async () => {},
+    readMedia: async () => { throw new Error("not found"); },
+    hasMedia: async () => false,
+  });
+
+  await expect(lib.readDerived("media/missing.transcript.json")).resolves.toBeNull();
+});

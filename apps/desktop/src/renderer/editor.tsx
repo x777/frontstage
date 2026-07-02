@@ -5,8 +5,8 @@ import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl } from "@palmier/ai";
-import type { GenerationHost, StartJobArgs } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService } from "@palmier/ai";
+import type { GenerationHost, StartJobArgs, TranscriptionHost } from "@palmier/ai";
 
 declare global {
   interface Window {
@@ -20,9 +20,11 @@ declare global {
   }
 }
 import { DesktopGateway } from "./desktop-gateway.js";
+import type { DesktopProjectRef } from "./desktop-gateway.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
 import { DesktopGenGateway } from "./desktop-gen-gateway.js";
+import { makeDesktopAudioExtractor } from "./desktop-audio-extract.js";
 import type { PlaybackEngine } from "@palmier/engine";
 
 const engineRef: { current: PlaybackEngine | null } = { current: null };
@@ -83,6 +85,31 @@ const entryUrl = makeEntryUrl({
   uploadFile: (bytes, contentType, fileName) => genGateway.uploadFile(bytes, contentType, fileName),
   now: () => Date.now(),
 });
+
+// Transcription orchestrator (fal-ai/wizper) — the M11B tools + M11D Captions tab consume this ref.
+const transcriptionHost: TranscriptionHost = {
+  entries: () => library.getSnapshot().entries,
+  patchEntry: (id, patch) => library.patchEntry(id, patch),
+  writeDerived: (relativePath, bytes) => library.writeDerived(relativePath, bytes),
+  readDerived: (relativePath) => library.readDerived(relativePath),
+};
+const audioExtractor = makeDesktopAudioExtractor({
+  libraryBytes: (mediaRef) => {
+    const entry = library.entry(mediaRef);
+    return entry ? library.bytesFor(entry) ?? null : null;
+  },
+  resolvePath: (mediaRef) => {
+    const entry = library.entry(mediaRef);
+    if (!entry) return null;
+    if (entry.source.kind === "external") return entry.source.absolutePath;
+    const ref = session.getState().ref as DesktopProjectRef | null;
+    return ref ? `${ref.path}/${entry.source.relativePath}` : null;
+  },
+});
+const transcriptionServiceRef: { current: TranscriptionService } = {
+  current: new TranscriptionService(genGateway, transcriptionHost, audioExtractor),
+};
+(window as unknown as Record<string, unknown>).__transcriptionService = transcriptionServiceRef;
 
 // SAME object threaded into the ToolExecutor context and the manual GenerationPanel — one facade, two callers.
 const generationFacade = {
