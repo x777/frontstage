@@ -103,6 +103,29 @@ describe("generate_video tool", () => {
     expect(textOf(result)).toBe("Veo 3.1 Fast does not support duration '999s'. Valid: 4s, 6s, 8s.");
   });
 
+  test("an OMITTED duration is priced at the model's default — the gate cannot be bypassed", async () => {
+    const tool = generateVideoTool();
+    const { facade, addPlaceholderCalls, startJobCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade });
+
+    // veo3.1-fast default duration = caps.durations[0] = 4s × 15 = 60 credits > 50 threshold.
+    // Before the fix this estimated 0 (undefined duration) and submitted without confirmation.
+    const result = await tool.run({ prompt: "a cat", model: "veo3.1-fast" }, ctx);
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("Confirmation required");
+    expect(textOf(result)).toContain("60 credits");
+    expect(addPlaceholderCalls).toHaveLength(0);
+    expect(startJobCalls).toHaveLength(0);
+
+    // Confirmed: the recorded cost is the real default-duration estimate, not 0.
+    const confirmed = await tool.run({ prompt: "a cat", model: "veo3.1-fast", confirm: true }, ctx);
+    expect(confirmed.isError).toBe(false);
+    expect(startJobCalls).toHaveLength(1);
+    expect(startJobCalls[0]!.costCredits).toBe(60);
+    expect(startJobCalls[0]!.placeholders[0]!.duration).toBe(4);
+  });
+
   test("over threshold without confirm returns a non-error confirmation and does not submit", async () => {
     const tool = generateVideoTool();
     const { facade, addPlaceholderCalls, startJobCalls } = makeFacade();

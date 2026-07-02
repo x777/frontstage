@@ -76,9 +76,12 @@ export function generateVideoTool(): ToolSpec {
       const entry = genModel(a.model);
       if (!entry || entry.kind !== "video") return unknownModelError(a.model, "video");
 
+      // Resolve the effective duration BEFORE estimating: an omitted duration must be
+      // priced at the model's default, not 0 — otherwise the cost gate is bypassable.
+      const duration = a.duration ?? entry.caps.durations?.[0] ?? 5;
       const params: GenToolParams = {
         prompt: a.prompt,
-        duration: a.duration,
+        duration,
         aspectRatio: a.aspectRatio,
         resolution: a.resolution,
       };
@@ -102,12 +105,6 @@ export function generateVideoTool(): ToolSpec {
         }
         if (refs.length > 0) params.imageUrls = refs;
       }
-
-      // No explicit "default duration" field on GenModelEntry — the first allowed duration
-      // is the most sensible fallback, and pinning it here keeps the placeholder's duration
-      // consistent with what buildInput actually sends (rather than buildInput's own internal default).
-      const duration = params.duration ?? entry.caps.durations?.[0] ?? 5;
-      params.duration = duration;
 
       const input = entry.buildInput(params);
 
@@ -297,12 +294,16 @@ export function generateAudioTool(): ToolSpec {
       const entry = genModel(a.model);
       if (!entry || entry.kind !== "audio") return unknownModelError(a.model, "audio");
 
+      // Swift's TTS/music placeholder-duration heuristic (Defaults.audio{TTS,Music}DurationSeconds):
+      // models that support lyrics are music (long-form), everything else is TTS (short-form).
+      // Resolved BEFORE the estimate so a future duration-priced audio model can't bypass the gate.
+      const duration = a.duration ?? (entry.caps.supportsLyrics ? 60 : 10);
       const params: GenToolParams = {
         prompt: a.prompt,
         voice: a.voice,
         lyrics: a.lyrics,
         instrumental: a.instrumental,
-        duration: a.duration,
+        duration,
       };
 
       const validationError = validateGenParams(entry, params);
@@ -310,11 +311,6 @@ export function generateAudioTool(): ToolSpec {
 
       const estimate = estimateCredits(entry, params);
       if (estimate > ctx.generation.confirmThreshold && !a.confirm) return confirmationResult(estimate);
-
-      // Swift's TTS/music placeholder-duration heuristic (Defaults.audio{TTS,Music}DurationSeconds):
-      // models that support lyrics are music (long-form), everything else is TTS (short-form).
-      const duration = a.duration ?? (entry.caps.supportsLyrics ? 60 : 10);
-      params.duration = duration;
 
       const input = entry.buildInput(params);
 
