@@ -48,6 +48,32 @@ describe("captionSpecsForClip — frame math", () => {
     });
   });
 
+  it("rebuilds content from kept words when edge words drop (renderer alignment)", () => {
+    const clip = makeClip({ id: "c1", startFrame: 0, durationFrames: 30 }); // 1s visible window @ 30fps
+    const specs = captionSpecsForClip(
+      clip,
+      0,
+      [
+        phrase({
+          text: "hello there world",
+          startSec: 0.2,
+          endSec: 1.4,
+          words: [
+            { text: "hello", startSec: 0.2, endSec: 0.5 },
+            { text: "there", startSec: 0.5, endSec: 0.9 },
+            { text: "world", startSec: 1.1, endSec: 1.4 }, // outside the 1s window -> dropped
+          ],
+        }),
+      ],
+      30,
+    );
+    expect(specs).toHaveLength(1);
+    // content word count MUST equal wordTimings length or the renderer falls back to static.
+    expect(specs[0]!.content).toBe("hello there");
+    expect(specs[0]!.wordTimings).toHaveLength(2);
+    expect(specs[0]!.content.split(/\s+/)).toHaveLength(specs[0]!.wordTimings.length);
+  });
+
   it("maps through trim and speed like clipTimelineFrame", () => {
     // trimStart 15 frames (0.5s), speed 2x, so 30 timeline frames covers 60 source frames (2s):
     // visible source window is [0.5s, 2.5s).

@@ -88,19 +88,23 @@ export function captionSpecsForClip(
     const durationFrames = Math.max(1, Math.min(clipEnd, e) - Math.max(clip.startFrame, s));
 
     const wordTimings: CaptionWordTiming[] = [];
+    let droppedWords = false;
     for (const w of p.words) {
       const wordStartSource = w.startSec * fps;
       const wordEndSource = w.endSec * fps;
-      if (!(wordEndSource > visible.start && wordStartSource < visible.end)) continue;
+      if (!(wordEndSource > visible.start && wordStartSource < visible.end)) { droppedWords = true; continue; }
       const ws = clampedTimelineFrame(w.startSec);
       const we = clampedTimelineFrame(w.endSec);
       const rs = Math.min(Math.max(0, ws - s), durationFrames);
       const re = Math.min(Math.max(rs, we - s), durationFrames);
-      if (!(re > rs)) continue;
+      if (!(re > rs)) { droppedWords = true; continue; }
       wordTimings.push({ text: w.text, startFrame: rs, endFrame: re });
     }
 
-    specs.push({ content: p.text, startFrame: s, durationFrames, wordTimings });
+    // When edge words drop, rebuild content from the kept words: the renderer requires
+    // content word count == wordTimings length, else it falls back to a static raster.
+    const content = droppedWords && wordTimings.length > 0 ? wordTimings.map((w) => w.text).join(" ") : p.text;
+    specs.push({ content, startFrame: s, durationFrames, wordTimings });
   }
   return specs;
 }
