@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { EditorStore, defaultTimeline } from "@palmier/core";
 import type { MediaManifest, MediaManifestEntry } from "@palmier/core";
-import { generateVideoTool, upscaleMediaTool, generateAudioTool } from "../src/tools/generate-tools.js";
+import { generateVideoTool, upscaleMediaTool, generateAudioTool, listModelsTool } from "../src/tools/generate-tools.js";
 import type { ToolContext } from "../src/index.js";
 import type { StartJobArgs } from "../src/generation/generation-service.js";
 
@@ -435,5 +435,65 @@ describe("generate_audio tool", () => {
 
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("aud-42");
+  });
+});
+
+// ── list_models ─────────────────────────────────────────────────────────────
+
+describe("list_models tool", () => {
+  test("has the correct name", () => {
+    expect(listModelsTool().name).toBe("list_models");
+  });
+
+  test("with no kind, returns every catalog entry", async () => {
+    const tool = listModelsTool();
+    const ctx = makeCtx();
+
+    const result = await tool.run({}, ctx);
+
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse(textOf(result)) as { models: { kind: string }[] };
+    const kinds = new Set(payload.models.map((m) => m.kind));
+    expect(kinds).toEqual(new Set(["video", "image", "audio", "upscale"]));
+  });
+
+  test("with kind: video, returns only video entries", async () => {
+    const tool = listModelsTool();
+    const ctx = makeCtx();
+
+    const result = await tool.run({ kind: "video" }, ctx);
+
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse(textOf(result)) as { models: { id: string; kind: string }[] };
+    expect(payload.models.length).toBeGreaterThan(0);
+    for (const m of payload.models) expect(m.kind).toBe("video");
+    expect(payload.models.map((m) => m.id)).toContain("veo3.1-fast");
+  });
+
+  test("each entry carries id, kind, displayName, capabilities, and estimatedCost", async () => {
+    const tool = listModelsTool();
+    const ctx = makeCtx();
+
+    const result = await tool.run({ kind: "video" }, ctx);
+
+    const payload = JSON.parse(textOf(result)) as {
+      models: { id: string; kind: string; displayName: string; capabilities: unknown; estimatedCost: string }[];
+    };
+    const veo = payload.models.find((m) => m.id === "veo3.1-fast")!;
+    expect(veo.kind).toBe("video");
+    expect(veo.displayName).toBe("Veo 3.1 Fast");
+    expect(veo.capabilities).toMatchObject({ durations: [4, 6, 8] });
+    expect(typeof veo.estimatedCost).toBe("string");
+    expect(veo.estimatedCost.length).toBeGreaterThan(0);
+  });
+
+  test("the note mentions that generate_*/upscale tools take the id as model", async () => {
+    const tool = listModelsTool();
+    const ctx = makeCtx();
+
+    const result = await tool.run({}, ctx);
+
+    const payload = JSON.parse(textOf(result)) as { note: string };
+    expect(payload.note).toContain("model");
   });
 });

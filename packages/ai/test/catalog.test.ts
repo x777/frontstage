@@ -26,6 +26,10 @@ const EXPECTED_NAMES = [
   "set_keyframes",
   "add_texts",
   "generate_image",
+  "generate_video",
+  "generate_audio",
+  "upscale_media",
+  "list_models",
   "ripple_delete_ranges",
   "insert_clips",
   "apply_color",
@@ -89,15 +93,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 20 specs", () => {
+  test("returns exactly 24 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(20);
+    expect(catalog).toHaveLength(24);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(20);
+    expect(new Set(names).size).toBe(24);
   });
 
   test("names match the expected list exactly", () => {

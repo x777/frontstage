@@ -1,11 +1,10 @@
 /**
- * buildCatalog assembles all 20 currently available tools.
+ * buildCatalog assembles all 24 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - import_media        — plan 6.2 (media import pipeline)
  *   - folder ops          — plan 6.2 (media folder CRUD)
  *   - inspect_timeline    — plan 6.3 (deep render analysis)
- *   - list_models         — plan 6.6 (model registry)
  *   - add_captions        — plan 6.6 (caption track + ASR)
  */
 
@@ -15,6 +14,7 @@ import { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClips
 import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./property-tools.js";
 import { removeTracksTool } from "./track-tools.js";
 import { generateImageTool } from "./generate-image-tool.js";
+import { generateVideoTool, generateAudioTool, upscaleMediaTool, listModelsTool } from "./generate-tools.js";
 import { rippleDeleteRangesTool, insertClipsTool } from "./ripple-tools.js";
 import { applyColorTool, applyEffectTool, inspectColorTool } from "./color-tools.js";
 
@@ -41,6 +41,10 @@ export function buildCatalog(): ToolSpec[] {
     addTextsTool(),
     // AI generation tools
     generateImageTool(),
+    generateVideoTool(),
+    generateAudioTool(),
+    upscaleMediaTool(),
+    listModelsTool(),
     // Color / effect tools
     applyColorTool(),
     applyEffectTool(),

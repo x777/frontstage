@@ -133,6 +133,65 @@ export function generateVideoTool(): ToolSpec {
   };
 }
 
+// A single representative formatCredits() line per pricing kind, so list_models can show
+// a cost without requiring the agent to supply a full param set up front.
+function representativeCost(entry: GenModelEntry): string {
+  const pricing = entry.pricing;
+  switch (pricing.kind) {
+    case "perSecond": {
+      const resolution = entry.caps.resolutions?.[0];
+      const estimate = estimateCredits(entry, { duration: 1, resolution });
+      return resolution ? `${formatCredits(estimate)}/s at ${resolution}` : `${formatCredits(estimate)}/s`;
+    }
+    case "perImage": {
+      const estimate = estimateCredits(entry, { numImages: 1 });
+      return `${formatCredits(estimate)}/image`;
+    }
+    case "audioPerSecond": {
+      const estimate = estimateCredits(entry, { duration: 1 });
+      return `${formatCredits(estimate)}/s`;
+    }
+    case "audioPerThousandChars": {
+      const estimate = estimateCredits(entry, { prompt: "x".repeat(1000) });
+      return `${formatCredits(estimate)} per 1000 chars`;
+    }
+    case "flat": {
+      const estimate = estimateCredits(entry, {});
+      return formatCredits(estimate);
+    }
+    case "upscalePerSecond": {
+      const estimate = estimateCredits(entry, { duration: 1 });
+      return `${formatCredits(estimate)}/s`;
+    }
+  }
+}
+
+export function listModelsTool(): ToolSpec {
+  return {
+    name: "list_models",
+    description:
+      "Call this before any generate_*/upscale call to discover models, capabilities, and costs.",
+    inputSchema: z.object({
+      kind: z.enum(["video", "image", "audio", "upscale"]).optional(),
+    }),
+    run(args, _ctx) {
+      const a = args as { kind?: GenModelKind };
+      const models = listGenModels(a.kind).map((entry) => ({
+        id: entry.id,
+        kind: entry.kind,
+        displayName: entry.displayName,
+        capabilities: entry.caps,
+        estimatedCost: representativeCost(entry),
+      }));
+      const payload = {
+        note: "generate_video, generate_audio, generate_image, and upscale_media take the `id` field below as their `model` parameter.",
+        models,
+      };
+      return ok(JSON.stringify(payload, null, 2));
+    },
+  };
+}
+
 export function upscaleMediaTool(): ToolSpec {
   return {
     name: "upscale_media",
