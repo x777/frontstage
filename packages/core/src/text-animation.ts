@@ -1,4 +1,5 @@
 import { smoothstep } from "./keyframe.js";
+import type { RGBA } from "./text-style.js";
 
 // Swift: Models/TextAnimation.swift TextAnimation.Preset (CaseIterable order)
 export const TEXT_ANIMATION_PRESETS = [
@@ -33,6 +34,15 @@ export interface TextLayerAnim {
 // yet carry it, so T1 hardcodes the Swift default rather than partially porting the field — see
 // task-1-report.md for the rationale.
 const PER_WORD_FRAMES = 6;
+
+// Swift: TextAnimation.defaultHighlight — used when Clip.textAnimation.highlightColor is unset.
+export const DEFAULT_HIGHLIGHT_COLOR: RGBA = { r: 1, g: 0.85, b: 0, a: 1 };
+
+/** Whitespace-run tokenization, matching Swift's `TextFrameRenderer.words(in:)` granularity — the
+ * shared word-count/index basis for wordTimings alignment (render-plan) and raster layout (rasterizer). */
+export function splitTextWords(text: string): string[] {
+  return text.split(/\s+/).filter((w) => w.length > 0);
+}
 
 const ENTRANCE_PRESETS: ReadonlySet<TextAnimationPreset> = new Set(["none", "fadeIn", "popIn", "slideUp"]);
 

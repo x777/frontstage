@@ -1,4 +1,4 @@
-import { affineTransform, buildRenderPlan, defaultCrop, frameToSeconds, type Clip, type Size, type Timeline } from "@palmier/core";
+import { affineTransform, applyTextLayerAnim, buildRenderPlan, defaultCrop, frameToSeconds, type Clip, type Size, type Timeline } from "@palmier/core";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
 import { buildVideoChunks, VideoDecodeManager } from "../decode/video-decoder.js";
 import { ImageSource } from "../media/image-source.js";
@@ -200,9 +200,10 @@ export class SourceCoordinator {
     }
 
     for (const textLayer of plan.textLayers) {
-      const tf = affineTransform(textLayer.transform, renderSize, renderSize);
+      const { transform, opacity } = applyTextLayerAnim(textLayer);
+      const tf = affineTransform(transform, renderSize, renderSize);
       tagged.push({
-        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity: textLayer.opacity, crop: defaultCrop() },
+        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity, crop: defaultCrop() },
         zIndex: textLayer.zIndex,
       });
     }
@@ -268,9 +269,10 @@ export class SourceCoordinator {
     }
 
     for (const textLayer of plan.textLayers) {
-      const tf = affineTransform(textLayer.transform, renderSize, renderSize);
+      const { transform, opacity } = applyTextLayerAnim(textLayer);
+      const tf = affineTransform(transform, renderSize, renderSize);
       tagged.push({
-        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity: textLayer.opacity, crop: defaultCrop() },
+        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity, crop: defaultCrop() },
         zIndex: textLayer.zIndex,
       });
     }
