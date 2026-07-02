@@ -28,3 +28,15 @@ export type {
 export { AgentSession } from "./agent/session.js";
 export type { ChatSessionDoc, ChatSessionIndexEntry } from "./agent/session-store.js";
 export { ChatSessionStore } from "./agent/session-store.js";
+export type { JobStatus, GenJobGateway } from "./generation/gen-gateway.js";
+export {
+  FAL_QUEUE_BASE,
+  falSubmitRequest,
+  falStatusRequest,
+  falResultRequest,
+  parseFalSubmit,
+  mapFalStatus,
+  extractResultUrls,
+  extractResultError,
+} from "./generation/fal-wire.js";
+export { nextPollDelay } from "./generation/poll-schedule.js";
