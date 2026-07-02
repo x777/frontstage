@@ -1,10 +1,12 @@
 import { buildChatBody, parseOpenRouterStream, buildImageBody, parseImageResponse } from "@palmier/ai";
 import type { AiGateway, ChatRequest, StreamEvent, ImageRequest, ImageResult } from "@palmier/ai";
 
+export type AiKeyProvider = "openrouter" | "fal";
+
 interface DesktopAIBridge {
-  setKey(key: string): Promise<void>;
-  hasKey(): Promise<boolean>;
-  clearKey(): Promise<void>;
+  setKey(key: string, provider?: AiKeyProvider): Promise<void>;
+  hasKey(provider?: AiKeyProvider): Promise<boolean>;
+  clearKey(provider?: AiKeyProvider): Promise<void>;
   streamChat(id: string, body: object): void;
   onChunk(cb: (msg: { id: string; data?: Uint8Array; done?: boolean; error?: string }) => void): () => void;
   generateImage(body: object): Promise<unknown>;

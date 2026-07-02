@@ -21,9 +21,9 @@ contextBridge.exposeInMainWorld("desktopExport", {
 });
 
 contextBridge.exposeInMainWorld("desktopAI", {
-  setKey: (k) => ipcRenderer.invoke("ai:setKey", k),
-  hasKey: () => ipcRenderer.invoke("ai:hasKey"),
-  clearKey: () => ipcRenderer.invoke("ai:clearKey"),
+  setKey: (k, provider) => ipcRenderer.invoke("ai:setKey", k, provider),
+  hasKey: (provider) => ipcRenderer.invoke("ai:hasKey", provider),
+  clearKey: (provider) => ipcRenderer.invoke("ai:clearKey", provider),
   streamChat: (id, body) => ipcRenderer.send("ai:streamChat", { id, body }),
   onChunk: (cb) => {
     const h = (_e, m) => cb(m);
@@ -31,6 +31,12 @@ contextBridge.exposeInMainWorld("desktopAI", {
     return () => ipcRenderer.removeListener("ai:chunk", h);
   },
   generateImage: (body) => ipcRenderer.invoke("ai:generateImage", body),
+});
+
+contextBridge.exposeInMainWorld("desktopGen", {
+  falSubmit: (modelEndpoint, input) => ipcRenderer.invoke("gen:falSubmit", { modelEndpoint, input }),
+  falStatus: (modelEndpoint, jobId) => ipcRenderer.invoke("gen:falStatus", { modelEndpoint, jobId }),
+  falDownload: (url) => ipcRenderer.invoke("gen:falDownload", { url }),
 });
 
 contextBridge.exposeInMainWorld("desktopMcp", {

@@ -695,50 +695,66 @@ ipcMain.handle("export:finish", async (_event) => {
 });
 
 // ── AI IPC (DesktopAiGateway) ────────────────────────────────────────────────
-// The OpenRouter API key is stored exclusively in the main process (never in renderer).
+// Provider API keys are stored exclusively in the main process (never in renderer).
 // In production: safeStorage (OS keychain encryption).
 // In headless CI (PALMIER_E2E=1): plain file fallback when safeStorage unavailable.
 
-const AI_KEY_FILE = path.join(app.getPath("userData"), "openrouter-key.bin");
-const AI_KEY_FILE_PLAIN = path.join(app.getPath("userData"), "openrouter-key-plain.txt");
+const KEY_FILES = {
+  openrouter: {
+    enc: path.join(app.getPath("userData"), "openrouter-key.bin"),
+    plain: path.join(app.getPath("userData"), "openrouter-key-plain.txt"),
+  },
+  fal: {
+    enc: path.join(app.getPath("userData"), "fal-key.bin"),
+    plain: path.join(app.getPath("userData"), "fal-key-plain.txt"),
+  },
+};
 
-function loadKey() {
+function keyFiles(provider) {
+  return KEY_FILES[provider] || KEY_FILES.openrouter;
+}
+
+function loadKey(provider) {
+  const { enc, plain } = keyFiles(provider);
   try {
     const isE2E = process.env.PALMIER_E2E === "1";
     if (isE2E && !safeStorage.isEncryptionAvailable()) {
       // Headless CI fallback: plain text store
-      if (!fs.existsSync(AI_KEY_FILE_PLAIN)) return null;
-      return fs.readFileSync(AI_KEY_FILE_PLAIN, "utf8");
+      if (!fs.existsSync(plain)) return null;
+      return fs.readFileSync(plain, "utf8");
     }
-    if (!fs.existsSync(AI_KEY_FILE)) return null;
-    return safeStorage.decryptString(fs.readFileSync(AI_KEY_FILE));
+    if (!fs.existsSync(enc)) return null;
+    return safeStorage.decryptString(fs.readFileSync(enc));
   } catch {
     return null;
   }
 }
 
-ipcMain.handle("ai:setKey", (_e, key) => {
+ipcMain.handle("ai:setKey", (_e, key, provider) => {
+  const { enc, plain } = keyFiles(provider);
   const isE2E = process.env.PALMIER_E2E === "1";
   if (isE2E && !safeStorage.isEncryptionAvailable()) {
-    fs.writeFileSync(AI_KEY_FILE_PLAIN, String(key), "utf8");
+    fs.writeFileSync(plain, String(key), "utf8");
     return;
   }
-  fs.writeFileSync(AI_KEY_FILE, safeStorage.encryptString(String(key)));
+  fs.writeFileSync(enc, safeStorage.encryptString(String(key)));
 });
 
-ipcMain.handle("ai:hasKey", () => {
+ipcMain.handle("ai:hasKey", (_e, provider) => {
+  const { enc, plain } = keyFiles(provider);
   const isE2E = process.env.PALMIER_E2E === "1";
-  if (isE2E && !safeStorage.isEncryptionAvailable()) return fs.existsSync(AI_KEY_FILE_PLAIN);
-  return fs.existsSync(AI_KEY_FILE);
+  if (isE2E && !safeStorage.isEncryptionAvailable()) return fs.existsSync(plain);
+  return fs.existsSync(enc);
 });
 
-ipcMain.handle("ai:clearKey", () => {
-  try { fs.unlinkSync(AI_KEY_FILE); } catch { /* ignore */ }
-  try { fs.unlinkSync(AI_KEY_FILE_PLAIN); } catch { /* ignore */ }
+ipcMain.handle("ai:clearKey", (_e, provider) => {
+  const { enc, plain } = keyFiles(provider);
+  try { fs.unlinkSync(enc); } catch { /* ignore */ }
+  try { fs.unlinkSync(plain); } catch { /* ignore */ }
 });
 
 ipcMain.handle("ai:generateImage", async (_e, body) => {
-  const key = loadKey();
+  const key = loadKey("openrouter");
   if (!key) throw new Error("no API key");
   const base = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
   const res = await fetch(base + "/chat/completions", {
@@ -756,7 +772,7 @@ ipcMain.handle("ai:generateImage", async (_e, body) => {
 });
 
 ipcMain.on("ai:streamChat", async (event, { id, body }) => {
-  const key = loadKey();
+  const key = loadKey("openrouter");
   if (!key) {
     event.sender.send("ai:chunk", { id, error: "no API key" });
     return;
@@ -783,5 +799,60 @@ ipcMain.on("ai:streamChat", async (event, { id, body }) => {
     event.sender.send("ai:chunk", { id, done: true });
   } catch (err) {
     event.sender.send("ai:chunk", { id, error: String(err) });
+  }
+});
+
+// ── Generation IPC (DesktopGenGateway / fal.ai queue) ───────────────────────
+// The fal.ai key never enters the renderer — main fetches queue.fal.run directly.
+// URL shape mirrors packages/ai/src/generation/fal-wire.ts (main is CJS and can't
+// import that ESM package, so the builders are re-inlined here — keep in sync).
+
+const FAL_QUEUE_BASE = "https://queue.fal.run";
+const falSubmitUrl = (modelEndpoint) => `${FAL_QUEUE_BASE}/${modelEndpoint}`;
+const falStatusUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}/status`;
+const falResultUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}`;
+
+ipcMain.handle("gen:falSubmit", async (_e, { modelEndpoint, input }) => {
+  const key = loadKey("fal");
+  if (!key) return { error: "fal key not configured" };
+  try {
+    const res = await fetch(falSubmitUrl(modelEndpoint), {
+      method: "POST",
+      headers: { Authorization: "Key " + key, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) return { error: res.status + " " + (await res.text()) };
+    const json = await res.json();
+    const jobId = json && typeof json.request_id === "string" ? json.request_id : null;
+    if (!jobId) return { error: "fal submit response missing request_id" };
+    return { jobId };
+  } catch (err) {
+    return { error: String(err) };
+  }
+});
+
+ipcMain.handle("gen:falStatus", async (_e, { modelEndpoint, jobId }) => {
+  const key = loadKey("fal");
+  if (!key) return { error: "fal key not configured" };
+  try {
+    const res = await fetch(falStatusUrl(modelEndpoint, jobId), { headers: { Authorization: "Key " + key } });
+    if (!res.ok) return { error: res.status + " " + (await res.text()) };
+    const status = await res.json();
+    if (!status || status.status !== "COMPLETED") return { status };
+    const resultRes = await fetch(falResultUrl(modelEndpoint, jobId), { headers: { Authorization: "Key " + key } });
+    if (!resultRes.ok) return { error: resultRes.status + " " + (await resultRes.text()) };
+    return { status, resultJson: await resultRes.json() };
+  } catch (err) {
+    return { error: String(err) };
+  }
+});
+
+ipcMain.handle("gen:falDownload", async (_e, { url }) => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { error: res.status + " " + (await res.text()) };
+    return { data: await res.arrayBuffer() };
+  } catch (err) {
+    return { error: String(err) };
   }
 });
