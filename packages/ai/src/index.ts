@@ -42,3 +42,6 @@ export {
 export { nextPollDelay } from "./generation/poll-schedule.js";
 export type { GenerationHost, GenerationServiceOptions, StartJobArgs } from "./generation/generation-service.js";
 export { GenerationService } from "./generation/generation-service.js";
+export type { GenModelKind, GenModelCaps, GenPricing, GenModelEntry, GenToolParams } from "./generation/gen-catalog.js";
+export { genModel, listGenModels, validateGenParams } from "./generation/gen-catalog.js";
+export { estimateCredits, formatCredits } from "./generation/cost-estimator.js";
