@@ -4,7 +4,7 @@ import type { GenJobGateway } from "../generation/gen-gateway.js";
 import { nextPollDelay } from "../generation/poll-schedule.js";
 import { genModel } from "../generation/gen-catalog.js";
 import { estimateCredits } from "../generation/cost-estimator.js";
-import { parseWizperResult } from "../generation/wizper-wire.js";
+import { parseWhisperResult } from "../generation/whisper-wire.js";
 
 export type AudioExtractor = (mediaRef: string) => Promise<{ wav: Uint8Array; durationSeconds: number }>;
 
@@ -22,7 +22,7 @@ export interface TranscriptionServiceOptions {
   pollDelay?: typeof nextPollDelay;
 }
 
-const WIZPER_ENDPOINT = "fal-ai/wizper";
+const WHISPER_ENDPOINT = "fal-ai/whisper";
 
 function toMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -32,13 +32,13 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function requireWizperEntry() {
-  const entry = genModel("wizper");
-  if (!entry) throw new Error("wizper catalog entry missing");
+function requireWhisperEntry() {
+  const entry = genModel("whisper");
+  if (!entry) throw new Error("whisper catalog entry missing");
   return entry;
 }
 
-/** Cache-first, full-file (the #232 invariant), parallel transcription orchestration over fal-ai/wizper. */
+/** Cache-first, full-file (the #232 invariant), parallel transcription orchestration over fal-ai/whisper. */
 export class TranscriptionService {
   private readonly gateway: GenJobGateway;
   private readonly host: TranscriptionHost;
@@ -92,7 +92,7 @@ export class TranscriptionService {
   }
 
   estimateCredits(durationSeconds: number): number {
-    return estimateCredits(requireWizperEntry(), { duration: durationSeconds });
+    return estimateCredits(requireWhisperEntry(), { duration: durationSeconds });
   }
 
   hasKey(): Promise<boolean> {
@@ -116,14 +116,14 @@ export class TranscriptionService {
     try {
       const { wav, durationSeconds } = await this.extract(mediaRef);
       const url = await this.gateway.uploadFile(wav, "audio/wav", `${mediaRef}.wav`);
-      const wizper = requireWizperEntry();
-      const input = wizper.buildInput({ sourceUrl: url, language });
-      const { jobId } = await this.gateway.submitJob(WIZPER_ENDPOINT, input);
+      const whisper = requireWhisperEntry();
+      const input = whisper.buildInput({ sourceUrl: url, language });
+      const { jobId } = await this.gateway.submitJob(WHISPER_ENDPOINT, input);
       const resultJson = await this.poll(jobId);
-      const parsed = parseWizperResult(resultJson);
+      const parsed = parseWhisperResult(resultJson);
 
       if (language === undefined) {
-        const record: TranscriptRecord = { ...parsed, sourceDurationSeconds: durationSeconds, model: WIZPER_ENDPOINT };
+        const record: TranscriptRecord = { ...parsed, sourceDurationSeconds: durationSeconds, model: WHISPER_ENDPOINT };
         const relativePath = transcriptRelativePath(mediaRef);
         this.host.writeDerived(relativePath, new TextEncoder().encode(JSON.stringify(record)));
         this.host.patchEntry(mediaRef, { transcriptPath: relativePath, generationStatus: undefined });
@@ -153,10 +153,10 @@ export class TranscriptionService {
       delay = this.pollDelay(delay);
       await this.sleep(delay);
 
-      const status = await this.gateway.jobStatus(WIZPER_ENDPOINT, jobId);
+      const status = await this.gateway.jobStatus(WHISPER_ENDPOINT, jobId);
       if (status.status === "queued" || status.status === "running") continue;
       if (status.status === "failed") throw new Error(status.errorMessage ?? "Transcription failed");
-      if (status.resultJson === undefined) throw new Error("wizper job succeeded with no result payload");
+      if (status.resultJson === undefined) throw new Error("whisper job succeeded with no result payload");
       return status.resultJson;
     }
   }

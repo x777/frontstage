@@ -52,7 +52,7 @@ export { genModel, listGenModels, validateGenParams } from "./generation/gen-cat
 export { estimateCredits, formatCredits } from "./generation/cost-estimator.js";
 export type { EntryUrlDeps } from "./generation/entry-url.js";
 export { makeEntryUrl, mimeForEntry } from "./generation/entry-url.js";
-export { parseWizperResult, deriveWords } from "./generation/wizper-wire.js";
+export { parseWhisperResult, deriveSegments } from "./generation/whisper-wire.js";
 export type {
   AudioExtractor,
   TranscriptionHost,

@@ -173,7 +173,7 @@ export function listModelsTool(): ToolSpec {
     }),
     run(args, _ctx) {
       const a = args as { kind?: GenModelKind };
-      // "transcribe" (wizper) isn't a generate_*/upscale_media model choice — it's driven by its
+      // "transcribe" (whisper) isn't a generate_*/upscale_media model choice — it's driven by its
       // own TranscriptionService orchestration (M11B's transcript tools), so it's excluded here.
       const models = listGenModels(a.kind)
         .filter((entry) => entry.kind !== "transcribe")

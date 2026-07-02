@@ -60,7 +60,7 @@ function makeGateway(opts: {
     async jobStatus(_modelEndpoint, jobId) {
       calls.status++;
       if (opts.statusFor) return opts.statusFor(jobId);
-      const seq = opts.statuses ?? [{ status: "succeeded" as const, resultJson: { text: "", chunks: [], languages: [] } }];
+      const seq = opts.statuses ?? [{ status: "succeeded" as const, resultJson: { text: "", chunks: [], inferred_languages: [] } }];
       const status = seq[Math.min(statusIndex, seq.length - 1)]!;
       statusIndex++;
       return status;
@@ -90,7 +90,7 @@ describe("TranscriptionService.transcribe: cache-first", () => {
       words: [{ text: "hello", start: 0, end: 0.5 }, { text: "world", start: 0.5, end: 1 }],
       segments: [{ text: "hello world", start: 0, end: 1 }],
       sourceDurationSeconds: 10,
-      model: "fal-ai/wizper",
+      model: "fal-ai/whisper",
     };
     const path = "media/m1.transcript.json";
     const entry = makeEntry({ transcriptPath: path });
@@ -115,7 +115,7 @@ describe("TranscriptionService.transcribe: cache-first", () => {
     const entry = makeEntry({ transcriptPath: path });
     const { host, writes } = makeHost([entry], { [path]: new TextEncoder().encode("not json") });
     const { gateway, calls } = makeGateway({
-      statuses: [{ status: "succeeded", resultJson: { text: "fresh", chunks: [{ text: "fresh", timestamp: [0, 1] }], languages: [] } }],
+      statuses: [{ status: "succeeded", resultJson: { text: "fresh", chunks: [{ text: "fresh", timestamp: [0, 1] }], inferred_languages: [] } }],
     });
     const extract: AudioExtractor = async () => ({ wav: new Uint8Array([1]), durationSeconds: 3 });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
@@ -132,7 +132,7 @@ describe("TranscriptionService.transcribe: miss happy path", () => {
   test("status transitions transcribing -> cleared, the record lands at the right path with correct content", async () => {
     const entry = makeEntry();
     const { host, patches, writes, store } = makeHost([entry]);
-    const resultJson = { text: "hi there", chunks: [{ text: "hi there", timestamp: [0, 1] }], languages: ["en"] };
+    const resultJson = { text: "hi there", chunks: [{ text: "hi there", timestamp: [0, 1] }], inferred_languages: ["en"] };
     const { gateway, calls } = makeGateway({
       statuses: [{ status: "queued" }, { status: "running" }, { status: "succeeded", resultJson }],
     });
@@ -162,7 +162,7 @@ describe("TranscriptionService.transcribe: miss happy path", () => {
       ],
       segments: [{ text: "hi there", start: 0, end: 1 }],
       sourceDurationSeconds: 12,
-      model: "fal-ai/wizper",
+      model: "fal-ai/whisper",
     });
 
     const final = store.get("m1")!;
@@ -170,7 +170,7 @@ describe("TranscriptionService.transcribe: miss happy path", () => {
     expect(final.generationStatus).toBeUndefined();
   });
 
-  test("uploads the extracted WAV as audio/wav and submits fal-ai/wizper with the fal-fetchable URL", async () => {
+  test("uploads the extracted WAV as audio/wav and submits fal-ai/whisper with the fal-fetchable URL", async () => {
     const entry = makeEntry();
     const { host } = makeHost([entry]);
     const uploadCalls: { bytes: Uint8Array; contentType: string; fileName: string }[] = [];
@@ -180,7 +180,7 @@ describe("TranscriptionService.transcribe: miss happy path", () => {
         uploadCalls.push({ bytes, contentType, fileName });
         return "https://v3.fal.media/files/m1.wav";
       },
-      statuses: [{ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], languages: [] } }],
+      statuses: [{ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], inferred_languages: [] } }],
     });
     const originalSubmit = gateway.submitJob.bind(gateway);
     gateway.submitJob = async (endpoint, input) => { submittedInputs.push(input); return originalSubmit(endpoint, input); };
@@ -198,10 +198,10 @@ describe("TranscriptionService.transcribe: miss happy path", () => {
 describe("TranscriptionService.transcribe: language override", () => {
   test("bypasses the cache entirely: no read despite a cached transcriptPath, and no write afterward", async () => {
     const path = "media/m1.transcript.json";
-    const staleRecord: TranscriptRecord = { text: "stale", words: [], segments: [], sourceDurationSeconds: 1, model: "fal-ai/wizper" };
+    const staleRecord: TranscriptRecord = { text: "stale", words: [], segments: [], sourceDurationSeconds: 1, model: "fal-ai/whisper" };
     const entry = makeEntry({ transcriptPath: path });
     const { host, writes, readDerivedCalls, store } = makeHost([entry], { [path]: new TextEncoder().encode(JSON.stringify(staleRecord)) });
-    const resultJson = { text: "french hi", chunks: [{ text: "french hi", timestamp: [0, 1] }], languages: ["fr"] };
+    const resultJson = { text: "french hi", chunks: [{ text: "french hi", timestamp: [0, 1] }], inferred_languages: ["fr"] };
     const { gateway } = makeGateway({ statuses: [{ status: "succeeded", resultJson }] });
     const extract: AudioExtractor = async () => ({ wav: new Uint8Array([1]), durationSeconds: 2 });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
@@ -222,7 +222,7 @@ describe("TranscriptionService.transcribe: language override", () => {
     const { host } = makeHost([entry]);
     const submittedInputs: Record<string, unknown>[] = [];
     const { gateway } = makeGateway({
-      statuses: [{ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], languages: [] } }],
+      statuses: [{ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], inferred_languages: [] } }],
     });
     const originalSubmit = gateway.submitJob.bind(gateway);
     gateway.submitJob = async (endpoint, input) => { submittedInputs.push(input); return originalSubmit(endpoint, input); };
@@ -266,12 +266,12 @@ describe("TranscriptionService.transcribe: failures", () => {
   test("a terminal 'failed' job status -> patches 'failed: <msg>' and rethrows", async () => {
     const entry = makeEntry();
     const { host, store } = makeHost([entry]);
-    const { gateway } = makeGateway({ statuses: [{ status: "failed", errorMessage: "wizper exploded" }] });
+    const { gateway } = makeGateway({ statuses: [{ status: "failed", errorMessage: "whisper exploded" }] });
     const extract: AudioExtractor = async () => ({ wav: new Uint8Array([1]), durationSeconds: 2 });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
 
-    await expect(service.transcribe("m1")).rejects.toThrow("wizper exploded");
-    expect(store.get("m1")!.generationStatus).toBe("failed: wizper exploded");
+    await expect(service.transcribe("m1")).rejects.toThrow("whisper exploded");
+    expect(store.get("m1")!.generationStatus).toBe("failed: whisper exploded");
   });
 
   test("a succeeded status with no resultJson payload -> a defined failure, not a silent crash", async () => {
@@ -308,8 +308,8 @@ describe("TranscriptionService.transcribeMany", () => {
       submitJobId: (input) => "job:" + (input as { audio_url: string }).audio_url,
       statusFor: (jobId) => {
         const ref = jobId.replace("job:https://fake/", "");
-        if (ref === "c") return { status: "failed", errorMessage: "wizper exploded" };
-        return { status: "succeeded", resultJson: { text: `hi ${ref}`, chunks: [{ text: `hi ${ref}`, timestamp: [0, 1] }], languages: [] } };
+        if (ref === "c") return { status: "failed", errorMessage: "whisper exploded" };
+        return { status: "succeeded", resultJson: { text: `hi ${ref}`, chunks: [{ text: `hi ${ref}`, timestamp: [0, 1] }], inferred_languages: [] } };
       },
     });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
@@ -321,7 +321,7 @@ describe("TranscriptionService.transcribeMany", () => {
     const byRef = new Map(results.map((r) => [r.ref, r]));
     expect(byRef.get("a")?.result?.text).toBe("hi a");
     expect(byRef.get("b")?.result?.text).toBe("hi b");
-    expect(byRef.get("c")?.error).toBe("wizper exploded");
+    expect(byRef.get("c")?.error).toBe("whisper exploded");
     expect(byRef.get("c")?.result).toBeUndefined();
   });
 
@@ -347,7 +347,7 @@ describe("TranscriptionService: in-flight dedupe", () => {
       return { wav: new Uint8Array([1]), durationSeconds: 2 };
     };
     const { gateway, calls } = makeGateway({
-      statuses: [{ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], languages: [] } }],
+      statuses: [{ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], inferred_languages: [] } }],
     });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
 
@@ -364,7 +364,7 @@ describe("TranscriptionService: in-flight dedupe", () => {
     const { host } = makeHost([entry]);
     const extract: AudioExtractor = async () => ({ wav: new Uint8Array([1]), durationSeconds: 2 });
     const { gateway, calls } = makeGateway({
-      statusFor: () => ({ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], languages: [] } }),
+      statusFor: () => ({ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], inferred_languages: [] } }),
     });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
 
@@ -378,7 +378,7 @@ describe("TranscriptionService: in-flight dedupe", () => {
     const { host } = makeHost([entry]);
     const extract: AudioExtractor = async () => ({ wav: new Uint8Array([1]), durationSeconds: 2 });
     const { gateway, calls } = makeGateway({
-      statusFor: () => ({ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], languages: [] } }),
+      statusFor: () => ({ status: "succeeded", resultJson: { text: "hi", chunks: [{ text: "hi", timestamp: [0, 1] }], inferred_languages: [] } }),
     });
     const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
 
@@ -391,7 +391,7 @@ describe("TranscriptionService: in-flight dedupe", () => {
 
 describe("TranscriptionService.cachedTranscript", () => {
   test("returns the cached full result without touching the gateway or extractor", async () => {
-    const record: TranscriptRecord = { text: "hi", language: "en", words: [], segments: [], sourceDurationSeconds: 1, model: "fal-ai/wizper" };
+    const record: TranscriptRecord = { text: "hi", language: "en", words: [], segments: [], sourceDurationSeconds: 1, model: "fal-ai/whisper" };
     const path = "media/m1.transcript.json";
     const entry = makeEntry({ transcriptPath: path });
     const { host } = makeHost([entry], { [path]: new TextEncoder().encode(JSON.stringify(record)) });
@@ -432,12 +432,12 @@ describe("TranscriptionService.cachedTranscript", () => {
 });
 
 describe("TranscriptionService.estimateCredits / hasKey", () => {
-  test("estimateCredits delegates to the wizper catalog entry's audioPerSecond pricing", () => {
+  test("estimateCredits delegates to the whisper catalog entry's audioPerSecond pricing", () => {
     const { host } = makeHost([]);
     const { gateway } = makeGateway({});
     const service = new TranscriptionService(gateway, host, async () => ({ wav: new Uint8Array(), durationSeconds: 0 }));
-    // 0.01 credits/s * 250s = 2.5 -> ceil 3.
-    expect(service.estimateCredits(250)).toBe(3);
+    // 0.111 credits/s * 250s = 27.75 -> ceil 28.
+    expect(service.estimateCredits(250)).toBe(28);
   });
 
   test("hasKey passes through to the gateway", async () => {

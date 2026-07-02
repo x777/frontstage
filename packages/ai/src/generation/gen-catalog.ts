@@ -258,33 +258,29 @@ const CATALOG: GenModelEntry[] = [
 
   // --- transcribe ---
   {
-    id: "wizper",
-    endpoint: "fal-ai/wizper",
+    id: "whisper",
+    endpoint: "fal-ai/whisper",
     kind: "transcribe",
-    displayName: "Wizper (Whisper v3)",
+    displayName: "Whisper v3",
     caps: {},
     pricing: {
-      // fal exposes no static per-second rate for wizper (the model/pricing pages both render a
-      // client-side "$0 per compute second" placeholder; openapi.json carries no cost field). Best-
-      // effort fallback per the design brief (~$0.0001/s = 0.01cr/s, in line with other cheap STT
-      // pricing e.g. Groq Whisper ~$0.000011/s). A third-party fal-price scrape lists the older
-      // non-turbo fal-ai/whisper at ~0.111cr/s ($0.00111/compute-second) — an order of magnitude
-      // higher and for a different (non-"double the performance") endpoint. FLAGGED: needs a
-      // real-key smoke test to confirm.
+      // fal exposes no static per-second rate here either (the model/pricing pages both render a
+      // client-side "$0 per compute second" placeholder; openapi.json carries no cost field). A
+      // third-party fal-price scrape lists non-turbo fal-ai/whisper at ~0.111cr/s ($0.00111/
+      // compute-second). Billing is per COMPUTE second, so the real cost per AUDIO-second is likely
+      // much lower in practice — this figure is deliberately conservative so the confirm-gate errs
+      // safe. FLAGGED: needs a real-key smoke test to confirm actual per-audio-second cost.
       kind: "audioPerSecond",
-      creditsPerSecond: 0.01,
+      creditsPerSecond: 0.111,
     },
     buildInput(params) {
       return {
         audio_url: params.sourceUrl ?? "",
         task: "transcribe",
-        // wizper's verified openapi.json (2026-07) marks chunk_level `const: "segment"` — word-level
-        // chunking is NOT offered (the design brief's assumption was wrong; see wizper-wire.ts).
-        // merge_chunks:false keeps Whisper's natural per-utterance chunk granularity instead of fal's
-        // default 29s-merged segments, which materially improves the accuracy of the word timestamps
-        // wizper-wire derives from each chunk's span.
-        chunk_level: "segment",
-        merge_chunks: false,
+        // fal-ai/whisper's verified openapi.json (2026-07) confirms chunk_level is a real enum
+        // ["none","segment","word"] (unlike wizper's const:"segment") — native word-level chunks.
+        // No merge_chunks/max_segment_len field exists on this endpoint (that was wizper-only).
+        chunk_level: "word",
         ...(params.language ? { language: params.language } : {}),
       };
     },

@@ -25,7 +25,7 @@ describe("gen-catalog: lookups", () => {
     expect(listGenModels("image").map((e) => e.id).sort()).toEqual(["flux-dev", "nano-banana"].sort());
     expect(listGenModels("audio").map((e) => e.id).sort()).toEqual(["elevenlabs-tts", "minimax-music"].sort());
     expect(listGenModels("upscale").map((e) => e.id)).toEqual(["seedvr-upscale"]);
-    expect(listGenModels("transcribe").map((e) => e.id)).toEqual(["wizper"]);
+    expect(listGenModels("transcribe").map((e) => e.id)).toEqual(["whisper"]);
   });
 
   test("every entry has a non-empty id, endpoint, and displayName", () => {
@@ -109,13 +109,13 @@ describe("validateGenParams: naming allowed values", () => {
   });
 
   test("rejects transcribe params missing a source URL", () => {
-    const entry = genModel("wizper")!;
+    const entry = genModel("whisper")!;
     const err = validateGenParams(entry, { language: "en" });
-    expect(err).toBe("Wizper (Whisper v3) requires a source audio URL.");
+    expect(err).toBe("Whisper v3 requires a source audio URL.");
   });
 
   test("accepts transcribe params with a source URL (returns null)", () => {
-    const entry = genModel("wizper")!;
+    const entry = genModel("whisper")!;
     expect(validateGenParams(entry, { sourceUrl: "https://example.com/a.wav" })).toBeNull();
   });
 
@@ -201,10 +201,10 @@ describe("estimateCredits: audio + flat + upscale", () => {
     expect(estimateCredits(entry, {})).toBe(5);
   });
 
-  test("wizper's audioPerSecond rate ceils the source duration", () => {
-    const entry = genModel("wizper")!;
-    // 0.01 cr/s * 130s = 1.3 -> ceil 2.
-    expect(estimateCredits(entry, { duration: 130 })).toBe(2);
+  test("whisper's audioPerSecond rate ceils the source duration", () => {
+    const entry = genModel("whisper")!;
+    // 0.111 cr/s * 130s = 14.43 -> ceil 15.
+    expect(estimateCredits(entry, { duration: 130 })).toBe(15);
   });
 });
 
@@ -305,23 +305,21 @@ describe("buildInput: every entry maps normalized params to its fal body", () =>
     });
   });
 
-  test("wizper without a language override omits the field (auto-detect)", () => {
-    const entry = genModel("wizper")!;
+  test("whisper without a language override omits the field (auto-detect)", () => {
+    const entry = genModel("whisper")!;
     expect(entry.buildInput({ sourceUrl: "https://example.com/a.wav" })).toEqual({
       audio_url: "https://example.com/a.wav",
       task: "transcribe",
-      chunk_level: "segment",
-      merge_chunks: false,
+      chunk_level: "word",
     });
   });
 
-  test("wizper with a language override adds the field", () => {
-    const entry = genModel("wizper")!;
+  test("whisper with a language override adds the field", () => {
+    const entry = genModel("whisper")!;
     expect(entry.buildInput({ sourceUrl: "https://example.com/a.wav", language: "fr" })).toEqual({
       audio_url: "https://example.com/a.wav",
       task: "transcribe",
-      chunk_level: "segment",
-      merge_chunks: false,
+      chunk_level: "word",
       language: "fr",
     });
   });
