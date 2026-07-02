@@ -47,9 +47,13 @@ export class WebGenGateway implements GenJobGateway {
   }
 
   async hasKey(): Promise<boolean> {
-    const res = await fetch(this.proxyUrl + "/fal/enabled", { headers: this.headers() });
-    if (!res.ok) return false;
-    const json = (await res.json()) as { enabled?: boolean };
-    return json.enabled === true;
+    try {
+      const res = await fetch(this.proxyUrl + "/fal/enabled", { headers: this.headers() });
+      if (!res.ok) return false;
+      const json = (await res.json()) as { enabled?: boolean };
+      return json.enabled === true;
+    } catch {
+      return false; // unreachable proxy = no key
+    }
   }
 }

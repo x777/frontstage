@@ -95,7 +95,8 @@ export function generateImageTool(): ToolSpec {
         confirm?: boolean;
       };
 
-      if (ctx.generation && (await ctx.generation.hasKey())) {
+      // A rejecting hasKey (e.g. unreachable proxy) must fall back to the legacy path, not error.
+      if (ctx.generation && (await ctx.generation.hasKey().catch(() => false))) {
         return runImagePipeline(a, ctx.generation, ctx);
       }
 

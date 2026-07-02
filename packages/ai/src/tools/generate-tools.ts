@@ -71,7 +71,7 @@ export function generateVideoTool(): ToolSpec {
       };
 
       if (!ctx.generation) return errorResult("generation is not available in this context");
-      if (!(await ctx.generation.hasKey())) return keyMissingError("generate video");
+      if (!(await ctx.generation.hasKey().catch(() => false))) return keyMissingError("generate video");
 
       const entry = genModel(a.model);
       if (!entry || entry.kind !== "video") return unknownModelError(a.model, "video");
@@ -203,7 +203,7 @@ export function upscaleMediaTool(): ToolSpec {
       const a = args as { mediaRef: string; model?: string; confirm?: boolean };
 
       if (!ctx.generation) return errorResult("generation is not available in this context");
-      if (!(await ctx.generation.hasKey())) return keyMissingError("upscale media");
+      if (!(await ctx.generation.hasKey().catch(() => false))) return keyMissingError("upscale media");
 
       const source = ctx.getManifest().entries.find((e) => e.id === a.mediaRef);
       if (!source) return errorResult(`Media not found: ${a.mediaRef}`);
@@ -289,7 +289,7 @@ export function generateAudioTool(): ToolSpec {
       };
 
       if (!ctx.generation) return errorResult("generation is not available in this context");
-      if (!(await ctx.generation.hasKey())) return keyMissingError("generate audio");
+      if (!(await ctx.generation.hasKey().catch(() => false))) return keyMissingError("generate audio");
 
       const entry = genModel(a.model);
       if (!entry || entry.kind !== "audio") return unknownModelError(a.model, "audio");
