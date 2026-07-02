@@ -256,8 +256,9 @@ const CATALOG: GenModelEntry[] = [
   },
 ];
 
+// Matches the friendly id OR the fal endpoint — the generation log stores the endpoint.
 export function genModel(id: string): GenModelEntry | undefined {
-  return CATALOG.find((e) => e.id === id);
+  return CATALOG.find((e) => e.id === id || e.endpoint === id);
 }
 
 export function listGenModels(kind?: GenModelKind): GenModelEntry[] {

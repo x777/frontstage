@@ -35,8 +35,8 @@ describe("relativeTime", () => {
 });
 
 const ENTRIES: GenerationLogEntry[] = [
-  { id: "a", model: "veo3.1-fast", costCredits: 500, createdAt: "2026-01-01T00:00:00.000Z" },
-  { id: "b", model: "nano-banana", costCredits: 10, createdAt: "2026-01-03T00:00:00.000Z" },
+  { id: "a", model: "fal-ai/veo3.1/fast", costCredits: 500, createdAt: "2026-01-01T00:00:00.000Z" },
+  { id: "b", model: "fal-ai/nano-banana", costCredits: 10, createdAt: "2026-01-03T00:00:00.000Z" },
   { id: "c", model: "unknown-model-id", costCredits: null, createdAt: "2026-01-02T00:00:00.000Z" },
 ];
 

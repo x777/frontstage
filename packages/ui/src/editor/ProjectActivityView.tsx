@@ -107,7 +107,7 @@ export function ProjectActivityView({ entries, now = new Date(), onClose }: Proj
               <span style={{ fontSize: theme.fontSize.xs, color: theme.text.tertiary, width: theme.spacing.md, textAlign: "center" }}>
                 {kindGlyph(entry.model)}
               </span>
-              <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.medium, color: theme.text.secondary, width: "56px" }}>
+              <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.medium, color: theme.text.secondary, width: theme.size.activityCost }}>
                 {entry.costCredits === null ? "—" : formatCredits(entry.costCredits)}
               </span>
               <span

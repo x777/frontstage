@@ -14,8 +14,6 @@ export function generatingLabel(status: GenerationStatus): string {
   }
 }
 
-// matches Swift GeneratingOverlay.progressDuration=45s — cosmetic easing, not real progress
-const PROGRESS_DURATION_S = 45;
 
 export function GeneratingOverlay({ label }: { label: string }) {
   return (
@@ -57,7 +55,8 @@ export function GeneratingOverlay({ label }: { label: string }) {
             width: 0,
             borderRadius: theme.radius.xs,
             background: theme.generating.fill,
-            animation: `generating-progress-fill ${PROGRESS_DURATION_S}s ease-out forwards`,
+            // --anim-progress-duration matches Swift GeneratingOverlay.progressDuration=45s — cosmetic easing, not real progress
+            animation: `generating-progress-fill ${theme.anim.progressDuration} ease-out forwards`,
           }}
         />
       </div>

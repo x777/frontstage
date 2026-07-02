@@ -122,6 +122,7 @@
   --size-generation-panel-min: 320px;
   --size-settings-panel-min: 320px;
   --size-activity-max: 420px;
+  --size-activity-cost: 56px;
 
   /* Z-index layers */
   --z-menu: 9000;

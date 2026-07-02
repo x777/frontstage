@@ -127,6 +127,7 @@ export const theme = {
     generationPanelMin: "var(--size-generation-panel-min)",
     settingsPanelMin: "var(--size-settings-panel-min)",
     activityMax: "var(--size-activity-max)",
+    activityCost: "var(--size-activity-cost)",
     adjustTrack: "var(--size-adjust-track)",
     adjustThumb: "var(--size-adjust-thumb)",
     colorWheelPad: "var(--size-color-wheel-pad)",

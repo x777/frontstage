@@ -382,7 +382,7 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
                   min={1}
                   max={entry.caps.numImagesMax}
                   value={numImages}
-                  onChange={(e) => setNumImages(Number(e.target.value))}
+                  onChange={(e) => setNumImages(Math.max(1, Math.min(entry?.caps.numImagesMax ?? 4, Number(e.target.value) || 1)))}
                   style={{
                     background: theme.bg.surface,
                     border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
