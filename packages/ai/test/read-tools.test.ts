@@ -7,6 +7,7 @@ import {
   type MediaManifest,
   type Track,
   type Timeline,
+  type TranscriptionResult,
 } from "@palmier/core";
 import {
   ToolExecutor,
@@ -210,5 +211,140 @@ describe("search_media tool", () => {
     const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
     expect(text).toContain("No media matches");
     expect(text).toContain("xyznotfound");
+  });
+});
+
+type TranscriptionFacade = NonNullable<ToolContext["transcription"]>;
+
+function makeTranscriptionFacade(byId: Record<string, TranscriptionResult>): {
+  facade: TranscriptionFacade;
+  transcribeCalls: string[];
+  cachedCalls: string[];
+} {
+  const transcribeCalls: string[] = [];
+  const cachedCalls: string[] = [];
+  const facade: TranscriptionFacade = {
+    cachedTranscript: async (mediaRef) => {
+      cachedCalls.push(mediaRef);
+      return byId[mediaRef] ?? null;
+    },
+    transcribe: async (mediaRef) => {
+      transcribeCalls.push(mediaRef);
+      throw new Error("search_media must never transcribe");
+    },
+    hasKey: async () => true,
+    estimateCredits: () => 1,
+  };
+  return { facade, transcribeCalls, cachedCalls };
+}
+
+function makeManifestWithTranscripts(): MediaManifest {
+  return {
+    version: 2,
+    entries: [
+      {
+        id: "media-1",
+        name: "sunrise.mp4",
+        type: "video",
+        source: { kind: "external", absolutePath: "/tmp/sunrise.mp4" },
+        duration: 10,
+        transcriptPath: "media/media-1.transcript.json",
+      },
+      {
+        id: "media-2",
+        name: "ocean.mp4",
+        type: "video",
+        source: { kind: "external", absolutePath: "/tmp/ocean.mp4" },
+        duration: 15,
+        transcriptPath: "media/media-2.transcript.json",
+      },
+    ],
+    folders: [],
+  };
+}
+
+function makeScopeCtx(transcription?: TranscriptionFacade): ToolContext {
+  return {
+    store: new EditorStore(makeTimeline()),
+    getManifest: makeManifestWithTranscripts,
+    newId: () => "test-id",
+    transcription,
+  };
+}
+
+describe("search_media scope", () => {
+  test("scope defaults to both: visual name match still works without a transcription facade", async () => {
+    const ex = new ToolExecutor([searchMediaTool()], makeScopeCtx());
+    const result = await ex.execute("search_media", { query: "sunrise" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("media-1");
+  });
+
+  test("scope='spoken' without a transcription facade errors", async () => {
+    const ex = new ToolExecutor([searchMediaTool()], makeScopeCtx());
+    const result = await ex.execute("search_media", { query: "hello", scope: "spoken" });
+    expect(result.isError).toBe(true);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("not available");
+  });
+
+  test("scope='spoken' matches cached transcript segments and never transcribes", async () => {
+    const transcript: TranscriptionResult = { text: "", segments: [{ text: "hello world", start: 1, end: 2 }], words: [] };
+    const { facade, transcribeCalls } = makeTranscriptionFacade({ "media-1": transcript });
+    const ex = new ToolExecutor([searchMediaTool()], makeScopeCtx(facade));
+    const result = await ex.execute("search_media", { query: "hello", scope: "spoken" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(JSON.parse(text)).toEqual([
+      { id: "media-1", name: "sunrise.mp4", type: "video", spokenMatches: [{ start: 1, end: 2, text: "hello world" }] },
+    ]);
+    expect(transcribeCalls).toEqual([]);
+  });
+
+  test("spoken match requires every query term to be present in the segment", async () => {
+    const transcript: TranscriptionResult = { text: "", segments: [{ text: "hello world", start: 0, end: 1 }], words: [] };
+    const { facade } = makeTranscriptionFacade({ "media-1": transcript });
+    const ex = new ToolExecutor([searchMediaTool()], makeScopeCtx(facade));
+    const result = await ex.execute("search_media", { query: "hello mars", scope: "spoken" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("No media matches");
+  });
+
+  test("spoken matching normalizes case and diacritics on both sides", async () => {
+    const transcript: TranscriptionResult = { text: "", segments: [{ text: "a nice cafe downtown", start: 0, end: 1 }], words: [] };
+    const { facade } = makeTranscriptionFacade({ "media-1": transcript });
+    const ex = new ToolExecutor([searchMediaTool()], makeScopeCtx(facade));
+    const result = await ex.execute("search_media", { query: "CAFÉ", scope: "spoken" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("media-1");
+  });
+
+  test("scope='both' unions visual and spoken hits, merging an entry that matches both", async () => {
+    const transcript: TranscriptionResult = { text: "", segments: [{ text: "sunrise footage", start: 0, end: 1 }], words: [] };
+    const { facade } = makeTranscriptionFacade({ "media-1": transcript });
+    const ex = new ToolExecutor([searchMediaTool()], makeScopeCtx(facade));
+    const result = await ex.execute("search_media", { query: "sunrise" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    const parsed = JSON.parse(text) as { id: string; spokenMatches?: unknown[] }[];
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!.id).toBe("media-1");
+    expect(parsed[0]!.spokenMatches).toEqual([{ start: 0, end: 1, text: "sunrise footage" }]);
+  });
+
+  test("an entry without transcriptPath is never queried for spoken matches", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [{ id: "media-3", name: "no-transcript.mp4", type: "video", source: { kind: "external", absolutePath: "/tmp/x.mp4" }, duration: 5 }],
+      folders: [],
+    };
+    const { facade, cachedCalls } = makeTranscriptionFacade({});
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", transcription: facade };
+    const ex = new ToolExecutor([searchMediaTool()], ctx);
+    await ex.execute("search_media", { query: "x", scope: "spoken" });
+    expect(cachedCalls).toEqual([]);
   });
 });

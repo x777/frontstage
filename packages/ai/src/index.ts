@@ -3,6 +3,7 @@ export { ok, errorResult, asUndoStep, ToolExecutor } from "./tools/executor.js";
 export { getTimelineTool, getMediaTool, inspectMediaTool, searchMediaTool } from "./tools/read-tools.js";
 export { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClipsTool, trimClipsTool } from "./tools/clip-tools.js";
 export { rippleDeleteRangesTool, insertClipsTool } from "./tools/ripple-tools.js";
+export { getTranscriptTool } from "./tools/transcription-tools.js";
 export { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./tools/property-tools.js";
 export { removeTracksTool } from "./tools/track-tools.js";
 export { applyColorTool, applyEffectTool, inspectColorTool } from "./tools/color-tools.js";

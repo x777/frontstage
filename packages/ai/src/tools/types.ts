@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { EditorStore, MediaManifest, MediaManifestEntry } from "@palmier/core";
+import type { EditorStore, MediaManifest, MediaManifestEntry, TranscriptionResult } from "@palmier/core";
 import type { ImageGenInput } from "../agent/image-generator.js";
 import type { StartJobArgs } from "../generation/generation-service.js";
 
@@ -25,6 +25,13 @@ export interface ToolContext {
     // Resolves a library media ref to a URL fal can fetch (data URI or hosted). Optional in v1.
     entryUrl?(mediaRef: string): Promise<string | undefined>;
     confirmThreshold: number;
+  };
+  transcription?: {
+    transcribe(mediaRef: string, opts?: { language?: string }): Promise<TranscriptionResult>;
+    // Cache-only read: never transcribes.
+    cachedTranscript(mediaRef: string): Promise<TranscriptionResult | null>;
+    hasKey(): Promise<boolean>;
+    estimateCredits(durationSeconds: number): number;
   };
 }
 

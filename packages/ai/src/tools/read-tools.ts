@@ -110,19 +110,65 @@ export function inspectMediaTool(): ToolSpec {
   };
 }
 
+// NFD-decompose then strip combining marks, so accented and plain forms compare equal.
+function normalizeSearchText(s: string): string {
+  return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+interface SearchHit {
+  id: string;
+  name: string;
+  type: string;
+  spokenMatches?: { start: number; end: number; text: string }[];
+}
+
 export function searchMediaTool(): ToolSpec {
   return {
     name: "search_media",
-    description: "Searches media manifest entries by name (case-insensitive substring match).",
-    inputSchema: z.object({ query: z.string() }),
-    run(args, ctx) {
-      const { query } = args as { query: string };
-      const lower = query.toLowerCase();
-      const matches = ctx
-        .getManifest()
-        .entries.filter((e) => e.name.toLowerCase().includes(lower))
-        .map((e) => ({ id: e.id, name: e.name, type: e.type }));
+    description:
+      "Searches media manifest entries. scope='visual' matches by name (case-insensitive substring); " +
+      "scope='spoken' matches cached transcript text (case/diacritic-insensitive, never transcribes); " +
+      "scope='both' (default) unions the two.",
+    inputSchema: z.object({
+      query: z.string(),
+      scope: z.enum(["visual", "spoken", "both"]).optional(),
+    }),
+    async run(args, ctx) {
+      const { query, scope = "both" } = args as { query: string; scope?: "visual" | "spoken" | "both" };
+      const entries = ctx.getManifest().entries;
+      const hits = new Map<string, SearchHit>();
 
+      if (scope !== "spoken") {
+        const lower = query.toLowerCase();
+        for (const e of entries) {
+          if (e.name.toLowerCase().includes(lower)) hits.set(e.id, { id: e.id, name: e.name, type: e.type });
+        }
+      }
+
+      if (scope !== "visual") {
+        if (!ctx.transcription) {
+          if (scope === "spoken") return errorResult("transcription is not available in this context");
+        } else {
+          const terms = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+          for (const e of entries) {
+            if (!e.transcriptPath) continue;
+            const transcript = await ctx.transcription.cachedTranscript(e.id);
+            if (!transcript) continue;
+            const spokenMatches = transcript.segments
+              .filter((s) => {
+                const norm = normalizeSearchText(s.text);
+                return terms.every((t) => norm.includes(t));
+              })
+              .map((s) => ({ start: s.start, end: s.end, text: s.text }));
+            if (spokenMatches.length === 0) continue;
+            const existing = hits.get(e.id);
+            if (existing) existing.spokenMatches = spokenMatches;
+            else hits.set(e.id, { id: e.id, name: e.name, type: e.type, spokenMatches });
+          }
+        }
+      }
+
+      const matches = [...hits.values()];
       if (matches.length === 0) return ok(`No media matches "${query}"`);
       return ok(JSON.stringify(matches, null, 2));
     },

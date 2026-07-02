@@ -203,6 +203,14 @@ async function bootstrap() {
     confirmThreshold: 50,
   };
 
+  // Delegates through the ref (not a captured instance) so any future recreate is picked up.
+  const transcriptionFacade = {
+    transcribe: (mediaRef: string, opts?: { language?: string }) => transcriptionServiceRef.current.transcribe(mediaRef, opts),
+    cachedTranscript: (mediaRef: string) => transcriptionServiceRef.current.cachedTranscript(mediaRef),
+    hasKey: () => transcriptionServiceRef.current.hasKey(),
+    estimateCredits: (durationSeconds: number) => transcriptionServiceRef.current.estimateCredits(durationSeconds),
+  };
+
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {
     store,
@@ -217,6 +225,7 @@ async function bootstrap() {
       return { rgba, width: engine.width, height: engine.height };
     },
     generation: generationFacade,
+    transcription: transcriptionFacade,
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
