@@ -374,4 +374,39 @@ describe("add_texts", () => {
     expect(store.getSnapshot().timeline).toBe(before);
     expect(store.canUndo()).toBe(false);
   });
+
+  test("text clip has textAnimation when an animation preset is provided", async () => {
+    const store = new EditorStore({ ...defaultTimeline() });
+    const ctx = makeCtx(store);
+    await addTextsTool().run({
+      texts: [{ content: "Animated", startFrame: 0, animation: { preset: "popIn" } }],
+    }, ctx);
+    const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(clip.textAnimation).toEqual({ preset: "popIn" });
+    expect(clip.wordTimings).toBeUndefined();
+  });
+
+  test("text clip's textAnimation carries an optional highlightColor", async () => {
+    const store = new EditorStore({ ...defaultTimeline() });
+    const ctx = makeCtx(store);
+    await addTextsTool().run({
+      texts: [{
+        content: "Highlighted",
+        startFrame: 0,
+        animation: { preset: "highlightPop", highlightColor: { r: 1, g: 0, b: 0, a: 1 } },
+      }],
+    }, ctx);
+    const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(clip.textAnimation).toEqual({ preset: "highlightPop", highlightColor: { r: 1, g: 0, b: 0, a: 1 } });
+  });
+
+  test("omitting animation leaves textAnimation unset", async () => {
+    const store = new EditorStore({ ...defaultTimeline() });
+    const ctx = makeCtx(store);
+    await addTextsTool().run({
+      texts: [{ content: "Plain", startFrame: 0 }],
+    }, ctx);
+    const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(clip.textAnimation).toBeUndefined();
+  });
 });

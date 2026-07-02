@@ -37,6 +37,7 @@ const EXPECTED_NAMES = [
   "inspect_color",
   "get_transcript",
   "remove_words",
+  "add_captions",
 ] as const;
 
 function makeClip(id: string) {
@@ -95,15 +96,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 26 specs", () => {
+  test("returns exactly 27 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(26);
+    expect(catalog).toHaveLength(27);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(26);
+    expect(new Set(names).size).toBe(27);
   });
 
   test("names match the expected list exactly", () => {

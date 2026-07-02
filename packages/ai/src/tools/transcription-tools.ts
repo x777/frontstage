@@ -17,10 +17,59 @@ import { keyMissingError } from "./generate-tools.js";
 const TRANSCRIPT_WORD_LIMIT = 10_000;
 
 /** Swift's captionCanTranscribe: audio, or video whose asset is known to carry an audio track. */
-function canTranscribe(entry: MediaManifestEntry | undefined): boolean {
+export function canTranscribe(entry: MediaManifestEntry | undefined): boolean {
   if (!entry) return false;
   if (entry.type === "audio") return true;
   return entry.type === "video" && entry.hasAudio !== false;
+}
+
+/**
+ * Cache-first classification of a set of mediaRefs: a cache hit populates `resultByRef`; everything
+ * else (a miss, or any ref when `language` is set — a language override always bypasses the cache,
+ * the M11A rule) lands in `uncachedRefs`. Split out from the old resolveTimelineWords so callers that
+ * need to inspect the cached/uncached split BEFORE transcribing (e.g. add_captions' cost gate) can.
+ */
+export async function classifyRefsByCache(
+  facade: NonNullable<ToolContext["transcription"]>,
+  refs: string[],
+  language: string | undefined,
+): Promise<{ resultByRef: Map<string, TranscriptionResult>; uncachedRefs: string[] }> {
+  const resultByRef = new Map<string, TranscriptionResult>();
+  const uncachedRefs: string[] = [];
+  for (const ref of refs) {
+    if (language === undefined) {
+      const cached = await facade.cachedTranscript(ref);
+      if (cached) {
+        resultByRef.set(ref, cached);
+        continue;
+      }
+    }
+    uncachedRefs.push(ref);
+  }
+  return { resultByRef, uncachedRefs };
+}
+
+/** Transcribes each of `refs` in parallel; a per-ref failure is collected into `skipped`, not fatal. */
+export async function transcribeRefs(
+  facade: NonNullable<ToolContext["transcription"]>,
+  refs: string[],
+  language: string | undefined,
+): Promise<{ resultByRef: Map<string, TranscriptionResult>; skipped: { mediaRef: string; error: string }[] }> {
+  const resultByRef = new Map<string, TranscriptionResult>();
+  const skipped: { mediaRef: string; error: string }[] = [];
+  const opts = language !== undefined ? { language } : undefined;
+  const outcomes = await Promise.all(
+    refs.map(async (ref) => {
+      try {
+        return { ref, result: await facade.transcribe(ref, opts) };
+      } catch (err) {
+        skipped.push({ mediaRef: ref, error: err instanceof Error ? err.message : String(err) });
+        return { ref, result: undefined };
+      }
+    }),
+  );
+  for (const { ref, result } of outcomes) if (result) resultByRef.set(ref, result);
+  return { resultByRef, skipped };
 }
 
 interface ClipRow {
@@ -63,34 +112,14 @@ async function resolveTimelineWords(
   // Cache-first per unique mediaRef; a language override always bypasses the cache (M11A rule),
   // so it's treated as uncached even when an auto-detected transcript already exists.
   const uniqueRefs = [...new Set(targets.map((t) => t.clip.mediaRef))];
-  const resultByRef = new Map<string, TranscriptionResult>();
-  const uncached: string[] = [];
-  for (const ref of uniqueRefs) {
-    if (a.language === undefined) {
-      const cached = await facade.cachedTranscript(ref);
-      if (cached) {
-        resultByRef.set(ref, cached);
-        continue;
-      }
-    }
-    uncached.push(ref);
-  }
+  const { resultByRef, uncachedRefs } = await classifyRefsByCache(facade, uniqueRefs, a.language);
 
-  const skipped: { mediaRef: string; error: string }[] = [];
-  if (uncached.length > 0) {
+  let skipped: { mediaRef: string; error: string }[] = [];
+  if (uncachedRefs.length > 0) {
     if (!(await facade.hasKey().catch(() => false))) return { ok: false, result: keyMissingError("transcribe") };
-    const opts = a.language !== undefined ? { language: a.language } : undefined;
-    const outcomes = await Promise.all(
-      uncached.map(async (ref) => {
-        try {
-          return { ref, result: await facade.transcribe(ref, opts) };
-        } catch (err) {
-          skipped.push({ mediaRef: ref, error: err instanceof Error ? err.message : String(err) });
-          return { ref, result: undefined };
-        }
-      }),
-    );
-    for (const { ref, result } of outcomes) if (result) resultByRef.set(ref, result);
+    const fetched = await transcribeRefs(facade, uncachedRefs, a.language);
+    for (const [ref, result] of fetched.resultByRef) resultByRef.set(ref, result);
+    skipped = fetched.skipped;
   }
 
   const perClip: Omit<TimelineWord, "index">[][] = [];

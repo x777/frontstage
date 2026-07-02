@@ -36,6 +36,7 @@ export * from "./audio-plan.js";
 export * from "./editor/editor-store.js";
 export * from "./editor/commands.js";
 export * from "./editor/timeline-commands.js";
+export * from "./editor/caption-commands.js";
 export * from "./editor/keyframe-commands.js";
 export * from "./editor/link-commands.js";
 export * from "./editor/track-commands.js";

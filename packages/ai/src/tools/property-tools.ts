@@ -9,6 +9,7 @@ import {
   removeKeyframeCommand,
   addClipCommand,
   clipTypesCompatible,
+  TEXT_ANIMATION_PRESETS,
   type KeyframeTrackKey,
 } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
@@ -53,6 +54,11 @@ const CropSchema = z.object({
 });
 
 const AnimPairSchema = z.object({ a: z.number().finite(), b: z.number().finite() });
+
+const TextAnimationSchema = z.object({
+  preset: z.enum(TEXT_ANIMATION_PRESETS),
+  highlightColor: RGBASchema.optional(),
+});
 
 const KEYFRAME_TRACK_KEYS = ["opacityTrack", "positionTrack", "scaleTrack", "rotationTrack", "cropTrack", "volumeTrack"] as const;
 
@@ -223,6 +229,7 @@ export function addTextsTool(): ToolSpec {
         durationFrames: z.number().finite().int().optional(),
         trackIndex: z.number().finite().int().optional(),
         style: TextStyleSchema.optional(),
+        animation: TextAnimationSchema.optional(),
       })).min(1),
     }),
     run(args, ctx) {
@@ -233,6 +240,7 @@ export function addTextsTool(): ToolSpec {
           durationFrames?: number;
           trackIndex?: number;
           style?: z.infer<typeof TextStyleSchema>;
+          animation?: z.infer<typeof TextAnimationSchema>;
         }[];
       };
       const tl = ctx.store.getSnapshot().timeline;
@@ -280,6 +288,13 @@ export function addTextsTool(): ToolSpec {
         if (text.style) {
           const styleCmd = setClipTextStyleCommand(clipId, text.style);
           reducers.push(styleCmd.apply.bind(styleCmd));
+        }
+
+        // wordTimings is intentionally left unset here — a per-word preset with no wordTimings
+        // falls back to its static (all-visible) rendering, per T2.
+        if (text.animation) {
+          const animCmd = setClipPropertyCommand(clipId, "textAnimation", text.animation);
+          reducers.push(animCmd.apply.bind(animCmd));
         }
       }
 
