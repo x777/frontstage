@@ -173,6 +173,15 @@ export const theme = {
     trimHandle: "var(--color-timeline-trim-handle)",
     clipLabel: "var(--color-timeline-clip-label)",
   },
+  generating: {
+    overlayBg: "var(--color-generating-overlay-bg)",
+    track: "var(--color-generating-track)",
+    fill: "var(--color-generating-fill)",
+  },
+  anim: {
+    shimmerDuration: "var(--anim-shimmer-duration)",
+    progressDuration: "var(--anim-progress-duration)",
+  },
 } as const;
 
 export type Theme = typeof theme;

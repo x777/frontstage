@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import type { MediaManifestEntry } from "@palmier/core";
+import { parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 
 interface MediaLibraryLike {
   getSnapshot(): { entries: MediaManifestEntry[] };
@@ -163,6 +165,9 @@ interface MediaItemProps {
 
 function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
   const trackColor = theme.track[entry.type as keyof typeof theme.track] ?? theme.bg.prominent;
+  const status = parseGenerationStatus(entry.generationStatus);
+  const isGenerating = status.kind !== "none" && status.kind !== "failed";
+  const isFailed = status.kind === "failed";
 
   return (
     <div
@@ -180,12 +185,13 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
         border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
       }}
     >
-      {/* Thumbnail or color tile */}
+      {/* Thumbnail, generating overlay, failed state, or color tile */}
       <div
         style={{
+          position: "relative",
           width: "100%",
           aspectRatio: "16/9",
-          background: thumbnail ? "transparent" : trackColor,
+          background: thumbnail && !isGenerating && !isFailed ? "transparent" : trackColor,
           overflow: "hidden",
           display: "flex",
           alignItems: "center",
@@ -193,7 +199,11 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
           flexShrink: 0,
         }}
       >
-        {thumbnail ? (
+        {isGenerating ? (
+          <GeneratingOverlay label={generatingLabel(status)} />
+        ) : isFailed ? (
+          <FailedTile message={status.message} />
+        ) : thumbnail ? (
           <img
             src={thumbnail}
             alt={entry.name}
@@ -238,6 +248,43 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
           {entry.type}
         </span>
       </div>
+    </div>
+  );
+}
+
+function FailedTile({ message }: { message: string }) {
+  return (
+    <div
+      data-testid="media-item-failed"
+      title={message}
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: theme.spacing.xxs,
+        padding: theme.spacing.xs,
+        textAlign: "center",
+      }}
+    >
+      <span style={{ fontSize: theme.fontSize.mdLg, color: theme.status.error }}>{"⚠"}</span>
+      <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.secondary }}>
+        Failed
+      </span>
+      <span
+        style={{
+          fontSize: theme.fontSize.xxs,
+          color: theme.text.tertiary,
+          display: "-webkit-box",
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
+        {message}
+      </span>
     </div>
   );
 }

@@ -186,4 +186,30 @@
   --color-overlay-handle-stroke: #333333;
   --color-overlay-crop-border: rgba(255, 200, 0, 0.9);
   --color-overlay-crop-handle: #ffcc00;
+
+  /* Generating overlay (media tiles) */
+  --color-generating-overlay-bg: rgba(10, 10, 10, 0.92);
+  --color-generating-track: rgba(255, 255, 255, 0.15);
+  --color-generating-fill: rgba(255, 255, 255, 0.55);
+  --anim-shimmer-duration: 1.35s;
+  --anim-progress-duration: 45s; /* matches Swift GeneratingOverlay.progressDuration=45s */
+}
+
+@keyframes generating-shimmer {
+  0%,
+  100% {
+    opacity: var(--opacity-strong);
+  }
+  50% {
+    opacity: var(--opacity-opaque);
+  }
+}
+
+@keyframes generating-progress-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 90%;
+  }
 }
