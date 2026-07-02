@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld("desktopGen", {
   falDownload: (url) => ipcRenderer.invoke("gen:falDownload", { url }),
 });
 
+contextBridge.exposeInMainWorld("desktopMedia", {
+  extractAudio: (opts) => ipcRenderer.invoke("media:extractAudio", opts),
+});
+
 contextBridge.exposeInMainWorld("desktopMcp", {
   setEnabled: (on) => ipcRenderer.invoke("mcp:setEnabled", on),
   getStatus: () => ipcRenderer.invoke("mcp:getStatus"),

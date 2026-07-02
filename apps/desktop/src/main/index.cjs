@@ -856,3 +856,49 @@ ipcMain.handle("gen:falDownload", async (_e, { url }) => {
     return { error: String(err) };
   }
 });
+
+// ── Media IPC (audio extraction for transcription) ──────────────────────────
+// mono 16kHz PCM16 WAV via ffmpeg. Exactly one of {path, bytes}: unsaved media
+// (in-memory only) pipes bytes to stdin, else ffmpeg reads the resolved on-disk path.
+
+ipcMain.handle("media:extractAudio", async (_e, { path: mediaPath, bytes }) => {
+  if ((mediaPath == null) === (bytes == null)) {
+    return { error: "media:extractAudio requires exactly one of path or bytes" };
+  }
+
+  let ffmpegPath;
+  try {
+    ffmpegPath = require("ffmpeg-static");
+  } catch (e) {
+    return { error: "ffmpeg-static not found: " + e.message };
+  }
+
+  const args = [
+    "-i", mediaPath != null ? mediaPath : "pipe:0",
+    "-vn", "-ac", "1", "-ar", "16000",
+    "-f", "wav", "pipe:1",
+  ];
+
+  return new Promise((resolve) => {
+    const proc = spawn(ffmpegPath, args, { stdio: ["pipe", "pipe", "pipe"] });
+    const stdoutChunks = [];
+    let stderr = "";
+
+    proc.stdout.on("data", (d) => stdoutChunks.push(d));
+    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+    proc.stdin.on("error", () => { /* EPIPE when ffmpeg exits before stdin is fully written */ });
+    proc.on("error", (err) => resolve({ error: "ffmpeg spawn error: " + err.message }));
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        resolve({ error: `ffmpeg exited with code ${code}. stderr: ${stderr.slice(-500)}` });
+        return;
+      }
+      const wav = Buffer.concat(stdoutChunks);
+      const durationSeconds = Math.max(0, (wav.length - 44) / (16000 * 2));
+      resolve({ wav: wav.buffer.slice(wav.byteOffset, wav.byteOffset + wav.byteLength), durationSeconds });
+    });
+
+    if (bytes != null) proc.stdin.write(Buffer.from(bytes));
+    proc.stdin.end();
+  });
+});
