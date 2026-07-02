@@ -9,15 +9,15 @@ import { estimateCredits, formatCredits } from "../generation/cost-estimator.js"
 
 type Generation = NonNullable<ToolContext["generation"]>;
 
-function keyMissingError(action: string): ToolResult {
+export function keyMissingError(action: string): ToolResult {
   return errorResult(`No fal.ai API key configured. Add one in Settings to ${action}.`);
 }
 
-function unknownModelError(id: string, kind: GenModelKind): ToolResult {
+export function unknownModelError(id: string, kind: GenModelKind): ToolResult {
   return errorResult(`Unknown ${kind} model '${id}'. Call list_models (kind='${kind}') to see available models.`);
 }
 
-function confirmationResult(estimate: number): ToolResult {
+export function confirmationResult(estimate: number): ToolResult {
   return ok(`Confirmation required: this will cost ~${formatCredits(estimate)}. Re-call with confirm: true to proceed.`);
 }
 
@@ -201,6 +201,85 @@ export function upscaleMediaTool(): ToolSpec {
       });
 
       return submit(ctx.generation, entry, input, placeholder, estimate, "Upscale started.");
+    },
+  };
+}
+
+export function generateAudioTool(): ToolSpec {
+  return {
+    name: "generate_audio",
+    description:
+      "Starts an async AI audio generation: text-to-speech or text-to-music. Returns a placeholder asset ID immediately; generation runs in the background and the asset becomes usable once ready. Video-to-audio / video-scoring generation (matching an audio track to a timeline span or video asset) is NOT available yet. Call list_models (kind='audio') first to see available models, their voices, and whether they support lyrics or instrumental tracks. Costs real money and is not undoable.",
+    inputSchema: z.object({
+      prompt: z.string().min(1),
+      model: z.string().min(1),
+      voice: z.string().optional(),
+      lyrics: z.string().optional(),
+      styleInstructions: z.string().optional(),
+      instrumental: z.boolean().optional(),
+      duration: z.number().optional(),
+      confirm: z.boolean().optional(),
+    }),
+    async run(args, ctx) {
+      const a = args as {
+        prompt: string;
+        model: string;
+        voice?: string;
+        lyrics?: string;
+        styleInstructions?: string;
+        instrumental?: boolean;
+        duration?: number;
+        confirm?: boolean;
+      };
+
+      if (!ctx.generation) return errorResult("generation is not available in this context");
+      if (!(await ctx.generation.hasKey())) return keyMissingError("generate audio");
+
+      const entry = genModel(a.model);
+      if (!entry || entry.kind !== "audio") return unknownModelError(a.model, "audio");
+
+      const params: GenToolParams = {
+        prompt: a.prompt,
+        voice: a.voice,
+        lyrics: a.lyrics,
+        instrumental: a.instrumental,
+        duration: a.duration,
+      };
+
+      const validationError = validateGenParams(entry, params);
+      if (validationError) return errorResult(validationError);
+
+      const estimate = estimateCredits(entry, params);
+      if (estimate > ctx.generation.confirmThreshold && !a.confirm) return confirmationResult(estimate);
+
+      // Swift's TTS/music placeholder-duration heuristic (Defaults.audio{TTS,Music}DurationSeconds):
+      // models that support lyrics are music (long-form), everything else is TTS (short-form).
+      const duration = a.duration ?? (entry.caps.supportsLyrics ? 60 : 10);
+      params.duration = duration;
+
+      const input = entry.buildInput(params);
+
+      const genInput: GenerationInput = {
+        prompt: a.prompt,
+        model: entry.endpoint,
+        duration,
+        aspectRatio: "",
+        voice: a.voice,
+        lyrics: a.lyrics,
+        styleInstructions: a.styleInstructions,
+        instrumental: a.instrumental,
+        createdAt: new Date().toISOString(),
+      };
+      const placeholder = createPlaceholderEntry({
+        id: ctx.newId(),
+        type: "audio",
+        name: a.prompt.slice(0, 30),
+        duration,
+        ext: "mp3",
+        genInput,
+      });
+
+      return submit(ctx.generation, entry, input, placeholder, estimate, "Generation started.");
     },
   };
 }

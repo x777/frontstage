@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { EditorStore, defaultTimeline } from "@palmier/core";
 import type { MediaManifest, MediaManifestEntry } from "@palmier/core";
-import { generateVideoTool, upscaleMediaTool } from "../src/tools/generate-tools.js";
+import { generateVideoTool, upscaleMediaTool, generateAudioTool } from "../src/tools/generate-tools.js";
 import type { ToolContext } from "../src/index.js";
 import type { StartJobArgs } from "../src/generation/generation-service.js";
 
@@ -263,5 +263,177 @@ describe("upscale_media tool", () => {
     const result = await tool.run({ mediaRef: "does-not-exist", confirm: true }, ctx);
 
     expect(result.isError).toBe(true);
+  });
+});
+
+// ── generate_audio ───────────────────────────────────────────────────────────
+
+describe("generate_audio tool", () => {
+  test("has the correct name", () => {
+    expect(generateAudioTool().name).toBe("generate_audio");
+  });
+
+  test("errors when ctx.generation is absent", async () => {
+    const tool = generateAudioTool();
+    const ctx = makeCtx();
+
+    const result = await tool.run({ prompt: "hello there", model: "elevenlabs-tts" }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("not available");
+  });
+
+  test("errors when no fal key is configured, pointing at settings", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade({ hasKey: async () => false });
+    const ctx = makeCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "hello there", model: "elevenlabs-tts" }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Settings");
+  });
+
+  test("errors on an unknown model, mentioning list_models", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "hello there", model: "does-not-exist" }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("list_models");
+  });
+
+  test("errors when the model is not an audio-kind model", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "hello there", model: "veo3.1-fast" }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("list_models");
+  });
+
+  test("defaults duration to 10s for a TTS model (no duration given)", async () => {
+    const tool = generateAudioTool();
+    const { facade, addPlaceholderCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade, newId: () => "aud-1" });
+
+    const result = await tool.run({ prompt: "hello there", model: "elevenlabs-tts" }, ctx);
+
+    expect(result.isError).toBe(false);
+    const placeholder = addPlaceholderCalls[0]!;
+    expect(placeholder.duration).toBe(10);
+    expect(placeholder.generationInput?.duration).toBe(10);
+  });
+
+  test("defaults duration to 60s for a music model (no duration given)", async () => {
+    const tool = generateAudioTool();
+    const { facade, addPlaceholderCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade, newId: () => "aud-2" });
+
+    const result = await tool.run({ prompt: "an upbeat pop song", model: "minimax-music" }, ctx);
+
+    expect(result.isError).toBe(false);
+    const placeholder = addPlaceholderCalls[0]!;
+    expect(placeholder.duration).toBe(60);
+    expect(placeholder.generationInput?.duration).toBe(60);
+  });
+
+  test("respects an explicit duration override", async () => {
+    const tool = generateAudioTool();
+    const { facade, addPlaceholderCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade });
+
+    await tool.run({ prompt: "hello there", model: "elevenlabs-tts", duration: 20 }, ctx);
+
+    expect(addPlaceholderCalls[0]!.duration).toBe(20);
+  });
+
+  test("over threshold without confirm returns a non-error confirmation and does not submit", async () => {
+    const tool = generateAudioTool();
+    const { facade, addPlaceholderCalls, startJobCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade });
+
+    // elevenlabs-tts @ 5 credits/1k chars; 11000 chars => ceil(55) = 55 credits, over the 50 threshold.
+    const result = await tool.run({ prompt: "a".repeat(11000), model: "elevenlabs-tts" }, ctx);
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("Confirmation required");
+    expect(textOf(result)).toContain("55 credits");
+    expect(textOf(result)).toContain("confirm: true");
+    expect(addPlaceholderCalls).toHaveLength(0);
+    expect(startJobCalls).toHaveLength(0);
+  });
+
+  test("with confirm: true, adds a placeholder and starts the job for a TTS model with voice in the built input", async () => {
+    const tool = generateAudioTool();
+    const { facade, addPlaceholderCalls, startJobCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade, newId: () => "aud-3" });
+
+    const result = await tool.run(
+      { prompt: "hello there", model: "elevenlabs-tts", voice: "Aria", confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(addPlaceholderCalls).toHaveLength(1);
+    const placeholder = addPlaceholderCalls[0]!;
+    expect(placeholder.id).toBe("aud-3");
+    expect(placeholder.type).toBe("audio");
+    expect(placeholder.generationInput?.model).toBe("fal-ai/elevenlabs/tts/turbo-v2.5");
+    expect(placeholder.generationInput?.prompt).toBe("hello there");
+    expect(placeholder.generationInput?.voice).toBe("Aria");
+
+    expect(startJobCalls).toHaveLength(1);
+    const call = startJobCalls[0]!;
+    expect(call.modelEndpoint).toBe("fal-ai/elevenlabs/tts/turbo-v2.5");
+    expect(call.model).toBe("fal-ai/elevenlabs/tts/turbo-v2.5");
+    expect(call.input).toEqual({ text: "hello there", voice: "Aria" });
+    expect(call.placeholders).toEqual([placeholder]);
+  });
+
+  test("with confirm: true, a music model's built input carries lyrics", async () => {
+    const tool = generateAudioTool();
+    const { facade, startJobCalls } = makeFacade();
+    const ctx = makeCtx({ generation: facade });
+
+    await tool.run(
+      {
+        prompt: "an upbeat pop song",
+        model: "minimax-music",
+        lyrics: "[Verse] la la la",
+        instrumental: false,
+        confirm: true,
+      },
+      ctx,
+    );
+
+    expect(startJobCalls).toHaveLength(1);
+    expect(startJobCalls[0]!.input).toEqual({ prompt: "[Verse] la la la" });
+  });
+
+  test("returns errorResult when startJob returns an error", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade({ startJob: async () => ({ error: "fal is down" }) });
+    const ctx = makeCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "hello there", model: "elevenlabs-tts", confirm: true }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("fal is down");
+  });
+
+  test("success names the placeholder asset id", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeCtx({ generation: facade, newId: () => "aud-42" });
+
+    const result = await tool.run({ prompt: "hello there", model: "elevenlabs-tts", confirm: true }, ctx);
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("aud-42");
   });
 });
