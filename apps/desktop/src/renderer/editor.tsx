@@ -4,7 +4,8 @@ import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG } from "@palmier/ai";
+import type { GenerationHost } from "@palmier/ai";
 
 declare global {
   interface Window {
@@ -20,6 +21,7 @@ declare global {
 import { DesktopGateway } from "./desktop-gateway.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
+import { DesktopGenGateway } from "./desktop-gen-gateway.js";
 import type { PlaybackEngine } from "@palmier/engine";
 
 const engineRef: { current: PlaybackEngine | null } = { current: null };
@@ -42,6 +44,40 @@ const imageGenerator = new ImageGenerator({
   model: initialImageModel,
 });
 (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
+
+// Generation orchestrator (image/video jobs) — gateway is main-process-only (fal key never in renderer).
+const genGateway = new DesktopGenGateway();
+const generationHost: GenerationHost = {
+  addPlaceholder: (entry) => library.addPlaceholder(entry),
+  patchEntry: (id, patch) => library.patchEntry(id, patch),
+  finalizeGenerated: (id, bytes, patch) => library.finalizeGenerated(id, bytes, patch),
+  markGenerationFailed: (ids, message) => library.markGenerationFailed(ids, message),
+  entries: () => library.getSnapshot().entries,
+  appendGenerationLog,
+  requestCheckpoint: () => { void session.save(); },
+  notifyComplete: (assetName) => {
+    if (!("Notification" in globalThis) || Notification.permission !== "granted") return;
+    new Notification("Generation complete", { body: assetName });
+  },
+};
+const generationServiceRef: { current: GenerationService } = {
+  current: new GenerationService(genGateway, generationHost),
+};
+(window as unknown as Record<string, unknown>).__generationService = generationServiceRef;
+
+// Wrap session.open so every successful open resumes in-flight jobs from the loaded manifest;
+// dispose+recreate first since there's no separate "close project" action to hook.
+const sessionOpen = session.open.bind(session);
+session.open = async (...args: Parameters<typeof sessionOpen>) => {
+  const ok = await sessionOpen(...args);
+  if (ok) {
+    generationServiceRef.current.dispose();
+    generationServiceRef.current = new GenerationService(genGateway, generationHost);
+    generationServiceRef.current.resumePending();
+  }
+  return ok;
+};
+
 const executor = new ToolExecutor(buildCatalog(), {
   store,
   getManifest: () => library.getManifest(),

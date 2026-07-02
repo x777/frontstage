@@ -1,5 +1,5 @@
 import { EditorStore, defaultTimeline } from "@palmier/core";
-import type { MediaManifest, MediaGateway, ProjectGateway, BoundProject, ProjectRef } from "@palmier/core";
+import type { MediaManifest, MediaManifestEntry, MediaGateway, ProjectGateway, BoundProject, ProjectRef } from "@palmier/core";
 import type { EditorMediaHost } from "../src/editor/editor-host.js";
 import { createEditorHost } from "../src/editor/editor-host.js";
 
@@ -79,4 +79,31 @@ test("createEditorHost: loadDoc with undefined generationLog clears the log", ()
   });
 
   expect(host.getGenerationLog().entries).toHaveLength(0);
+});
+
+test("createEditorHost: loadDoc clears stuck in-flight generation status before entries reach the library", () => {
+  const store = new EditorStore(defaultTimeline());
+  const { host } = createEditorHost(store, makeMediaHost(), makeGateway());
+
+  const stuck: MediaManifestEntry = {
+    id: "stuck", name: "stuck", type: "image", duration: 5,
+    source: { kind: "project", relativePath: "media/stuck.png" },
+    generationStatus: "generating", // no backendJobId: not resumable
+  };
+  const resumable: MediaManifestEntry = {
+    id: "resumable", name: "resumable", type: "image", duration: 5,
+    source: { kind: "project", relativePath: "media/resumable.png" },
+    generationStatus: "generating",
+    generationInput: { prompt: "x", model: "m", duration: 5, aspectRatio: "1:1", backendJobId: "job-1" },
+  };
+
+  host.loadDoc({
+    timeline: defaultTimeline(),
+    manifest: { version: 2, entries: [stuck, resumable], folders: [] },
+    generationLog: { version: 1, entries: [] },
+  });
+
+  const entries = host.getManifest().entries;
+  expect(entries.find((e) => e.id === "stuck")?.generationStatus).toBeUndefined();
+  expect(entries.find((e) => e.id === "resumable")?.generationStatus).toBe("generating");
 });

@@ -2,7 +2,7 @@ import type { EditorStore } from "@palmier/core";
 import type { MediaManifest, MediaGateway } from "@palmier/core";
 import type { ProjectHost, ProjectGateway, BoundProject } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
-import { emptyGenerationLog } from "@palmier/core";
+import { emptyGenerationLog, resetStuckGenerations } from "@palmier/core";
 
 export interface EditorMediaHost {
   getManifest(): MediaManifest;
@@ -78,7 +78,9 @@ export function createEditorHost(
       _bindPending = false;
       _genLog = doc.generationLog?.entries ? [...doc.generationLog.entries] : [];
       store.load(doc.timeline);
-      mediaHost.loadManifest(doc.manifest, _lastMedia);
+      // Clear stuck in-flight statuses (no resumable jobId) before entries ever reach the library.
+      const manifest = { ...doc.manifest, entries: resetStuckGenerations(doc.manifest.entries) };
+      mediaHost.loadManifest(manifest, _lastMedia);
       mediaHost.setGateway(_lastMedia);
     },
     pendingMedia() {

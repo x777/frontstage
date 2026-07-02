@@ -5,12 +5,14 @@ import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
 import type { KeyConfig } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel } from "@palmier/ai";
+import type { GenerationHost } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
 import { WebExportGateway } from "./web-export.js";
 import { WebAiGateway } from "./web-ai-gateway.js";
+import { WebGenGateway } from "./web-gen-gateway.js";
 import "./web-fs-test-entry.js";
 
 interface PalmierAppProps {
@@ -125,6 +127,40 @@ async function bootstrap() {
     model: initialImageModel,
   });
   (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
+
+  // Generation orchestrator (image/video jobs) — routed through the self-hosted proxy (fal key never in browser).
+  const genGateway = new WebGenGateway(aiProxyUrl, aiProxyToken);
+  const generationHost: GenerationHost = {
+    addPlaceholder: (entry) => library.addPlaceholder(entry),
+    patchEntry: (id, patch) => library.patchEntry(id, patch),
+    finalizeGenerated: (id, bytes, patch) => library.finalizeGenerated(id, bytes, patch),
+    markGenerationFailed: (ids, message) => library.markGenerationFailed(ids, message),
+    entries: () => library.getSnapshot().entries,
+    appendGenerationLog,
+    requestCheckpoint: () => { void session.save(); },
+    notifyComplete: (assetName) => {
+      if (!("Notification" in globalThis) || Notification.permission !== "granted") return;
+      new Notification("Generation complete", { body: assetName });
+    },
+  };
+  const generationServiceRef: { current: GenerationService } = {
+    current: new GenerationService(genGateway, generationHost),
+  };
+  (window as unknown as Record<string, unknown>).__generationService = generationServiceRef;
+
+  // Wrap session.open so every successful open resumes in-flight jobs from the loaded manifest;
+  // dispose+recreate first since there's no separate "close project" action to hook.
+  const sessionOpen = session.open.bind(session);
+  session.open = async (...args: Parameters<typeof sessionOpen>) => {
+    const ok = await sessionOpen(...args);
+    if (ok) {
+      generationServiceRef.current.dispose();
+      generationServiceRef.current = new GenerationService(genGateway, generationHost);
+      generationServiceRef.current.resumePending();
+    }
+    return ok;
+  };
+
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {
     store,
