@@ -172,6 +172,8 @@ export const theme = {
   timeline: {
     trimHandle: "var(--color-timeline-trim-handle)",
     clipLabel: "var(--color-timeline-clip-label)",
+    generatingScrim: "var(--color-timeline-generating-scrim)",
+    failedScrim: "var(--color-timeline-failed-scrim)",
   },
   generating: {
     overlayBg: "var(--color-generating-overlay-bg)",

@@ -134,6 +134,8 @@
   /* Timeline */
   --color-timeline-trim-handle: rgba(0, 0, 0, 0.25);
   --color-timeline-clip-label: rgba(255, 255, 255, 0.85);
+  --color-timeline-generating-scrim: rgba(10, 10, 10, 0.72);
+  --color-timeline-failed-scrim: rgba(229, 79, 79, 0.55);
 
   /* Shadows */
   --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);

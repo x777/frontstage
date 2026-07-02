@@ -30,7 +30,7 @@ import {
   planRippleInsertPreview,
 } from "@palmier/core";
 import type { RippleInsertPreviewPlan } from "@palmier/core";
-import type { EditorStore } from "@palmier/core";
+import type { EditorStore, MediaManifestEntry } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { TrackHeaders, TRACK_HEADER_WIDTH } from "./TrackHeaders.js";
 import { drawTimeline } from "./draw-timeline.js";
@@ -43,9 +43,25 @@ const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 40;
 const DRAG_THRESHOLD = 3;
 
+// Duck-typed: TimelinePanel only needs to read entries + hear about changes (mirrors MediaPanel's library dep).
+export interface TimelineLibraryLike {
+  getSnapshot(): { entries: MediaManifestEntry[] };
+  subscribe(cb: () => void): () => void;
+}
+
 export interface TimelinePanelProps {
   store: EditorStore;
   dragController?: MediaDragController;
+  library?: TimelineLibraryLike;
+}
+
+/** mediaRef (= entry.id) → serialized generationStatus, entries without one omitted. */
+export function generationStatusByRef(entries: MediaManifestEntry[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry.generationStatus !== undefined) map.set(entry.id, entry.generationStatus);
+  }
+  return map;
 }
 
 /** Read concrete color strings from CSS vars once. */
@@ -68,10 +84,12 @@ function resolvePalette(el: Element): TimelinePalette {
     trackLottie: get("--track-lottie") || "#E0A800",
     trimHandle: get("--color-timeline-trim-handle") || "rgba(0,0,0,0.25)",
     clipLabel: get("--color-timeline-clip-label") || "rgba(255,255,255,0.85)",
+    generatingScrim: get("--color-timeline-generating-scrim") || "rgba(10,10,10,0.72)", // matches --color-timeline-generating-scrim
+    failedScrim: get("--color-timeline-failed-scrim") || "rgba(229,79,79,0.55)", // matches --color-timeline-failed-scrim
   };
 }
 
-export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
+export function TimelinePanel({ store, dragController, library }: TimelinePanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const snapLineXRef = useRef<number | null>(null);
@@ -130,7 +148,9 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
         overlays.ghostInsert = ghostPreviewRef.current;
       }
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays);
+      const statusByRef = library ? generationStatusByRef(library.getSnapshot().entries) : undefined;
+
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef);
     }
 
     function scheduleDraw() {
@@ -171,6 +191,8 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
 
     // Store subscription — rAF-coalesced redraw
     const unsub = store.subscribe(scheduleDraw);
+    // Library subscription — redraws the generating/failed clip scrim when a job finalizes or fails
+    const unsubLibrary = library ? library.subscribe(scheduleDraw) : null;
 
     // pointer: scrub + drag gestures (move, trim)
     let scrubbing = false;
@@ -661,6 +683,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
     return () => {
       aborted = true;
       unsub();
+      if (unsubLibrary) unsubLibrary();
       if (unsubDrag) unsubDrag();
       ro.disconnect();
       if (rafId !== null) {
@@ -676,7 +699,7 @@ export function TimelinePanel({ store, dragController }: TimelinePanelProps) {
       canvas.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("click", onDocClick);
     };
-  }, [store, dragController]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store, dragController, library]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

@@ -3,11 +3,13 @@ import {
   RULER_HEIGHT,
   TRIM_HANDLE_WIDTH,
   clipRect,
+  parseGenerationStatus,
   trackHeightAt,
   trackTopY,
   xForFrame,
 } from "@palmier/core";
 import type { TimelineGeometry, FrameRange } from "@palmier/core";
+import { generatingLabel } from "../media/GeneratingOverlay.js";
 
 export interface TimelinePalette {
   bgBase: string;
@@ -25,6 +27,8 @@ export interface TimelinePalette {
   trackLottie: string;
   trimHandle: string;
   clipLabel: string;
+  generatingScrim: string;
+  failedScrim: string;
 }
 
 function trackColor(palette: TimelinePalette, mediaType: string): string {
@@ -108,6 +112,7 @@ export interface TimelineOverlays {
  * snapLineX: optional screen-px x for a snap indicator vertical line.
  * dropIndicator: optional media-drag drop indicator.
  * overlays: optional marquee rect + ruler range band.
+ * statusByRef: optional mediaRef → serialized GenerationStatus map for the generating/failed clip scrim.
  */
 export function drawTimeline(
   ctx: CanvasRenderingContext2D,
@@ -117,7 +122,8 @@ export function drawTimeline(
   palette: TimelinePalette,
   snapLineX: number | null = null,
   dropIndicator: DropIndicator | null = null,
-  overlays?: TimelineOverlays
+  overlays?: TimelineOverlays,
+  statusByRef?: Map<string, string>
 ): void {
   const { width, height, dpr } = size;
 
@@ -262,6 +268,27 @@ export function drawTimeline(
         const label = basename(clip.mediaRef);
         ctx.fillText(label, rect.x + TRIM_HANDLE_WIDTH + 2, rect.y + rect.height / 2);
         ctx.restore();
+      }
+
+      // Generation status scrim — STATIC (Swift animates a 45s progress bar; deliberate canvas deviation, see plan).
+      const rawStatus = statusByRef?.get(clip.mediaRef);
+      if (rawStatus !== undefined) {
+        const status = parseGenerationStatus(rawStatus);
+        if (status.kind !== "none") {
+          const isFailed = status.kind === "failed";
+          ctx.save();
+          roundRect(ctx, rect.x, rect.y, rect.width, rect.height, radius);
+          ctx.fillStyle = isFailed ? palette.failedScrim : palette.generatingScrim;
+          ctx.fill();
+          if (rect.width > 20) {
+            ctx.fillStyle = palette.clipLabel;
+            ctx.font = `10px -apple-system,BlinkMacSystemFont,sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(isFailed ? "Failed" : generatingLabel(status), rect.x + rect.width / 2, rect.y + rect.height / 2);
+          }
+          ctx.restore();
+        }
       }
     }
   }
