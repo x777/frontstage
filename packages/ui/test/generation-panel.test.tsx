@@ -59,20 +59,18 @@ test("no key: Generate disabled with the settings hint", async () => {
   expect(screen.getByTestId("gen-submit")).toBeDisabled();
 });
 
-test("invalid params (numImages out of range) show the validation message inline", async () => {
+test("numImages input clamps out-of-range and cleared values (no invalid submit possible)", async () => {
   render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} />);
 
   fireEvent.click(screen.getByTestId("gen-kind-tab-image"));
   await waitFor(() => expect(screen.getByTestId("gen-num-images")).toBeInTheDocument());
 
-  fireEvent.change(screen.getByTestId("gen-prompt"), { target: { value: "a fruit bowl" } });
-  fireEvent.change(screen.getByTestId("gen-num-images"), { target: { value: "5" } });
+  const input = screen.getByTestId("gen-num-images") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "5" } });
+  expect(input.value).toBe("4"); // clamped to numImagesMax
 
-  await waitFor(() => expect(screen.getByTestId("gen-submit")).not.toBeDisabled());
-  await act(async () => { fireEvent.click(screen.getByTestId("gen-submit")); });
-
-  const err = await screen.findByTestId("gen-error");
-  expect(err.textContent).toContain("1-4 image");
+  fireEvent.change(input, { target: { value: "" } });
+  expect(input.value).toBe("1"); // cleared field clamps to 1, never NaN
 });
 
 test("Generate (video, valid, key): addPlaceholder + startJob with endpoint, built input, and cost estimate", async () => {
