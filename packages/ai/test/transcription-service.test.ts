@@ -336,6 +336,92 @@ describe("TranscriptionService.transcribeMany", () => {
   });
 });
 
+function flushMacrotask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+describe("TranscriptionService: audio extraction concurrency", () => {
+  test("caps concurrent extractions at 2 across many uncached refs; never exceeds the high-water mark", async () => {
+    const refs = ["a", "b", "c", "d", "e"];
+    const { host } = makeHost(refs.map((id) => makeEntry({ id })));
+    const { gateway } = makeGateway({
+      submitJobId: (input) => "job:" + (input as { audio_url: string }).audio_url,
+      statusFor: (jobId) => ({ status: "succeeded", resultJson: { text: jobId, chunks: [{ text: jobId, timestamp: [0, 1] }], inferred_languages: [] } }),
+    });
+
+    let inFlight = 0;
+    let highWater = 0;
+    const releases: Array<() => void> = [];
+    const extract: AudioExtractor = async (ref) => {
+      inFlight++;
+      highWater = Math.max(highWater, inFlight);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      inFlight--;
+      return { wav: new TextEncoder().encode(ref), durationSeconds: 1 };
+    };
+    const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
+
+    const done = service.transcribeMany(refs);
+    await flushMacrotask();
+
+    expect(inFlight).toBe(2);
+    expect(highWater).toBe(2);
+
+    // Release the first wave; the next batch should fill back in to the same cap, never above it.
+    releases.splice(0).forEach((resolve) => resolve());
+    await flushMacrotask();
+    expect(inFlight).toBe(2);
+    expect(highWater).toBe(2);
+
+    releases.splice(0).forEach((resolve) => resolve());
+    await flushMacrotask();
+    releases.splice(0).forEach((resolve) => resolve());
+
+    await done;
+    expect(highWater).toBe(2);
+  });
+
+  test("cache hits never touch the extraction gate — they don't queue behind in-flight extractions", async () => {
+    const cachedPath = "media/cached.transcript.json";
+    const record: TranscriptRecord = {
+      text: "cached",
+      language: "en",
+      words: [],
+      segments: [],
+      sourceDurationSeconds: 1,
+      model: "fal-ai/whisper",
+    };
+    const entries = [
+      makeEntry({ id: "a" }),
+      makeEntry({ id: "b" }),
+      makeEntry({ id: "cached", transcriptPath: cachedPath }),
+    ];
+    const { host } = makeHost(entries, { [cachedPath]: new TextEncoder().encode(JSON.stringify(record)) });
+    const { gateway } = makeGateway({});
+
+    let inFlight = 0;
+    const releases: Array<() => void> = [];
+    const extract: AudioExtractor = async () => {
+      inFlight++;
+      await new Promise<void>((resolve) => releases.push(resolve));
+      inFlight--;
+      return { wav: new Uint8Array(), durationSeconds: 1 };
+    };
+    const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
+
+    // Saturate the gate with two uncached extractions, then confirm the cached ref still resolves.
+    void service.transcribe("a");
+    void service.transcribe("b");
+    await flushMacrotask();
+    expect(inFlight).toBe(2);
+
+    const result = await service.transcribe("cached");
+    expect(result.text).toBe("cached");
+
+    releases.splice(0).forEach((resolve) => resolve());
+  });
+});
+
 describe("TranscriptionService: in-flight dedupe", () => {
   test("two concurrent transcribe() calls for the same ref share ONE extract/upload/submit and resolve to equal results", async () => {
     const entry = makeEntry();

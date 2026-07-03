@@ -38,6 +38,28 @@ function requireWhisperEntry() {
   return entry;
 }
 
+// Swift ports Transcription.audioExtractionGate (AsyncSemaphore(value: 2)): bounds only the
+// extraction step, not cache hits or gateway calls, so cheap cache-served refs never queue.
+const AUDIO_EXTRACTION_CONCURRENCY = 2;
+
+class ExtractionGate {
+  private active = 0;
+  private readonly queue: Array<() => void> = [];
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.active >= AUDIO_EXTRACTION_CONCURRENCY) {
+      await new Promise<void>((resolve) => this.queue.push(resolve));
+    }
+    this.active++;
+    try {
+      return await fn();
+    } finally {
+      this.active--;
+      this.queue.shift()?.();
+    }
+  }
+}
+
 /** Cache-first, full-file (the #232 invariant), parallel transcription orchestration over fal-ai/whisper. */
 export class TranscriptionService {
   private readonly gateway: GenJobGateway;
@@ -48,6 +70,7 @@ export class TranscriptionService {
   // Keyed by mediaRef + language override so two concurrent SAME-language calls share one
   // extract/upload/submit, without silently merging two different forced-language requests.
   private readonly inFlight = new Map<string, Promise<TranscriptionResult>>();
+  private readonly extractionGate = new ExtractionGate();
 
   constructor(gateway: GenJobGateway, host: TranscriptionHost, extract: AudioExtractor, opts?: TranscriptionServiceOptions) {
     this.gateway = gateway;
@@ -114,7 +137,7 @@ export class TranscriptionService {
     this.host.patchEntry(mediaRef, { generationStatus: serializeGenerationStatus({ kind: "transcribing" }) });
 
     try {
-      const { wav, durationSeconds } = await this.extract(mediaRef);
+      const { wav, durationSeconds } = await this.extractionGate.run(() => this.extract(mediaRef));
       const url = await this.gateway.uploadFile(wav, "audio/wav", `${mediaRef}.wav`);
       const whisper = requireWhisperEntry();
       const input = whisper.buildInput({ sourceUrl: url, language });
