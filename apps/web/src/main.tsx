@@ -4,7 +4,7 @@ import { EditorStore, ProjectSession, SAMPLER_VERSION } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
-import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia } from "@palmier/ui";
+import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines } from "@palmier/ai";
 import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
@@ -297,11 +297,14 @@ async function bootstrap() {
 
   // Reads localStorage at call time (not just the bootstrap-time aiProxyUrl) so a proxy URL/token
   // change in Settings takes effect without a reload — mirrors keyConfig's persistence keys above.
-  const mediaImportFacade = createWebMediaImport({
+  // renderMatte (M13A T1, create_matte) is wired here rather than inside createWebMediaImport:
+  // it's pure canvas rendering with no host-specific I/O, so it's the same @palmier/ui function on
+  // both hosts — spread on top of the web-specific fromBytes/fromUrl facade.
+  const mediaImportFacade = { ...createWebMediaImport({
     library,
     proxyUrl: () => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl,
     proxyToken: () => localStorage.getItem("palmier.ai.proxyToken") ?? undefined,
-  });
+  }), renderMatte: renderMattePng };
 
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {

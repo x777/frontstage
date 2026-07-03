@@ -7,6 +7,7 @@ import { CaptionsTab } from "./CaptionsTab.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
 import { FolderTile, isMediaDrag, type MediaDragPayload } from "./FolderTile.js";
 import { MediaBreadcrumbs } from "./MediaBreadcrumbs.js";
+import { MatteSheet } from "./MatteSheet.js";
 import type { IndexStatus } from "./media-indexing.js";
 
 export interface MediaIndexingFacade {
@@ -38,6 +39,9 @@ interface MediaLibraryLike {
   deleteFolders(folderIds: string[]): { removedAssetIds: string[] };
   moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void;
   moveFolderToFolder(folderId: string, targetId: string | undefined): void;
+  // Backs the "New Matte…" header action (M13A T1) — the SAME fromBytes-backed import path
+  // import_media uses. Optional: omitted -> the action is hidden rather than erroring.
+  importBytes?(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }>;
 }
 
 export interface MediaPanelProps {
@@ -70,6 +74,20 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
       .catch(() => {})
       .finally(() => setIsDownloadingModel(false));
   }, [indexing, isDownloadingModel]);
+  // Two independent primitive selectors (not one object-returning selector — see the entries/
+  // folders comment below) so an absent store falls back to a stable default without needing a
+  // conditional hook call.
+  const timelineWidth = useSyncExternalStore(
+    store?.subscribe.bind(store) ?? noopSubscribe,
+    () => store?.getSnapshot().timeline.width ?? 1920,
+  );
+  const timelineHeight = useSyncExternalStore(
+    store?.subscribe.bind(store) ?? noopSubscribe,
+    () => store?.getSnapshot().timeline.height ?? 1080,
+  );
+  const [showMatteSheet, setShowMatteSheet] = useState(false);
+  const canCreateMatte = library.importBytes !== undefined && store !== undefined;
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<PanelTab>("media");
@@ -324,6 +342,24 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             >
               New Folder
             </button>
+            {canCreateMatte && (
+              <button
+                data-testid="media-new-matte"
+                onClick={() => setShowMatteSheet(true)}
+                style={{
+                  background: theme.bg.raised,
+                  color: theme.text.primary,
+                  border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+                  borderRadius: theme.radius.xs,
+                  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                  fontSize: theme.fontSize.xs,
+                  fontWeight: theme.fontWeight.medium,
+                  cursor: "pointer",
+                }}
+              >
+                New Matte…
+              </button>
+            )}
             <input
               data-testid="media-search"
               type="text"
@@ -452,6 +488,16 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
         <div data-testid="captions-tab-unavailable" style={{ padding: theme.spacing.sm, fontSize: theme.fontSize.xs, color: theme.text.muted }}>
           Captions needs the AI facade — not wired for this host.
         </div>
+      )}
+
+      {showMatteSheet && library.importBytes && (
+        <MatteSheet
+          library={{ importBytes: library.importBytes }}
+          timelineWidth={timelineWidth}
+          timelineHeight={timelineHeight}
+          folderId={currentFolderId}
+          onClose={() => setShowMatteSheet(false)}
+        />
       )}
     </div>
   );

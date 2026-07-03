@@ -59,6 +59,9 @@ export interface ToolContext {
     fromUrl(url: string, name?: string, folderId?: string, mimeType?: string): Promise<{ assetId: string }>;
     // Desktop only — a directory recurses, mirroring its structure as folders.
     fromPath?(absPath: string, folderId?: string): Promise<{ assetIds: string[] }>;
+    // Solid-color matte rendering (M13A T1, create_matte): the ai package can't touch canvas, so
+    // hosts wire this from @palmier/ui's renderMattePng. Absent -> create_matte errors cleanly.
+    renderMatte?(hex: string, width: number, height: number): Promise<Uint8Array>;
   };
   // Timeline interchange export facade (XMEML/FCPXML) backing export_project (M12B T3) — the SAME
   // object is also threaded into the UI's export command, so the agent tool and the File menu share

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@palmier/core";
 import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia } from "@palmier/ui";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost } from "@palmier/ai";
@@ -202,10 +202,13 @@ const libraryFacade = {
   deleteEntries: (ids: string[]) => library.deleteEntries(ids),
 };
 
-const mediaImportFacade = createDesktopMediaImport({
+// renderMatte (M13A T1, create_matte) is wired here rather than inside createDesktopMediaImport:
+// it's pure canvas rendering with no host-specific I/O, so it's the same @palmier/ui function on
+// both hosts — spread on top of the desktop-specific fromBytes/fromUrl/fromPath facade.
+const mediaImportFacade = { ...createDesktopMediaImport({
   library,
   getProjectDir: () => (session.getState().ref as DesktopProjectRef | null)?.path,
-});
+}), renderMatte: renderMattePng };
 
 // SAME object threaded into the ToolExecutor context and useExportCommand's XML/FCPXML path —
 // mirrors the generation/transcription/library facade pattern above.

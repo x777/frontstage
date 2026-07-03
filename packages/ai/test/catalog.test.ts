@@ -46,6 +46,7 @@ const EXPECTED_NAMES = [
   "delete_media",
   "delete_folder",
   "import_media",
+  "create_matte",
   "export_project",
 ] as const;
 
@@ -105,15 +106,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 36 specs", () => {
+  test("returns exactly 37 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(36);
+    expect(catalog).toHaveLength(37);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(36);
+    expect(new Set(names).size).toBe(37);
   });
 
   test("names match the expected list exactly", () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { collectFolderCascade, referencingClipIds, removeClipCommand } from "@palmier/core";
-import type { ClipType, MediaFolder } from "@palmier/core";
+import { collectFolderCascade, referencingClipIds, removeClipCommand, matteSize, matteName, MATTE_ASPECTS } from "@palmier/core";
+import type { ClipType, MediaFolder, MatteAspect } from "@palmier/core";
 import type { ToolContext, ToolResult, ToolSpec } from "./types.js";
 import { asUndoStep, errorResult, ok } from "./executor.js";
 
@@ -556,6 +556,73 @@ export function importMediaTool(): ToolSpec {
         return ok(
           `Import started. Placeholder asset id: ${assetId}. Status: downloading. Poll get_media; the asset appears once the download completes.`,
         );
+      } catch (err) {
+        return errorResult(toMessage(err));
+      }
+    },
+  };
+}
+
+// ── create_matte (M13A T1) ───────────────────────────────────────────────────
+// Ported from Swift ToolExecutor+Import.swift::createMatte + the create_matte ToolDefinitions
+// entry. Real hex-color validity is checked downstream by the renderMatte facade call (mirrors
+// Swift's Matte.png, which is where TextStyle.RGBA(hex:) actually runs) — this front door only
+// checks that 'hex' is present and non-empty, exactly like the Swift tool.
+
+const MATTE_ASPECT_ARG_LIST = "Project, 16:9, 9:16, 1:1, 4:3, 9:14, 2.4:1";
+const MATTE_ASPECT_LABELS = ["16:9", "9:16", "1:1", "4:3", "9:14", "2.4:1"] as const;
+const MATTE_RENDER_UNAVAILABLE = "create_matte: matte rendering is not available in this context";
+
+// Trims first, exactly like Swift's MatteAspect.parse — but the error message the caller builds
+// on a null result uses the ORIGINAL (untrimmed) arg, matching the Swift tool's error text.
+function parseMatteAspectArg(raw: string): MatteAspect | undefined {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return undefined;
+  if (trimmed.toLowerCase() === "project") return "project";
+  return (MATTE_ASPECT_LABELS as readonly string[]).includes(trimmed) ? (trimmed as MatteAspect) : undefined;
+}
+
+export function createMatteTool(): ToolSpec {
+  return {
+    name: "create_matte",
+    description: "Creates a solid-color PNG matte in the media library.",
+    inputSchema: z.object({
+      hex: z.string(),
+      aspectRatio: z.enum(["Project", "16:9", "9:16", "1:1", "4:3", "9:14", "2.4:1"]).optional(),
+      name: z.string().optional(),
+      folderId: z.string().optional(),
+    }),
+    async run(args, ctx): Promise<ToolResult> {
+      const a = args as { hex?: string; aspectRatio?: string; name?: string; folderId?: string };
+      const facade = ctx.mediaImport;
+      if (!facade) return errorResult(MEDIA_IMPORT_UNAVAILABLE);
+      if (!facade.renderMatte) return errorResult(MATTE_RENDER_UNAVAILABLE);
+
+      const hex = a.hex?.trim();
+      if (!hex) return errorResult("create_matte requires 'hex'.");
+
+      let aspect: MatteAspect = "project";
+      if (a.aspectRatio !== undefined) {
+        const parsed = parseMatteAspectArg(a.aspectRatio);
+        if (!parsed) {
+          return errorResult(`create_matte: unknown aspectRatio '${a.aspectRatio}'. Use one of ${MATTE_ASPECT_ARG_LIST}.`);
+        }
+        aspect = parsed;
+      }
+
+      if (a.folderId !== undefined && ctx.library) {
+        const known = new Set(ctx.library.listFolders().map((f) => f.id));
+        if (!known.has(a.folderId)) return errorResult(`folderId not found: ${a.folderId}`);
+      }
+
+      const tl = ctx.store.getSnapshot().timeline;
+      const { width, height } = matteSize(aspect, tl.width, tl.height);
+      const name = a.name ?? matteName(aspect, width, height);
+
+      try {
+        const bytes = await facade.renderMatte(hex, width, height);
+        const { assetId } = await facade.fromBytes(bytes, "image/png", name, a.folderId);
+        return ok(JSON.stringify({ mediaRef: assetId, name }));
       } catch (err) {
         return errorResult(toMessage(err));
       }

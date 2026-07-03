@@ -20,6 +20,7 @@ import {
   deleteMediaTool,
   deleteFolderTool,
   importMediaTool,
+  createMatteTool,
   IMPORT_BYTES_MAX_BASE64_LENGTH,
   type ToolContext,
 } from "../src/index.js";
@@ -566,7 +567,9 @@ class FakeMediaImport {
   fromBytesResult: { assetId: string } | Error = { assetId: "asset-bytes" };
   fromUrlResult: { assetId: string } | Error = { assetId: "asset-url" };
   fromPathResult: { assetIds: string[] } | Error = { assetIds: ["asset-path-1"] };
+  renderMatteResult: Uint8Array | Error = new Uint8Array([9, 9, 9]);
   hasFromPath = true;
+  hasRenderMatte = true;
 
   async fromBytes(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }> {
     this.calls.push({ kind: "fromBytes", args: [bytes, mimeType, name, folderId] });
@@ -586,6 +589,15 @@ class FakeMediaImport {
       this.calls.push({ kind: "fromPath", args: [absPath, folderId] });
       if (this.fromPathResult instanceof Error) throw this.fromPathResult;
       return this.fromPathResult;
+    };
+  }
+
+  get renderMatte(): ((hex: string, width: number, height: number) => Promise<Uint8Array>) | undefined {
+    if (!this.hasRenderMatte) return undefined;
+    return async (hex: string, width: number, height: number) => {
+      this.calls.push({ kind: "renderMatte", args: [hex, width, height] });
+      if (this.renderMatteResult instanceof Error) throw this.renderMatteResult;
+      return this.renderMatteResult;
     };
   }
 }
@@ -829,5 +841,133 @@ describe("import_media — path", () => {
     const result = await importMediaTool().run({ source: { path: "/nope" } }, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(/path not found: \/nope/);
+  });
+});
+
+// ── create_matte (M13A T1) ────────────────────────────────────────────────────
+// makeImportCtx's timeline is EditorStore(makeTimeline()) = {...defaultTimeline(), tracks: []},
+// i.e. the schema default 1920x1080 project size — pinned against Swift's Matte.even/Matte.fit in
+// packages/core/test/matte.test.ts; these tests only need the tool-level plumbing to be right.
+
+describe("create_matte — facade absent", () => {
+  test("ctx.mediaImport absent: rejected", async () => {
+    const ctx = makeImportCtx(undefined);
+    const result = await createMatteTool().run({ hex: "#000000" }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/media import is not available/);
+  });
+
+  test("ctx.mediaImport present but renderMatte absent (e.g. a host that hasn't wired it): rejected cleanly", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.hasRenderMatte = false;
+    const ctx = makeImportCtx(mediaImport);
+    const result = await createMatteTool().run({ hex: "#000000" }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/matte rendering is not available/);
+    expect(mediaImport.calls).toHaveLength(0);
+  });
+});
+
+describe("create_matte — validation", () => {
+  test("missing hex: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await createMatteTool().run({}, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe("create_matte requires 'hex'.");
+  });
+
+  test("blank hex (whitespace only): rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await createMatteTool().run({ hex: "   " }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe("create_matte requires 'hex'.");
+  });
+
+  test("unknown aspectRatio: rejected with the Swift-parity message (raw, untrimmed value)", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await createMatteTool().run({ hex: "#000000", aspectRatio: "21:9 " }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(
+      "create_matte: unknown aspectRatio '21:9 '. Use one of Project, 16:9, 9:16, 1:1, 4:3, 9:14, 2.4:1.",
+    );
+  });
+
+  test("unknown folderId (ctx.library present): rejected, facade not called", async () => {
+    const mediaImport = new FakeMediaImport();
+    const lib = new FakeLibrary();
+    const ctx = makeImportCtx(mediaImport, lib);
+    const result = await createMatteTool().run({ hex: "#000000", folderId: "missing" }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/folderId not found: missing/);
+    expect(mediaImport.calls).toHaveLength(0);
+  });
+
+  test("unknown folderId but ctx.library absent (M12A deviation): not validated, proceeds", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await createMatteTool().run({ hex: "#000000", folderId: "missing" }, ctx);
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls.find((c) => c.kind === "fromBytes")?.args[3]).toBe("missing");
+  });
+});
+
+describe("create_matte — happy path", () => {
+  test("default aspectRatio (Project): sizes from the timeline, names 'Matte · WxH'", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await createMatteTool().run({ hex: "#112233" }, ctx);
+    expect(result.isError).toBe(false);
+
+    expect(mediaImport.calls).toEqual([
+      { kind: "renderMatte", args: ["#112233", 1920, 1080] },
+      { kind: "fromBytes", args: [mediaImport.renderMatteResult, "image/png", "Matte · 1920×1080", undefined] },
+    ]);
+    expect(JSON.parse(textOf(result))).toEqual({ mediaRef: "asset-bytes", name: "Matte · 1920×1080" });
+  });
+
+  test("explicit aspectRatio + name + folderId all flow through to renderMatte/fromBytes", async () => {
+    const mediaImport = new FakeMediaImport();
+    const lib = new FakeLibrary();
+    const folder = lib.createFolder("Mattes");
+    const ctx = makeImportCtx(mediaImport, lib);
+
+    const result = await createMatteTool().run(
+      { hex: "#FFFFFF", aspectRatio: "9:16", name: "My Matte", folderId: folder.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+
+    expect(mediaImport.calls).toEqual([
+      { kind: "renderMatte", args: ["#FFFFFF", 1080, 1920] },
+      { kind: "fromBytes", args: [mediaImport.renderMatteResult, "image/png", "My Matte", folder.id] },
+    ]);
+    expect(JSON.parse(textOf(result))).toEqual({ mediaRef: "asset-bytes", name: "My Matte" });
+  });
+
+  test("'project' aspectRatio is accepted case-insensitively", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await createMatteTool().run({ hex: "#000000", aspectRatio: "PROJECT" }, ctx);
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls[0]).toEqual({ kind: "renderMatte", args: ["#000000", 1920, 1080] });
+  });
+
+  test("renderMatte throws (e.g. invalid hex): surfaced as an error result, fromBytes not called", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.renderMatteResult = new Error("Couldn't render matte image.");
+    const ctx = makeImportCtx(mediaImport);
+    const result = await createMatteTool().run({ hex: "not-a-color" }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Couldn't render matte image\./);
+    expect(mediaImport.calls.some((c) => c.kind === "fromBytes")).toBe(false);
+  });
+
+  test("fromBytes throws: surfaced as an error result", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.fromBytesResult = new Error("disk full");
+    const ctx = makeImportCtx(mediaImport);
+    const result = await createMatteTool().run({ hex: "#000000" }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/disk full/);
   });
 });

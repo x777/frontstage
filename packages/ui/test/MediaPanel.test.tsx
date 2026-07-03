@@ -1,5 +1,5 @@
 import { render, screen, within, fireEvent, act, waitFor } from "@testing-library/react";
-import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
+import { EditorStore, defaultTimeline, type MediaFolder, type MediaManifestEntry } from "@palmier/core";
 import { MediaPanel } from "../src/media/MediaPanel.js";
 import type { MediaIndexingFacade } from "../src/media/MediaPanel.js";
 import type { IndexStatus } from "../src/media/media-indexing.js";
@@ -32,9 +32,10 @@ interface FakeLibraryCalls {
   deleteFolders: Array<{ folderIds: string[] }>;
   moveEntriesToFolder: Array<{ assetIds: string[]; folderId: string | undefined }>;
   moveFolderToFolder: Array<{ folderId: string; targetId: string | undefined }>;
+  importBytes: Array<{ mimeType: string; name: string | undefined; folderId: string | undefined }>;
 }
 
-function fakeLibrary(initialEntries: MediaManifestEntry[] = [], initialFolders: MediaFolder[] = []) {
+function fakeLibrary(initialEntries: MediaManifestEntry[] = [], initialFolders: MediaFolder[] = [], withMatte = false) {
   let entries = initialEntries;
   let folders = initialFolders;
   const listeners = new Set<() => void>();
@@ -48,6 +49,7 @@ function fakeLibrary(initialEntries: MediaManifestEntry[] = [], initialFolders: 
     deleteFolders: [],
     moveEntriesToFolder: [],
     moveFolderToFolder: [],
+    importBytes: [],
   };
 
   const lib = {
@@ -96,6 +98,14 @@ function fakeLibrary(initialEntries: MediaManifestEntry[] = [], initialFolders: 
       folders = folders.map((f) => (f.id === folderId ? { ...f, parentFolderId: targetId } : f));
       notify();
     },
+    ...(withMatte
+      ? {
+          importBytes: async (_bytes: Uint8Array, mimeType: string, name?: string, folderId?: string) => {
+            calls.importBytes.push({ mimeType, name, folderId });
+            return { assetId: "matte-asset-1" };
+          },
+        }
+      : {}),
   };
 
   return Object.assign(lib, { calls });
@@ -444,4 +454,55 @@ test("clicking Download model while already downloading does not re-fire ensureR
   await waitFor(() => expect(button).toBeDisabled());
   fireEvent.click(button); // no-op: disabled, and the handler also guards on isDownloadingModel
   expect(ensureReady).toHaveBeenCalledTimes(1);
+});
+
+// ── "New Matte…" header entry (M13A T1) ───────────────────────────────────────
+
+function stubCanvasMatte(): { restore: () => void } {
+  const getContextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, "getContext")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .mockReturnValue({ fillRect: () => {}, fillStyle: "" } as any);
+  const toDataURLSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, "toDataURL")
+    .mockReturnValue(`data:image/png;base64,${btoa("fake-png-bytes")}`);
+  return {
+    restore: () => {
+      getContextSpy.mockRestore();
+      toDataURLSpy.mockRestore();
+    },
+  };
+}
+
+test("no store, or a library without importBytes: the New Matte action is hidden", () => {
+  render(<MediaPanel library={fakeLibrary()} />);
+  expect(screen.queryByTestId("media-new-matte")).toBeNull();
+
+  const store = new EditorStore(defaultTimeline());
+  render(<MediaPanel library={fakeLibrary()} store={store} />);
+  expect(screen.queryAllByTestId("media-new-matte")).toHaveLength(0);
+});
+
+test("New Matte… opens the sheet; Create Matte imports via the library's importBytes at the current folder", async () => {
+  const canvas = stubCanvasMatte();
+  try {
+    const folder: MediaFolder = { id: "f1", name: "Interviews" };
+    const lib = fakeLibrary([], [folder], true);
+    const store = new EditorStore(defaultTimeline());
+
+    render(<MediaPanel library={lib} store={store} />);
+    fireEvent.doubleClick(screen.getByTestId("folder-tile")); // drill into f1
+
+    fireEvent.click(screen.getByTestId("media-new-matte"));
+    expect(screen.getByTestId("matte-sheet")).toBeInTheDocument();
+    expect(screen.getByTestId("matte-size-readout")).toHaveTextContent("1920 × 1080");
+
+    fireEvent.click(screen.getByTestId("matte-sheet-create"));
+
+    await waitFor(() => expect(lib.calls.importBytes).toHaveLength(1));
+    expect(lib.calls.importBytes[0]).toEqual({ mimeType: "image/png", name: "Matte · 1920×1080", folderId: "f1" });
+    await waitFor(() => expect(screen.queryByTestId("matte-sheet")).toBeNull());
+  } finally {
+    canvas.restore();
+  }
 });

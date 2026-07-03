@@ -17,6 +17,7 @@ export {
   deleteMediaTool,
   deleteFolderTool,
   importMediaTool,
+  createMatteTool,
   REMOTE_IMPORT_MAX_BYTES,
   REMOTE_IMPORT_TIMEOUT_MS,
   IMPORT_BYTES_MAX_BASE64_LENGTH,
