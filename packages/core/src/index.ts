@@ -10,6 +10,7 @@ export * from "./media.js";
 export * from "./media/generation-status.js";
 export * from "./media/generation-recovery.js";
 export * from "./media/transcript.js";
+export * from "./media/folder-ops.js";
 export * from "./media/timeline-words.js";
 export * from "./media/word-cut-planner.js";
 export * from "./captions/caption-builder.js";

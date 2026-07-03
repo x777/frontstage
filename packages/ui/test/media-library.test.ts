@@ -1,5 +1,6 @@
 import { test, expect } from "vitest";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
+import { decodeProjectFiles, defaultTimeline, emptyGenerationLog, encodeProjectFiles, PROJECT_FILES } from "@palmier/core";
 import { MediaLibrary } from "../src/media/media-library.js";
 
 function placeholderEntry(id: string): MediaManifestEntry {
@@ -221,6 +222,42 @@ test("readDerived: falls back to the gateway when not held in memory", async () 
 test("readDerived: null (not a throw) when neither in-memory bytes nor a gateway are available", async () => {
   const lib = new MediaLibrary();
   await expect(lib.readDerived("media/missing.transcript.json")).resolves.toBeNull();
+});
+
+test("loadManifest: folders and an entry's folderId survive an untouched round trip through getManifest (regression)", () => {
+  const lib = new MediaLibrary();
+  const folder: MediaFolder = { id: "f1", name: "B-roll" };
+  const entry = realEntry("a");
+  entry.folderId = "f1";
+
+  lib.loadManifest({ version: 2, entries: [entry], folders: [folder] }, null);
+
+  const manifest = lib.getManifest();
+  expect(manifest.folders).toEqual([folder]);
+  expect(manifest.entries[0]?.folderId).toBe("f1");
+});
+
+test("loadManifest -> getManifest folders round-trip through encodeProjectFiles/decodeProjectFiles", () => {
+  const lib = new MediaLibrary();
+  const folder: MediaFolder = { id: "f1", name: "B-roll" };
+  const entry = realEntry("a");
+  entry.folderId = "f1";
+  lib.loadManifest({ version: 2, entries: [entry], folders: [folder] }, null);
+
+  const files = encodeProjectFiles({
+    timeline: defaultTimeline(),
+    manifest: lib.getManifest(),
+    generationLog: emptyGenerationLog(),
+  });
+  const decoded = decodeProjectFiles({
+    timeline: files[PROJECT_FILES.timeline]!,
+    manifest: files[PROJECT_FILES.manifest],
+    generationLog: files[PROJECT_FILES.generationLog],
+  });
+
+  expect(decoded.manifestUnreadable).toBe(false);
+  expect(decoded.manifest.folders).toEqual([folder]);
+  expect(decoded.manifest.entries[0]?.folderId).toBe("f1");
 });
 
 test("readDerived: null when the gateway rejects (e.g. file not found)", async () => {

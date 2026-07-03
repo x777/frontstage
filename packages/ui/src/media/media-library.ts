@@ -1,5 +1,5 @@
 import { clipTypeFromFileExtension, serializeGenerationStatus } from "@palmier/core";
-import type { MediaManifest, MediaManifestEntry } from "@palmier/core";
+import type { MediaFolder, MediaManifest, MediaManifestEntry } from "@palmier/core";
 import type { MediaGateway } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
 
@@ -14,6 +14,7 @@ export class MediaLibrary {
   private _persisted = new Set<string>();
   private thumbnails = new Map<string, string>();
   private _entries: MediaManifestEntry[] = [];
+  private _folders: MediaFolder[] = [];
   private _snapshot: LibrarySnapshot = { entries: [] };
   private _manifest: MediaManifest = { version: 2, entries: [], folders: [] };
   private _manifestVersion = 2;
@@ -32,7 +33,7 @@ export class MediaLibrary {
   private emit(): void {
     const entries = [...this._entries];
     this._snapshot = { entries };
-    this._manifest = { version: this._manifestVersion, entries, folders: [] };
+    this._manifest = { version: this._manifestVersion, entries, folders: [...this._folders] };
     for (const l of this.listeners) l();
   }
 
@@ -50,6 +51,7 @@ export class MediaLibrary {
 
   loadManifest(manifest: MediaManifest, gateway: MediaGateway | null): void {
     this._entries = manifest.entries;
+    this._folders = manifest.folders;
     this._manifestVersion = manifest.version;
     this._bytes.clear();
     this._persisted.clear();
