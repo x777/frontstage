@@ -208,6 +208,14 @@ async function bootstrap() {
   library.subscribe(() => mediaIndexingServiceRef.current.start());
   (window as unknown as Record<string, unknown>).__mediaIndexingService = mediaIndexingServiceRef;
 
+  // The panel's "Download model" action (M12C T4) — same embeddingService the search_media tool's
+  // confirm gate drives, so a click here and a confirm:true tool call share one single-flight download.
+  const indexingFacade: MediaIndexingFacade = {
+    getStatus: () => indexingStatusRelay.getStatus(),
+    subscribe: (cb) => indexingStatusRelay.subscribe(cb),
+    ensureReady: (onProgress) => embeddingService.ensureReady(onProgress),
+  };
+
   // SAME object threaded into the ToolExecutor context; T4 wires the real visual search scope +
   // the model-download confirm gate on top of ready()/ensureReady(). cachedEmbeddings delegates
   // through the indexing service ref so it always reads the current project's cache.
@@ -363,7 +371,7 @@ async function bootstrap() {
         generationFacade={generationFacade}
         executor={executor}
         transcriptionFacade={transcriptionFacade}
-        indexing={indexingStatusRelay}
+        indexing={indexingFacade}
       />
     </StrictMode>,
   );

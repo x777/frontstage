@@ -4,7 +4,7 @@ import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@
 import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia } from "@palmier/ui";
-import type { KeyConfig, FalKeyConfig, MediaIndexingHost } from "@palmier/ui";
+import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost } from "@palmier/ai";
 
@@ -98,6 +98,14 @@ const indexingStatusRelay = new IndexingStatusRelay(mediaIndexingServiceRef.curr
 // Resweeps on every library mutation (new imports/generations finalizing) — registered once on
 // the (stable, never-recreated) library; always dereferences the CURRENT service via the ref.
 library.subscribe(() => mediaIndexingServiceRef.current.start());
+
+// The panel's "Download model" action (M12C T4) — same embeddingService the search_media tool's
+// confirm gate drives, so a click here and a confirm:true tool call share one single-flight download.
+const indexingFacade: MediaIndexingFacade = {
+  getStatus: () => indexingStatusRelay.getStatus(),
+  subscribe: (cb) => indexingStatusRelay.subscribe(cb),
+  ensureReady: (onProgress) => embeddingService.ensureReady(onProgress),
+};
 (window as unknown as Record<string, unknown>).__mediaIndexingService = mediaIndexingServiceRef;
 
 // Every successful open resumes in-flight jobs from the loaded manifest;
@@ -355,7 +363,7 @@ function PalmierDesktopApp() {
       interopExport={interopExportFacade}
       engineRef={engineRef}
       getGenerationLog={getGenerationLog}
-      indexing={indexingStatusRelay}
+      indexing={indexingFacade}
       agent={{
         session: agentSession,
         model: agentModelId,

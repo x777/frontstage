@@ -4,7 +4,9 @@ import {
   defaultTimeline,
   defaultTransform,
   defaultCrop,
+  type EmbeddingRow,
   type MediaManifest,
+  type MediaManifestEntry,
   type Track,
   type Timeline,
   type TranscriptionResult,
@@ -17,6 +19,20 @@ import {
   searchMediaTool,
   type ToolContext,
 } from "../src/index.js";
+
+// search_media wraps its JSON payload in { note, matches } only when a visual-scope note applies
+// (see read-tools.ts) — this unwraps either shape so tests don't care which one came back.
+interface SearchHitLike {
+  id: string;
+  name: string;
+  type: string;
+  spokenMatches?: { start: number; end: number; text: string }[];
+  visualMatches?: { timeSec: number; score: number }[];
+}
+function matchesOf(text: string): SearchHitLike[] {
+  const parsed: unknown = JSON.parse(text);
+  return Array.isArray(parsed) ? (parsed as SearchHitLike[]) : (parsed as { matches: SearchHitLike[] }).matches;
+}
 
 function makeClip(id: string, mediaRef: string, startFrame: number) {
   return {
@@ -329,10 +345,10 @@ describe("search_media scope", () => {
     const result = await ex.execute("search_media", { query: "sunrise" });
     expect(result.isError).toBe(false);
     const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
-    const parsed = JSON.parse(text) as { id: string; spokenMatches?: unknown[] }[];
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0]!.id).toBe("media-1");
-    expect(parsed[0]!.spokenMatches).toEqual([{ start: 0, end: 1, text: "sunrise footage" }]);
+    const matches = matchesOf(text);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.id).toBe("media-1");
+    expect(matches[0]!.spokenMatches).toEqual([{ start: 0, end: 1, text: "sunrise footage" }]);
   });
 
   test("an entry without transcriptPath is never queried for spoken matches", async () => {
@@ -346,5 +362,196 @@ describe("search_media scope", () => {
     const ex = new ToolExecutor([searchMediaTool()], ctx);
     await ex.execute("search_media", { query: "x", scope: "spoken" });
     expect(cachedCalls).toEqual([]);
+  });
+});
+
+// ── search_media visual scope: real embedding search (M12C T4) ────────────────
+
+type EmbeddingFacade = NonNullable<ToolContext["embedding"]>;
+
+function makeEmbeddingFacade(opts: { ready: boolean; queryVector?: Float32Array; rows?: Record<string, EmbeddingRow[]> }): {
+  facade: EmbeddingFacade;
+  calls: { ensureReady: number; embedText: string[]; cached: string[] };
+} {
+  const calls = { ensureReady: 0, embedText: [] as string[], cached: [] as string[] };
+  let ready = opts.ready;
+  const facade: EmbeddingFacade = {
+    ready: () => ready,
+    ensureReady: async () => {
+      calls.ensureReady += 1;
+      ready = true;
+    },
+    embedText: async (q) => {
+      calls.embedText.push(q);
+      return opts.queryVector ?? new Float32Array([1, 0, 0]);
+    },
+    cachedEmbeddings: async (mediaRef) => {
+      calls.cached.push(mediaRef);
+      return opts.rows?.[mediaRef] ?? null;
+    },
+    modelInfo: { model: "test-siglip", modelVersion: "v1", dim: 3 },
+  };
+  return { facade, calls };
+}
+
+function visualEntry(id: string, name: string, overrides: Partial<MediaManifestEntry> = {}): MediaManifestEntry {
+  return { id, name, type: "video", source: { kind: "external", absolutePath: `/tmp/${id}.mp4` }, duration: 10, ...overrides };
+}
+
+describe("search_media visual scope (embeddings)", () => {
+  test("ready facade: ranked matches carry the matched timeSec + score", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-a", "storm-clouds.mp4", { embeddingPath: "media/media-a.embed" })],
+      folders: [],
+    };
+    const { facade, calls } = makeEmbeddingFacade({
+      ready: true,
+      rows: { "media-a": [{ time: 5, shotStart: 0, shotEnd: 10, vector: new Float32Array([1, 0, 0]) }] },
+    });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding: facade };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "beach", scope: "visual" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    const matches = matchesOf(text);
+    expect(matches).toEqual([{ id: "media-a", name: "storm-clouds.mp4", type: "video", visualMatches: [{ timeSec: 5, score: 1 }] }]);
+    expect(calls.embedText).toEqual(["beach"]);
+    expect(calls.cached).toEqual(["media-a"]);
+  });
+
+  test("merges an embedding-only hit, a name-only hit, and an entry matching both — dedupe + order", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [
+        visualEntry("media-a", "storm-clouds.mp4", { embeddingPath: "media/media-a.embed" }), // visual-only
+        visualEntry("media-b", "beach-day.mp4"), // name-only, unindexed
+        visualEntry("media-c", "beach-sunset.mp4", { embeddingPath: "media/media-c.embed" }), // both
+      ],
+      folders: [],
+    };
+    const { facade, calls } = makeEmbeddingFacade({
+      ready: true,
+      rows: {
+        "media-a": [{ time: 5, shotStart: 0, shotEnd: 10, vector: new Float32Array([1, 0, 0]) }],
+        "media-c": [{ time: 2, shotStart: 0, shotEnd: 5, vector: new Float32Array([1, 0, 0]) }],
+      },
+    });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding: facade };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "beach", scope: "visual" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    const matches = matchesOf(text);
+
+    // Name-matched entries keep their original (name-pass) position; a visual-only hit is appended.
+    expect(matches.map((m) => m.id)).toEqual(["media-b", "media-c", "media-a"]);
+    expect(matches[0]).toEqual({ id: "media-b", name: "beach-day.mp4", type: "video" });
+    expect(matches[1]!.visualMatches).toEqual([{ timeSec: 2, score: 1 }]);
+    expect(matches[2]!.visualMatches).toEqual([{ timeSec: 5, score: 1 }]);
+    expect(calls.cached).not.toContain("media-b"); // unindexed entry is never queried for embeddings
+  });
+
+  test("unindexed entries fall back to name matching per-entry even when the facade is ready", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-b", "beach-day.mp4")], // no embeddingPath at all
+      folders: [],
+    };
+    const { facade, calls } = makeEmbeddingFacade({ ready: true, rows: {} });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding: facade };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "beach", scope: "visual" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(matchesOf(text)).toEqual([{ id: "media-b", name: "beach-day.mp4", type: "video" }]);
+    expect(calls.cached).toEqual([]); // never attempted — no embeddingPath to read
+  });
+
+  test("facade absent: falls back to name matching for every entry and notes the degraded state", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-a", "storm-clouds.mp4", { embeddingPath: "media/media-a.embed" })],
+      folders: [],
+    };
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id" };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "storm", scope: "visual" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(JSON.parse(text)).toEqual({
+      note: "visual index unavailable — name matching only",
+      matches: [{ id: "media-a", name: "storm-clouds.mp4", type: "video" }],
+    });
+  });
+
+  test("ready facade with some unindexed candidates: notes indexing may still be in progress", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-a", "storm-clouds.mp4", { embeddingPath: "media/media-a.embed" }), visualEntry("media-b", "unrelated.mp4")],
+      folders: [],
+    };
+    const { facade } = makeEmbeddingFacade({
+      ready: true,
+      rows: { "media-a": [{ time: 5, shotStart: 0, shotEnd: 10, vector: new Float32Array([1, 0, 0]) }] },
+    });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding: facade };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "storm", scope: "visual" });
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    const parsed = JSON.parse(text) as { note?: string };
+    expect(parsed.note).toBe("some media isn't indexed yet — visual results may improve as indexing completes");
+  });
+});
+
+describe("search_media visual model download gate", () => {
+  test("not-ready facade, no confirm: returns the confirmation-required result, no partial results, no download started", async () => {
+    const manifest: MediaManifest = { version: 2, entries: [visualEntry("media-a", "storm-clouds.mp4")], folders: [] };
+    const { facade, calls } = makeEmbeddingFacade({ ready: false });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding: facade };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "storm" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("Confirmation required");
+    expect(text).toContain("confirm: true");
+    expect(text).not.toContain("storm-clouds.mp4");
+    expect(calls.ensureReady).toBe(0);
+    expect(calls.embedText).toEqual([]);
+  });
+
+  test("not-ready facade, scope='spoken': the gate never triggers — visual isn't requested", async () => {
+    const transcript: TranscriptionResult = { text: "", segments: [{ text: "storm warning", start: 0, end: 1 }], words: [] };
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-a", "clip.mp4", { transcriptPath: "media/media-a.transcript.json" })],
+      folders: [],
+    };
+    const { facade: transcription } = makeTranscriptionFacade({ "media-a": transcript });
+    const { facade: embedding, calls } = makeEmbeddingFacade({ ready: false });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding, transcription };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", { query: "storm", scope: "spoken" });
+    expect(result.isError).toBe(false);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).not.toContain("Confirmation required");
+    expect(text).toContain("media-a");
+    expect(calls.ensureReady).toBe(0);
+  });
+
+  test("confirm: true downloads via ensureReady, then runs the real visual search", async () => {
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-a", "storm-clouds.mp4", { embeddingPath: "media/media-a.embed" })],
+      folders: [],
+    };
+    const { facade, calls } = makeEmbeddingFacade({
+      ready: false,
+      rows: { "media-a": [{ time: 5, shotStart: 0, shotEnd: 10, vector: new Float32Array([1, 0, 0]) }] },
+    });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding: facade };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", {
+      query: "beach",
+      scope: "visual",
+      confirm: true,
+    });
+    expect(result.isError).toBe(false);
+    expect(calls.ensureReady).toBe(1);
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    const matches = matchesOf(text);
+    expect(matches).toEqual([{ id: "media-a", name: "storm-clouds.mp4", type: "video", visualMatches: [{ timeSec: 5, score: 1 }] }]);
   });
 });

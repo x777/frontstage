@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Clip } from "@palmier/core";
+import type { Clip, EmbeddingRow } from "@palmier/core";
+import { rankVisualMatches } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 
@@ -120,28 +121,83 @@ interface SearchHit {
   name: string;
   type: string;
   spokenMatches?: { start: number; end: number; text: string }[];
+  visualMatches?: { timeSec: number; score: number }[];
 }
+
+// Swift's ToolExecutor+Search.swift default (args.int("limit") ?? 10) — this tool has no public
+// limit arg (unlike Swift's), so the visual rank is capped at that same default internally.
+const VISUAL_SEARCH_LIMIT = 10;
+
+const VISUAL_MODEL_CONFIRM_MESSAGE =
+  "Confirmation required: Visual search model (~150 MB one-time download) is not downloaded. " +
+  "Re-run with confirm: true to download now, or use the media panel.";
+
+const VISUAL_INDEX_UNAVAILABLE_NOTE = "visual index unavailable — name matching only";
+const VISUAL_INDEXING_IN_PROGRESS_NOTE = "some media isn't indexed yet — visual results may improve as indexing completes";
 
 export function searchMediaTool(): ToolSpec {
   return {
     name: "search_media",
     description:
-      "Searches media manifest entries. scope='visual' matches by name (case-insensitive substring); " +
+      "Searches media manifest entries. scope='visual' matches by semantic similarity to the query over the indexed " +
+      "visual library (SigLIP embeddings of sampled frames), falling back to name matching (case-insensitive substring) " +
+      "for entries without a visual index; if the visual model isn't downloaded yet, the first visual/both search asks " +
+      "for confirmation (confirm: true) before starting the one-time download. " +
       "scope='spoken' matches cached transcript text (case/diacritic-insensitive, never transcribes); " +
       "scope='both' (default) unions the two.",
     inputSchema: z.object({
       query: z.string(),
       scope: z.enum(["visual", "spoken", "both"]).optional(),
+      confirm: z.boolean().optional(),
     }),
     async run(args, ctx) {
-      const { query, scope = "both" } = args as { query: string; scope?: "visual" | "spoken" | "both" };
+      const { query, scope = "both", confirm } = args as {
+        query: string;
+        scope?: "visual" | "spoken" | "both";
+        confirm?: boolean;
+      };
       const entries = ctx.getManifest().entries;
       const hits = new Map<string, SearchHit>();
+      const wantsVisual = scope !== "spoken";
+      let visualNote: string | undefined;
 
-      if (scope !== "spoken") {
+      if (wantsVisual) {
+        const embedding = ctx.embedding;
+        if (embedding && !embedding.ready()) {
+          if (!confirm) return ok(VISUAL_MODEL_CONFIRM_MESSAGE);
+          await embedding.ensureReady();
+        }
+
         const lower = query.toLowerCase();
         for (const e of entries) {
           if (e.name.toLowerCase().includes(lower)) hits.set(e.id, { id: e.id, name: e.name, type: e.type });
+        }
+
+        if (embedding && embedding.ready()) {
+          const indexable = entries.filter((e) => e.type === "video" || e.type === "image");
+          const indexed = indexable.filter((e) => e.embeddingPath);
+          if (indexed.length > 0) {
+            const queryVector = await embedding.embedText(query);
+            const candidates: { mediaRef: string; rows: EmbeddingRow[] }[] = [];
+            for (const e of indexed) {
+              const rows = await embedding.cachedEmbeddings(e.id);
+              if (rows && rows.length > 0) candidates.push({ mediaRef: e.id, rows });
+            }
+            if (candidates.length > 0) {
+              const ranked = rankVisualMatches(queryVector, candidates, VISUAL_SEARCH_LIMIT);
+              for (const hit of ranked) {
+                const entryMeta = entries.find((e) => e.id === hit.mediaRef);
+                if (!entryMeta) continue;
+                const match = { timeSec: hit.timeSec, score: hit.score };
+                const existing = hits.get(hit.mediaRef);
+                if (existing) (existing.visualMatches ??= []).push(match);
+                else hits.set(hit.mediaRef, { id: entryMeta.id, name: entryMeta.name, type: entryMeta.type, visualMatches: [match] });
+              }
+            }
+          }
+          if (indexed.length < indexable.length) visualNote = VISUAL_INDEXING_IN_PROGRESS_NOTE;
+        } else if (!embedding) {
+          visualNote = VISUAL_INDEX_UNAVAILABLE_NOTE;
         }
       }
 
@@ -169,8 +225,10 @@ export function searchMediaTool(): ToolSpec {
       }
 
       const matches = [...hits.values()];
-      if (matches.length === 0) return ok(`No media matches "${query}"`);
-      return ok(JSON.stringify(matches, null, 2));
+      if (matches.length === 0) {
+        return ok(visualNote ? `No media matches "${query}" (${visualNote})` : `No media matches "${query}"`);
+      }
+      return ok(visualNote ? JSON.stringify({ note: visualNote, matches }, null, 2) : JSON.stringify(matches, null, 2));
     },
   };
 }

@@ -12,6 +12,9 @@ import type { IndexStatus } from "./media-indexing.js";
 export interface MediaIndexingFacade {
   getStatus(): IndexStatus;
   subscribe(cb: () => void): () => void;
+  // Downloads the visual-search model (M12C T4's confirm-gate action, surfaced here too so the
+  // panel doesn't require going through the agent). Omitted -> no download button is rendered.
+  ensureReady?: (onProgress?: (p: { loaded: number; total: number }) => void) => Promise<void>;
 }
 
 const IDLE_STATUS: IndexStatus = { kind: "idle" };
@@ -58,6 +61,15 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
     () => indexing?.getStatus() ?? IDLE_STATUS,
   );
   const indexLabel = indexStatusLabel(indexStatus);
+  const [isDownloadingModel, setIsDownloadingModel] = useState(false);
+  const handleDownloadModel = useCallback(() => {
+    if (!indexing?.ensureReady || isDownloadingModel) return;
+    setIsDownloadingModel(true);
+    indexing
+      .ensureReady()
+      .catch(() => {})
+      .finally(() => setIsDownloadingModel(false));
+  }, [indexing, isDownloadingModel]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<PanelTab>("media");
@@ -334,13 +346,36 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             <div
               data-testid="media-index-status"
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: theme.spacing.xxs,
                 fontSize: theme.fontSize.xxs,
                 color: indexStatus.kind === "waiting-model" ? theme.text.muted : theme.text.tertiary,
                 padding: `0 ${theme.spacing.sm}`,
                 flexShrink: 0,
               }}
             >
-              {indexLabel}
+              <span>{indexLabel}</span>
+              {indexStatus.kind === "waiting-model" && indexing?.ensureReady != null && (
+                <button
+                  data-testid="media-index-download-model"
+                  onClick={handleDownloadModel}
+                  disabled={isDownloadingModel}
+                  style={{
+                    background: theme.bg.raised,
+                    color: theme.text.primary,
+                    border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+                    borderRadius: theme.radius.xs,
+                    padding: `0 ${theme.spacing.xxs}`,
+                    fontSize: theme.fontSize.xxs,
+                    fontWeight: theme.fontWeight.medium,
+                    cursor: isDownloadingModel ? "default" : "pointer",
+                    opacity: isDownloadingModel ? theme.opacity.disabled : 1,
+                  }}
+                >
+                  {isDownloadingModel ? "Downloading…" : "Download model"}
+                </button>
+              )}
             </div>
           )}
 

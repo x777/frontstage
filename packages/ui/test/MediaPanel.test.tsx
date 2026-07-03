@@ -1,11 +1,14 @@
-import { render, screen, within, fireEvent, act } from "@testing-library/react";
+import { render, screen, within, fireEvent, act, waitFor } from "@testing-library/react";
 import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { MediaPanel } from "../src/media/MediaPanel.js";
 import type { MediaIndexingFacade } from "../src/media/MediaPanel.js";
 import type { IndexStatus } from "../src/media/media-indexing.js";
 import { MEDIA_DRAG_MIME } from "../src/media/FolderTile.js";
 
-function fakeIndexing(initial: IndexStatus): MediaIndexingFacade & { set: (s: IndexStatus) => void } {
+function fakeIndexing(
+  initial: IndexStatus,
+  ensureReady?: MediaIndexingFacade["ensureReady"],
+): MediaIndexingFacade & { set: (s: IndexStatus) => void } {
   let status = initial;
   const listeners = new Set<() => void>();
   return {
@@ -14,6 +17,7 @@ function fakeIndexing(initial: IndexStatus): MediaIndexingFacade & { set: (s: In
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
+    ensureReady,
     set: (s) => {
       status = s;
       for (const cb of listeners) cb();
@@ -389,4 +393,55 @@ test("waiting-model status: shows the subtle waiting line", () => {
   const indexing = fakeIndexing({ kind: "waiting-model" });
   render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
   expect(screen.getByTestId("media-index-status")).toHaveTextContent("Search index waiting for model");
+});
+
+test("waiting-model status without an ensureReady facade: no download button", () => {
+  const indexing = fakeIndexing({ kind: "waiting-model" });
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+  expect(screen.queryByTestId("media-index-download-model")).toBeNull();
+});
+
+test("indexing (not waiting-model) status: no download button even with an ensureReady facade", () => {
+  const indexing = fakeIndexing({ kind: "indexing", done: 0, total: 1 }, async () => {});
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+  expect(screen.queryByTestId("media-index-download-model")).toBeNull();
+});
+
+// ── Model-download button (M12C T4) ───────────────────────────────────────────
+
+test("waiting-model status with an ensureReady facade: shows a Download model button that calls it", async () => {
+  let resolveDownload: () => void = () => {};
+  const ensureReady = vi.fn(() => new Promise<void>((resolve) => { resolveDownload = resolve; }));
+  const indexing = fakeIndexing({ kind: "waiting-model" }, ensureReady);
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+
+  const button = screen.getByTestId("media-index-download-model");
+  expect(button).toHaveTextContent("Download model");
+  expect(button).not.toBeDisabled();
+
+  fireEvent.click(button);
+  expect(ensureReady).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(screen.getByTestId("media-index-download-model")).toBeDisabled());
+
+  await act(async () => {
+    resolveDownload();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(screen.getByTestId("media-index-download-model")).not.toBeDisabled());
+
+  // A second click while already idle-again doesn't re-fire until clicked again.
+  fireEvent.click(button);
+  expect(ensureReady).toHaveBeenCalledTimes(2);
+});
+
+test("clicking Download model while already downloading does not re-fire ensureReady", async () => {
+  const ensureReady = vi.fn(() => new Promise<void>(() => {})); // never resolves
+  const indexing = fakeIndexing({ kind: "waiting-model" }, ensureReady);
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+
+  const button = screen.getByTestId("media-index-download-model");
+  fireEvent.click(button);
+  await waitFor(() => expect(button).toBeDisabled());
+  fireEvent.click(button); // no-op: disabled, and the handler also guards on isDownloadingModel
+  expect(ensureReady).toHaveBeenCalledTimes(1);
 });
