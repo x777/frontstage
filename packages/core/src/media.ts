@@ -47,6 +47,7 @@ export interface MediaManifestEntry {
   cachedRemoteURLExpiresAt?: string; // ISO 8601
   generationStatus?: string; // serialized GenerationStatus; see media/generation-status.ts
   transcriptPath?: string; // relative path of the cached TranscriptRecord; see media/transcript.ts
+  embeddingPath?: string; // relative path of the cached PALMEMB1 embeddings; see search/embedding-codec.ts
 }
 
 export interface MediaFolder {

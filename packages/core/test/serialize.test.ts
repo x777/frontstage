@@ -82,11 +82,12 @@ describe("serialize", () => {
     expect(back.manifest.entries[0]!.generationInput?.backendJobId).toBe("job-1");
   });
 
-  test("a manifest entry with transcriptPath + a transcribing status survives the encode→decode round trip", () => {
+  test("a manifest entry with transcriptPath + embeddingPath + a transcribing status survives the encode→decode round trip", () => {
     const entry: MediaManifestEntry = {
       id: "abc", name: "clip.mp4", type: "video", duration: 3,
       source: { kind: "project", relativePath: "media/abc.mp4" },
       transcriptPath: "media/abc.transcript.json",
+      embeddingPath: "media/abc.embed",
       generationStatus: "transcribing",
     };
     const doc: ProjectDoc = {
@@ -103,6 +104,7 @@ describe("serialize", () => {
     expect(back.manifestUnreadable).toBe(false);
     expect(back.manifest.entries).toHaveLength(1);
     expect(back.manifest.entries[0]!.transcriptPath).toBe("media/abc.transcript.json");
+    expect(back.manifest.entries[0]!.embeddingPath).toBe("media/abc.embed");
     expect(back.manifest.entries[0]!.generationStatus).toBe("transcribing"); // persisted: not preparing/none
   });
 

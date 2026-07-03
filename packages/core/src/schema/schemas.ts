@@ -143,6 +143,7 @@ export const MediaManifestEntrySchema = z.object({
   cachedRemoteURLExpiresAt: z.string().optional(),
   generationStatus: z.string().optional(),
   transcriptPath: z.string().optional(),
+  embeddingPath: z.string().optional(),
 });
 
 export const MediaFolderSchema = z.object({
