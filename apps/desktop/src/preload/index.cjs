@@ -64,7 +64,10 @@ contextBridge.exposeInMainWorld("desktopProjectNav", {
   resolve: (id) => ipcRenderer.invoke("projects:resolve", id),
   create: (name) => ipcRenderer.invoke("projects:create", name),
   upsert: (projectPath, name) => ipcRenderer.invoke("projects:upsert", { path: projectPath, name }),
-  authorizePath: (p) => ipcRenderer.invoke("project:authorizePath", p),
+  // nonce: minted main-side per in-flight MCP callTool forward (M13B final-review H-2) — see
+  // mcpBridge/authNonceGuard in main/index.cjs.
+  authorizePath: (p, nonce) => ipcRenderer.invoke("project:authorizePath", p, nonce),
+  cleanupFailedCreate: (p) => ipcRenderer.invoke("projects:cleanupFailedCreate", p),
 });
 
 contextBridge.exposeInMainWorld("desktopProject", {

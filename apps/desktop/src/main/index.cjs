@@ -27,16 +27,35 @@ ipcMain.on("mcp:response", (_e, { id, result, error }) => {
   else p.resolve(result);
 });
 
-function mcpBridge(kind, payload) {
+// M13B final-review H-2: project:authorizePath is a pickerless, dialog-free directory-authorize
+// primitive — gate it on a single-use nonce minted only here, per "callTool" forward, so it
+// requires a live in-flight MCP tool call rather than just knowledge of any existing path.
+let _authNonceGuardMod = null;
+let _authNonceGuard = null;
+async function authNonceGuard() {
+  if (!_authNonceGuard) {
+    _authNonceGuardMod = await import("./mcp-auth-nonce.mjs");
+    _authNonceGuard = _authNonceGuardMod.createAuthNonceGuard();
+  }
+  return _authNonceGuard;
+}
+
+async function mcpBridge(kind, payload) {
   const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && !w.webContents.isDestroyed());
-  if (!win) return Promise.reject(new Error("editor not ready"));
+  if (!win) throw new Error("editor not ready");
   const id = ++_bridgeSeq;
+  const authNonce = kind === "callTool" ? (await authNonceGuard()).mint() : null;
+  const sendPayload = authNonce ? { ...payload, __authNonce: authNonce } : payload;
   return new Promise((resolve, reject) => {
+    const settle = (fn) => (v) => {
+      if (authNonce) _authNonceGuard.release(authNonce);
+      fn(v);
+    };
     const timer = setTimeout(() => {
-      if (_bridgePending.delete(id)) reject(new Error("bridge timeout"));
+      if (_bridgePending.delete(id)) settle(reject)(new Error("bridge timeout"));
     }, 30000);
-    _bridgePending.set(id, { resolve, reject, timer });
-    win.webContents.send("mcp:request", { id, kind, payload });
+    _bridgePending.set(id, { resolve: settle(resolve), reject: settle(reject), timer });
+    win.webContents.send("mcp:request", { id, kind, payload: sendPayload });
   });
 }
 
@@ -359,10 +378,34 @@ ipcMain.handle("projects:upsert", async (_e, { path: projectPath, name }) => {
   return reg.registryUpsert(app.getPath("userData"), projectPath, name);
 });
 
+// M13B final-review H-1: removes the on-disk dir projects:create just mkdir'd, when the renderer's
+// subsequent session.saveAs() fails — restricted to paths UNDER the fixed projects storage dir
+// (never the storage dir itself) so this can't be repurposed into an arbitrary-path delete.
+ipcMain.handle("projects:cleanupFailedCreate", async (_e, p) => {
+  const base = path.resolve(defaultProjectsDir());
+  const resolved = path.resolve(p);
+  if (resolved === base || !resolved.startsWith(base + path.sep)) {
+    return { error: "cleanupFailedCreate: path is not under the projects storage dir" };
+  }
+  try {
+    fs.rmSync(resolved, { recursive: true, force: true });
+  } catch (e) {
+    return { error: e.message };
+  }
+  authorizedDirs.delete(resolved);
+  return { ok: true };
+});
+
 // Validates existence + authorizes an explicit dir with NO save/open picker — the un-picker'd
 // trust decision approved for #238's desktop-only MCP nav (arbitrary absolute paths, same as
-// recent.json's startup authorization above).
-ipcMain.handle("project:authorizePath", async (_e, p) => {
+// recent.json's startup authorization above). M13B final-review H-2: gated on a single-use nonce
+// (see authNonceGuard/mcpBridge above) so this requires a live in-flight MCP tool call, not just
+// any renderer-executing JS calling window.desktopProjectNav.authorizePath directly.
+ipcMain.handle("project:authorizePath", async (_e, p, nonce) => {
+  const guard = await authNonceGuard();
+  if (!guard.consume(nonce)) {
+    return { error: "project:authorizePath requires an in-flight MCP tool call. Open the project from the app once to authorize it." };
+  }
   const resolved = path.resolve(p);
   if (!fs.existsSync(resolved)) {
     return { error: `No project at ${resolved}.` };

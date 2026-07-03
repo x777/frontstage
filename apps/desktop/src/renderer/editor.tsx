@@ -18,17 +18,15 @@ declare global {
       bridgeRespond(id: number, payload: { result?: unknown; error?: string }): void;
     };
     // M13B T1 project-nav registry (get_projects/open_project/new_project's desktop facade).
-    desktopProjectNav?: {
-      list(): Promise<Array<{ id: string; name: string; path: string; lastOpenedAt: string; isAccessible: boolean }>>;
-      resolve(id: string): Promise<string | null>;
-      create(name: string): Promise<{ path: string } | { error: string }>;
-      upsert(projectPath: string, name: string): Promise<{ id: string; name: string; path: string; lastOpenedAt: string }>;
-      authorizePath(projectPath: string): Promise<{ path: string } | { error: string }>;
-    };
+    // authorizePath's nonce (M13B final-review H-2) is minted main-side per in-flight MCP
+    // callTool dispatch and threaded through by desktop-project-nav.ts — see its setAuthNonce.
+    desktopProjectNav?: DesktopProjectNavBridge;
   }
 }
-import { DesktopGateway, refFor } from "./desktop-gateway.js";
+import { DesktopGateway } from "./desktop-gateway.js";
 import type { DesktopProjectRef } from "./desktop-gateway.js";
+import { createDesktopProjectNav } from "./desktop-project-nav.js";
+import type { DesktopProjectNavBridge, ProjectNavSession } from "./desktop-project-nav.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
 import { DesktopGenGateway } from "./desktop-gen-gateway.js";
@@ -227,68 +225,20 @@ const interopExportFacade = createDesktopInteropExport({
 
 // Project navigation facade (M13B T1, get_projects/open_project/new_project) — desktop only, over
 // window.desktopProjectNav (the main-process registry) + the session (auto-save/open/create-as).
-// The "Now editing" chat notice (spec M13B-1) is OMITTED: the chat message model
-// (packages/ai/src/agent/conversation.ts) has no display-only row kind — role is a closed
-// "user" | "assistant" | "tool" union — so there's nowhere to post a notice excluded from model
-// context without inventing one. Approved deviation, recorded in task-1-report.md.
-
-async function autoSaveCurrentProject(): Promise<void> {
-  if (!session.isDirty()) return;
-  const saved = await session.save();
-  if (!saved) throw new Error("Couldn't save the current project before switching.");
-}
-
-async function openProjectAtPath(targetPath: string): Promise<void> {
-  await autoSaveCurrentProject();
-  const authorized = await window.desktopProjectNav!.authorizePath(targetPath);
-  if ("error" in authorized) throw new Error(authorized.error);
-  const ref = refFor(authorized.path);
-  const opened = await session.open(async () => true, ref);
-  if (!opened) throw new Error(`No project at ${authorized.path}.`);
-  await window.desktopProjectNav!.upsert(ref.path, ref.name);
-}
-
-async function openProjectById(id: string): Promise<void> {
-  const target = await window.desktopProjectNav!.resolve(id);
-  if (!target) throw new Error(`No project with id ${id}. Call get_projects for valid ids.`);
-  await openProjectAtPath(target);
-}
-
-async function createProjectByName(name: string): Promise<{ path: string }> {
-  await autoSaveCurrentProject();
-  const created = await window.desktopProjectNav!.create(name);
-  if ("error" in created) throw new Error(created.error);
-  const ref = refFor(created.path);
-  const reset = await session.newProject(async () => true);
-  if (!reset) throw new Error("Couldn't reset the current project before creating a new one.");
-  const saved = await session.saveAs(ref);
-  if (!saved) throw new Error(`Couldn't create the project at ${created.path}.`);
-  await window.desktopProjectNav!.upsert(ref.path, ref.name);
-  return { path: ref.path };
-}
-
-async function listProjects() {
-  const entries = await window.desktopProjectNav!.list();
-  const ref = session.getState().ref as DesktopProjectRef | null;
-  const projects = entries.map((e) => ({
-    id: e.id,
-    name: e.name,
-    path: e.path,
-    isOpen: ref !== null && e.path === ref.path,
-    isActive: ref !== null && e.path === ref.path,
-    isAccessible: e.isAccessible,
-  }));
-  const active = ref ? { name: session.getState().name, path: ref.path } : undefined;
-  return { projects, active };
-}
-
-function activeProjectPath(): string | undefined {
-  return (session.getState().ref as DesktopProjectRef | null)?.path;
-}
-
-const projectsFacade: ToolContext["projects"] = window.desktopProjectNav
-  ? { list: listProjects, openByPath: openProjectAtPath, openById: openProjectById, create: createProjectByName, activePath: activeProjectPath }
-  : undefined;
+// Restore-on-failed-create, the no-picker-hang guard, and authorize-nonce threading (M13B
+// final-review H-1/M-1/H-2) live in desktop-project-nav.ts, where they're unit-testable.
+// ProjectSession.getState().ref is the generic ProjectRef; desktop's is always a DesktopProjectRef
+// under the hood (DesktopGateway only ever mints refs via refFor) — same cast the old inline code used.
+const projectNavSession: ProjectNavSession = {
+  isDirty: () => session.isDirty(),
+  getState: () => session.getState() as { ref: DesktopProjectRef | null; name: string },
+  save: () => session.save(),
+  newProject: (confirm) => session.newProject(confirm),
+  saveAs: (ref) => session.saveAs(ref),
+  open: (confirm, ref) => session.open(confirm, ref),
+};
+const projectNav = window.desktopProjectNav ? createDesktopProjectNav(projectNavSession, window.desktopProjectNav) : undefined;
+const projectsFacade: ToolContext["projects"] = projectNav?.facade;
 
 const toolContext: ToolContext = {
   store,
@@ -340,8 +290,15 @@ window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
     if (kind === "listTools") {
       result = toolsToMcp(mcpExecutor.list());
     } else if (kind === "callTool") {
-      const p = payload as { name: string; args: unknown };
-      result = await mcpExecutor.execute(p.name, p.args);
+      // H-2: the nonce main's mcpBridge minted for this forward — threaded through so
+      // openProjectAtPath's authorizePath call can prove it's happening inside a live MCP call.
+      const p = payload as { name: string; args: unknown; __authNonce?: string };
+      projectNav?.setAuthNonce(p.__authNonce ?? null);
+      try {
+        result = await mcpExecutor.execute(p.name, p.args);
+      } finally {
+        projectNav?.setAuthNonce(null);
+      }
     } else if (kind === "listResources") {
       result = [
         { uri: "palmier://models", name: "Models", description: "Available AI models", mimeType: "application/json" },
