@@ -26,7 +26,7 @@ describe("model-catalog", () => {
   });
 
   test("defaultLLMModel returns the isDefault llm id", () => {
-    expect(defaultLLMModel()).toBe("anthropic/claude-sonnet-4-6");
+    expect(defaultLLMModel()).toBe("anthropic/claude-sonnet-5");
   });
 
   test("defaultImageModel returns the isDefault image id", () => {

@@ -3,7 +3,7 @@ export interface ModelEntry { id: string; label: string; kind: "llm" | "image"; 
 
 export const MODEL_CATALOG: ModelEntry[] = [
   { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8", kind: "llm" },
-  { id: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6", kind: "llm", isDefault: true },
+  { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5", kind: "llm", isDefault: true },
   { id: "anthropic/claude-haiku-4-5", label: "Claude Haiku 4.5", kind: "llm" },
   { id: "google/gemini-2.5-flash-image-preview", label: "Gemini Flash Image", kind: "image", isDefault: true },
 ];

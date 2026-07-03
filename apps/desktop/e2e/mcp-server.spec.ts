@@ -194,7 +194,7 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     const modelsCatalog = JSON.parse(modelsRes.contents[0].text);
     expect(Array.isArray(modelsCatalog)).toBe(true);
     const modelIds = modelsCatalog.map((m: any) => m.id);
-    expect(modelIds).toContain("anthropic/claude-sonnet-4-6");
+    expect(modelIds).toContain("anthropic/claude-sonnet-5");
 
     // 7f. resources/read palmier://timeline → reflects live edits
     // (add_texts was already called in 7b — timeline has at least one clip)
