@@ -115,7 +115,7 @@ test("renders the source/style/preset controls", async () => {
   expect(screen.getByTestId("captions-color-input")).toBeInTheDocument();
   expect(screen.getByTestId("captions-centerx-input")).toBeInTheDocument();
   expect(screen.getByTestId("captions-centery-input")).toBeInTheDocument();
-  expect(screen.getByTestId("captions-preset-select")).toBeInTheDocument();
+  expect(screen.getByTestId("captions-preset-gallery")).toBeInTheDocument();
   expect(screen.getByTestId("captions-generate")).toBeInTheDocument();
 
   const sourceSelect = screen.getByTestId("captions-source-select") as HTMLSelectElement;
@@ -171,7 +171,7 @@ test("Generate assembles textCase/fontSize/preset (and omits clipIds for Auto-de
 
   fireEvent.change(screen.getByTestId("captions-textcase-select"), { target: { value: "upper" } });
   fireEvent.change(screen.getByTestId("captions-fontsize-input"), { target: { value: "60" } });
-  fireEvent.change(screen.getByTestId("captions-preset-select"), { target: { value: "wordPop" } });
+  fireEvent.click(screen.getByTestId("captions-preset-wordPop"));
 
   await waitFor(() => expect(screen.getByTestId("captions-generate")).not.toBeDisabled());
   await act(async () => { fireEvent.click(screen.getByTestId("captions-generate")); });
@@ -191,7 +191,7 @@ test("a highlight preset shows the highlightColor input and includes it in the a
   render(<CaptionsTab store={store} executor={executor} transcription={transcription} library={library} />);
 
   expect(screen.queryByTestId("captions-highlightcolor-input")).toBeNull();
-  fireEvent.change(screen.getByTestId("captions-preset-select"), { target: { value: "highlightPop" } });
+  fireEvent.click(screen.getByTestId("captions-preset-highlightPop"));
   expect(screen.getByTestId("captions-highlightcolor-input")).toBeInTheDocument();
 
   await waitFor(() => expect(screen.getByTestId("captions-generate")).not.toBeDisabled());
@@ -262,6 +262,65 @@ test("keyless but all-cached: Generate stays enabled (no credits needed)", async
   await waitFor(() => expect(screen.getByTestId("captions-estimate")).toHaveTextContent("Cached — no credits used"));
   expect(screen.queryByTestId("captions-key-hint")).toBeNull();
   expect(screen.getByTestId("captions-generate")).not.toBeDisabled();
+});
+
+const ALL_PRESET_LABELS: Record<string, string> = {
+  none: "None",
+  fadeIn: "Fade In",
+  popIn: "Pop In",
+  slideUp: "Slide Up",
+  typewriter: "Typewriter",
+  wordReveal: "Word Reveal",
+  wordSlide: "Word Slide",
+  wordPop: "Word Pop",
+  wordCycle: "Word Cycle",
+  highlightPop: "Highlight Pop",
+  highlightBlock: "Highlight Block",
+};
+
+test("the preset gallery renders all 11 presets with their labels", async () => {
+  const { store, library } = baseSetup();
+  render(<CaptionsTab store={store} executor={makeExecutor()} transcription={makeTranscription()} library={library} />);
+  await waitFor(() => expect(screen.getByTestId("captions-estimate")).not.toHaveTextContent(""));
+
+  for (const [id, label] of Object.entries(ALL_PRESET_LABELS)) {
+    const card = screen.getByTestId(`captions-preset-${id}`);
+    expect(card).toBeInTheDocument();
+    expect(card).toHaveTextContent(label);
+  }
+});
+
+test("clicking a preset card updates aria-pressed and the selection", async () => {
+  const { store, library } = baseSetup();
+  render(<CaptionsTab store={store} executor={makeExecutor()} transcription={makeTranscription()} library={library} />);
+  await waitFor(() => expect(screen.getByTestId("captions-estimate")).not.toHaveTextContent(""));
+
+  expect(screen.getByTestId("captions-preset-none")).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("captions-preset-wordSlide")).toHaveAttribute("aria-pressed", "false");
+
+  fireEvent.click(screen.getByTestId("captions-preset-wordSlide"));
+
+  expect(screen.getByTestId("captions-preset-wordSlide")).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("captions-preset-none")).toHaveAttribute("aria-pressed", "false");
+});
+
+test("the preset preview marks whether it respects prefers-reduced-motion", async () => {
+  const { store, library } = baseSetup();
+  const matchMedia = vi.fn().mockReturnValue({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
+  vi.stubGlobal("matchMedia", matchMedia);
+
+  try {
+    render(<CaptionsTab store={store} executor={makeExecutor()} transcription={makeTranscription()} library={library} />);
+    await waitFor(() => expect(screen.getByTestId("captions-estimate")).not.toHaveTextContent(""));
+    fireEvent.click(screen.getByTestId("captions-preset-wordCycle"));
+    expect(screen.getByTestId("captions-preset-preview")).toHaveAttribute("data-reduced-motion", "true");
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 test("MediaPanel: the Media/Captions tab bar switches the panel body", async () => {

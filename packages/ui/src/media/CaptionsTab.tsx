@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EditorStore, MediaManifestEntry, RGBA } from "@palmier/core";
 import {
-  TEXT_ANIMATION_PRESETS,
   DEFAULT_HIGHLIGHT_COLOR,
   transcriptTargets,
   timelineTrackDisplayLabel,
@@ -14,18 +13,13 @@ import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
 import { Select } from "../inspector/adjust/Select.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
+import { CaptionPresetGallery, isHighlightPreset } from "./CaptionPresetGallery.js";
 
-const HIGHLIGHT_PRESETS: ReadonlySet<TextAnimationPreset> = new Set(["highlightPop", "highlightBlock"]);
 const CENTER_SNAP_THRESHOLD = 0.02;
 const TRACK_PREFIX = "track-";
 
 function snapToHalf(v: number): number {
   return Math.abs(v - 0.5) <= CENTER_SNAP_THRESHOLD ? 0.5 : v;
-}
-
-function humanizePreset(id: TextAnimationPreset): string {
-  if (id === "none") return "None";
-  return id.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
 }
 
 function rgbaToHex(rgba: RGBA): string {
@@ -187,7 +181,7 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
       if (Number.isFinite(n) && n > 0) args.maxWords = n;
     }
     const animation: Record<string, unknown> = { preset };
-    if (HIGHLIGHT_PRESETS.has(preset)) animation.highlightColor = highlightColor;
+    if (isHighlightPreset(preset)) animation.highlightColor = highlightColor;
     args.animation = animation;
     return args;
   }
@@ -322,26 +316,13 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
 
         <div style={fieldGap}>
           <span style={labelStyle}>Animation</span>
-          <Select
-            testid="captions-preset-select"
-            value={preset}
-            options={TEXT_ANIMATION_PRESETS.map((p) => ({ value: p, label: humanizePreset(p) }))}
-            onChange={setPreset}
+          <CaptionPresetGallery
+            preset={preset}
+            onPreset={setPreset}
+            highlightColor={highlightColor}
+            onHighlightColor={setHighlightColor}
           />
         </div>
-
-        {HIGHLIGHT_PRESETS.has(preset) && (
-          <div style={fieldGap}>
-            <span style={labelStyle}>Highlight color</span>
-            <input
-              data-testid="captions-highlightcolor-input"
-              type="text"
-              value={highlightColor}
-              onChange={(e) => setHighlightColor(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-        )}
 
         <div data-testid="captions-estimate" style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
           {estimate === null

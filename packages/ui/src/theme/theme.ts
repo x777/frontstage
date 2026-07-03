@@ -134,6 +134,9 @@ export const theme = {
     colorWheelPuck: "var(--size-color-wheel-puck)",
     curveCanvas: "var(--size-curve-canvas)",
     curveDot: "var(--size-curve-dot)",
+    presetCardMin: "var(--size-preset-card-min)",
+    presetPreviewHeight: "var(--size-preset-preview-height)",
+    colorSwatch: "var(--size-color-swatch)",
   },
   adjust: {
     tempCool: "var(--color-adjust-temp-cool)",
@@ -185,6 +188,8 @@ export const theme = {
   anim: {
     shimmerDuration: "var(--anim-shimmer-duration)",
     progressDuration: "var(--anim-progress-duration)",
+    presetPreviewDuration: "var(--anim-preset-preview-duration)",
+    presetPreviewSoloDuration: "var(--anim-preset-preview-solo-duration)",
   },
 } as const;
 
