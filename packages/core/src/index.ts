@@ -69,3 +69,7 @@ export * from "./color/wheel-geometry.js";
 export * from "./color/curve-edit.js";
 export * from "./color/histogram.js";
 export * from "./color/hue-curve-edit.js";
+export * from "./interop/xml.js";
+export * from "./interop/source-timecode.js";
+export * from "./interop/media-resources.js";
+export * from "./interop/xmeml-exporter.js";
