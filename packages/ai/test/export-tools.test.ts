@@ -1,20 +1,27 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   EditorStore,
+  cuesFromCaptionClips,
+  cuesFromTranscript,
   defaultTimeline,
   defaultTransform,
   defaultCrop,
   exportXmeml,
   exportFcpxml,
+  formatSrt,
+  formatVtt,
+  type Clip,
   type MediaManifest,
   type SourceTimecode,
   type Timeline,
   type Track,
+  type TranscriptionResult,
 } from "@palmier/core";
 import { exportProjectTool } from "../src/tools/export-tools.js";
 import type { ToolContext } from "../src/index.js";
 
 type InteropFacade = NonNullable<ToolContext["interopExport"]>;
+type TranscriptionFacade = NonNullable<ToolContext["transcription"]>;
 
 function makeClip(id: string, mediaRef: string, startFrame = 0) {
   return {
@@ -38,8 +45,29 @@ function makeClip(id: string, mediaRef: string, startFrame = 0) {
   };
 }
 
-function makeTrack(id: string, clips: ReturnType<typeof makeClip>[]): Track {
+function makeCaptionClip(id: string, captionGroupId: string, textContent: string, startFrame = 0, durationFrames = 60) {
+  return {
+    ...makeClip(id, `caption-media-${id}`, startFrame),
+    mediaType: "text" as const,
+    sourceClipType: "text" as const,
+    durationFrames,
+    captionGroupId,
+    textContent,
+  };
+}
+
+function makeTrack(id: string, clips: Clip[]): Track {
   return { id, type: "video", muted: false, hidden: false, syncLocked: false, clips };
+}
+
+function makeTranscriptionFacade(overrides: Partial<TranscriptionFacade> = {}): TranscriptionFacade {
+  return {
+    transcribe: vi.fn().mockRejectedValue(new Error("transcribe should never be called by export_project")),
+    cachedTranscript: vi.fn().mockResolvedValue(null),
+    hasKey: vi.fn().mockResolvedValue(false),
+    estimateCredits: vi.fn().mockReturnValue(0),
+    ...overrides,
+  };
 }
 
 function makeTimeline(): Timeline {
@@ -82,17 +110,24 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
 }
 
 describe("export_project — mode validation", () => {
-  test("rejects an unknown mode string", async () => {
+  // mode is z.string() + in-run validation, NOT z.enum: the enum-in-zod trap (M13A H2) — an enum in
+  // the schema would reject unknown modes at the executor's safeParse gate, before run() ever runs,
+  // making the custom "unknown mode" message below dead code.
+  test("the schema accepts any string for mode — validation happens in run()", () => {
     const tool = exportProjectTool();
-    const parsed = tool.inputSchema.safeParse({ mode: "not-a-mode" });
-    expect(parsed.success).toBe(false);
-  });
-
-  test("accepts video/xml/fcpxml/palmier at the schema layer", () => {
-    const tool = exportProjectTool();
-    for (const mode of ["video", "xml", "fcpxml", "palmier"]) {
+    for (const mode of ["video", "xml", "fcpxml", "palmier", "srt", "vtt", "not-a-mode"]) {
       expect(tool.inputSchema.safeParse({ mode }).success).toBe(true);
     }
+  });
+
+  test("run() rejects an unrecognized mode with a message listing the valid ones", async () => {
+    const tool = exportProjectTool();
+    const result = await tool.run({ mode: "not-a-mode" }, makeCtx({ interopExport: makeInteropFacade() }));
+    expect(result.isError).toBe(true);
+    const text = (result.blocks[0] as { text: string }).text;
+    expect(text).toMatch(/unknown mode/i);
+    expect(text).toMatch(/srt/);
+    expect(text).toMatch(/vtt/);
   });
 
   test("accepts resolve/fcp for fcpxmlTarget, rejects anything else", () => {
@@ -361,5 +396,164 @@ describe("export_project — projectRoot (M12B fast-follow)", () => {
     const [, contents] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(contents).toBe(expectedXml);
     expect(contents).toContain('src="file:///MyProj/media/one.mp4"');
+  });
+});
+
+describe("export_project — srt/vtt from timeline caption clips", () => {
+  function makeCaptionTimeline(): Timeline {
+    return {
+      ...defaultTimeline(),
+      fps: 30,
+      tracks: [
+        makeTrack("t1", [
+          makeCaptionClip("cap2", "g1", "Second", 60, 30),
+          makeCaptionClip("cap1", "g1", "First", 0, 30),
+        ]),
+      ],
+    };
+  }
+
+  test("srt: formats cuesFromCaptionClips (chronological) and saves with kind='srt'", async () => {
+    const facade = makeInteropFacade();
+    const timeline = makeCaptionTimeline();
+    const ctx = makeCtx({ store: new EditorStore(timeline), interopExport: facade, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    const result = await tool.run({ mode: "srt" }, ctx);
+
+    const expectedCues = cuesFromCaptionClips(timeline, timeline.fps);
+    expect(expectedCues.map((c) => c.text)).toEqual(["First", "Second"]);
+    const expectedSrt = formatSrt(expectedCues);
+
+    const [defaultName, contents, kind, outputPath, overwrite] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(defaultName).toBe("MyProj.srt");
+    expect(contents).toBe(expectedSrt);
+    expect(kind).toBe("srt");
+    expect(outputPath).toBeUndefined();
+    expect(overwrite).toBe(true);
+
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse((result.blocks[0] as { text: string }).text);
+    expect(payload).toMatchObject({ status: "exported", mode: "srt", path: "/out/export.xml", cueCount: 2 });
+  });
+
+  test("vtt: formats cuesFromCaptionClips and saves with kind='vtt'", async () => {
+    const facade = makeInteropFacade();
+    const timeline = makeCaptionTimeline();
+    const ctx = makeCtx({ store: new EditorStore(timeline), interopExport: facade, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    await tool.run({ mode: "vtt" }, ctx);
+
+    const expectedVtt = formatVtt(cuesFromCaptionClips(timeline, timeline.fps));
+    const [defaultName, contents, kind] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(defaultName).toBe("MyProj.vtt");
+    expect(contents).toBe(expectedVtt);
+    expect(kind).toBe("vtt");
+  });
+
+  test("no caption clips on the timeline errors clearly, without touching saveText", async () => {
+    const facade = makeInteropFacade();
+    const tool = exportProjectTool(); // makeCtx()'s default timeline has plain video clips, no captions
+    const result = await tool.run({ mode: "srt" }, makeCtx({ interopExport: facade }));
+    expect(result.isError).toBe(true);
+    expect((result.blocks[0] as { text: string }).text).toMatch(/no caption clips/i);
+    expect(facade.saveText).not.toHaveBeenCalled();
+  });
+
+  test("without ctx.interopExport, srt/vtt error the same way xml/fcpxml do", async () => {
+    const tool = exportProjectTool();
+    const result = await tool.run({ mode: "srt" }, makeCtx());
+    expect(result.isError).toBe(true);
+    expect((result.blocks[0] as { text: string }).text).toMatch(/not available/i);
+  });
+
+  test("cancelled save surfaces as a non-error 'cancelled' status", async () => {
+    const facade = makeInteropFacade({ saveText: vi.fn().mockResolvedValue({ cancelled: true }) });
+    const timeline = makeCaptionTimeline();
+    const ctx = makeCtx({ store: new EditorStore(timeline), interopExport: facade });
+    const tool = exportProjectTool();
+    const result = await tool.run({ mode: "vtt" }, ctx);
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse((result.blocks[0] as { text: string }).text);
+    expect(payload).toEqual({ status: "cancelled", mode: "vtt" });
+  });
+});
+
+describe("export_project — srt/vtt from a cached transcript (captionsSource.mediaRef)", () => {
+  function makeTranscript(): TranscriptionResult {
+    return {
+      text: "Hello world",
+      words: [],
+      segments: [
+        { text: "Hello", start: 0, end: 1 },
+        { text: "world", start: 1, end: 2 },
+      ],
+    };
+  }
+
+  test("happy path: cachedTranscript's segments -> cuesFromTranscript -> formatted payload reaches saveText", async () => {
+    const facade = makeInteropFacade();
+    const transcript = makeTranscript();
+    const transcription = makeTranscriptionFacade({ cachedTranscript: vi.fn().mockResolvedValue(transcript) });
+    const ctx = makeCtx({ interopExport: facade, transcription, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    const result = await tool.run({ mode: "srt", captionsSource: { mediaRef: "media-1" } }, ctx);
+
+    expect(transcription.cachedTranscript).toHaveBeenCalledWith("media-1");
+    expect(transcription.transcribe).not.toHaveBeenCalled();
+
+    const expectedSrt = formatSrt(cuesFromTranscript(transcript));
+    const [defaultName, contents, kind] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(defaultName).toBe("MyProj.srt");
+    expect(contents).toBe(expectedSrt);
+    expect(kind).toBe("srt");
+
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse((result.blocks[0] as { text: string }).text);
+    expect(payload).toMatchObject({ status: "exported", mode: "srt", cueCount: 2 });
+  });
+
+  test("vtt happy path via captionsSource.mediaRef", async () => {
+    const facade = makeInteropFacade();
+    const transcript = makeTranscript();
+    const transcription = makeTranscriptionFacade({ cachedTranscript: vi.fn().mockResolvedValue(transcript) });
+    const ctx = makeCtx({ interopExport: facade, transcription });
+    const tool = exportProjectTool();
+
+    await tool.run({ mode: "vtt", captionsSource: { mediaRef: "media-1" } }, ctx);
+
+    const expectedVtt = formatVtt(cuesFromTranscript(transcript));
+    const [, contents, kind] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(contents).toBe(expectedVtt);
+    expect(kind).toBe("vtt");
+  });
+
+  test("uncached mediaRef errors naming get_transcript/add_captions, and never calls transcribe", async () => {
+    const facade = makeInteropFacade();
+    const transcription = makeTranscriptionFacade({ cachedTranscript: vi.fn().mockResolvedValue(null) });
+    const ctx = makeCtx({ interopExport: facade, transcription });
+    const tool = exportProjectTool();
+
+    const result = await tool.run({ mode: "srt", captionsSource: { mediaRef: "media-missing" } }, ctx);
+
+    expect(result.isError).toBe(true);
+    const text = (result.blocks[0] as { text: string }).text;
+    expect(text).toMatch(/get_transcript/);
+    expect(text).toMatch(/add_captions/);
+    expect(transcription.transcribe).not.toHaveBeenCalled();
+    expect(facade.saveText).not.toHaveBeenCalled();
+  });
+
+  test("without ctx.transcription, a mediaRef request errors cleanly instead of falling back to caption clips", async () => {
+    const facade = makeInteropFacade();
+    const ctx = makeCtx({ interopExport: facade }); // no ctx.transcription
+    const tool = exportProjectTool();
+
+    const result = await tool.run({ mode: "srt", captionsSource: { mediaRef: "media-1" } }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(facade.saveText).not.toHaveBeenCalled();
   });
 });

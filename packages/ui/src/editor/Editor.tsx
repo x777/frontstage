@@ -157,7 +157,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
     });
   }, []);
 
-  const { exportProject, exportState, canExport, canExportXml } = useExportCommand({
+  const { exportProject, exportState, canExport, canExportXml, canExportCaptions } = useExportCommand({
     exportGateway,
     interopExport,
     getTimeline: () => store.getSnapshot().timeline,
@@ -407,8 +407,9 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
                   session={session}
                   confirmDiscard={confirmDiscard}
                   runProjectCommand={runProjectCommand}
-                  onExport={(canExport || canExportXml) ? exportProject : undefined}
+                  onExport={(canExport || canExportXml || canExportCaptions) ? exportProject : undefined}
                   canExportXml={canExportXml}
+                  canExportCaptions={canExportCaptions}
                 />
               )}
               {agent && (

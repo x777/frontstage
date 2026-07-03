@@ -63,9 +63,9 @@ export interface ToolContext {
     // hosts wire this from @palmier/ui's renderMattePng. Absent -> create_matte errors cleanly.
     renderMatte?(hex: string, width: number, height: number): Promise<Uint8Array>;
   };
-  // Timeline interchange export facade (XMEML/FCPXML) backing export_project (M12B T3) — the SAME
-  // object is also threaded into the UI's export command, so the agent tool and the File menu share
-  // one save/timecode path per host.
+  // Timeline interchange export facade (XMEML/FCPXML, + M14A T1's SRT/VTT) backing export_project —
+  // the SAME object is also threaded into the UI's export command, so the agent tool and the File
+  // menu share one save/timecode path per host.
   interopExport?: {
     // Desktop: reads embedded tmcd via ffprobe. Web: no filesystem access — resolves an empty map
     // (0-based export, the #247 regression-locked path).
@@ -79,7 +79,7 @@ export interface ToolContext {
     saveText(
       defaultName: string,
       contents: string,
-      kind: "fcpxml" | "xmeml",
+      kind: "fcpxml" | "xmeml" | "srt" | "vtt",
       outputPath?: string,
       overwrite?: boolean,
     ): Promise<{ path?: string; cancelled?: boolean }>;

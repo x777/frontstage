@@ -12,13 +12,18 @@ export interface DesktopInteropExportDeps {
   getProjectDir(): string | undefined;
 }
 
-const KIND_FILTERS: Record<"fcpxml" | "xmeml", ExportSaveFilter> = {
+type ExportKind = "fcpxml" | "xmeml" | "srt" | "vtt";
+
+const KIND_FILTERS: Record<ExportKind, ExportSaveFilter> = {
   fcpxml: { name: "FCPXML", extensions: ["fcpxml"] },
   xmeml: { name: "XMEML", extensions: ["xml"] },
+  srt: { name: "SubRip Subtitle", extensions: ["srt"] },
+  vtt: { name: "WebVTT Subtitle", extensions: ["vtt"] },
 };
 
-function extensionForKind(kind: "fcpxml" | "xmeml"): string {
-  return kind === "xmeml" ? "xml" : "fcpxml";
+function extensionForKind(kind: ExportKind): string {
+  if (kind === "xmeml") return "xml";
+  return kind;
 }
 
 /**
@@ -26,7 +31,7 @@ function extensionForKind(kind: "fcpxml" | "xmeml"): string {
  * appending — `"reel.mp4"` (xmeml) -> `"reel.xml"`, `"reel"` -> `"reel.xml"`, `"reel.xml"` unchanged.
  * Only inspects the final path segment, so dots in directory names (`/Users/x.y/reel`) are inert.
  */
-export function normalizeExportOutputPath(outPath: string, kind: "fcpxml" | "xmeml"): string {
+export function normalizeExportOutputPath(outPath: string, kind: ExportKind): string {
   const expectedExt = extensionForKind(kind);
   const slashIdx = Math.max(outPath.lastIndexOf("/"), outPath.lastIndexOf("\\"));
   const dir = slashIdx >= 0 ? outPath.slice(0, slashIdx + 1) : "";

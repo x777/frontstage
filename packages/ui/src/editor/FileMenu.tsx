@@ -11,9 +11,11 @@ export interface FileMenuProps {
   onExport?: (kind: ExportKind) => void;
   // XMEML/FCPXML availability is separate from the video gateway — gates the two extra buttons.
   canExportXml?: boolean;
+  // SRT/VTT (M14A T1): gated on the timeline having caption clips, not on canExportXml.
+  canExportCaptions?: boolean;
 }
 
-export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport, canExportXml }: FileMenuProps) {
+export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport, canExportXml, canExportCaptions }: FileMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentRefs, setRecentRefs] = useState<ProjectRef[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -180,6 +182,24 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
                     onClick={() => { setMenuOpen(false); onExport("xmeml"); }}
                   >
                     Export XMEML (Premiere)…
+                  </button>
+                </>
+              )}
+              {canExportCaptions && (
+                <>
+                  <button
+                    data-testid="file-export-srt"
+                    style={itemStyle}
+                    onClick={() => { setMenuOpen(false); onExport("srt"); }}
+                  >
+                    Captions (SRT)…
+                  </button>
+                  <button
+                    data-testid="file-export-vtt"
+                    style={itemStyle}
+                    onClick={() => { setMenuOpen(false); onExport("vtt"); }}
+                  >
+                    Captions (VTT)…
                   </button>
                 </>
               )}

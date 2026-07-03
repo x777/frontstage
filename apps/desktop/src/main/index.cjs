@@ -531,6 +531,14 @@ function buildMenu() {
               label: "XMEML (Premiere)…",
               click: (_i, win) => win?.webContents.send("menu:command", "export", "xmeml"),
             },
+            {
+              label: "Captions (SRT)…",
+              click: (_i, win) => win?.webContents.send("menu:command", "export", "srt"),
+            },
+            {
+              label: "Captions (VTT)…",
+              click: (_i, win) => win?.webContents.send("menu:command", "export", "vtt"),
+            },
           ],
         },
         { type: "separator" },

@@ -38,4 +38,10 @@ describe("normalizeExportOutputPath", () => {
     expect(normalizeExportOutputPath("reel.mp4", "xmeml")).toBe("reel.xml");
     expect(normalizeExportOutputPath("reel", "xmeml")).toBe("reel.xml");
   });
+
+  test("srt/vtt (M14A T1): extension matches the kind name directly", () => {
+    expect(normalizeExportOutputPath("/Users/alice/reel", "srt")).toBe("/Users/alice/reel.srt");
+    expect(normalizeExportOutputPath("/Users/alice/reel.mp4", "vtt")).toBe("/Users/alice/reel.vtt");
+    expect(normalizeExportOutputPath("/Users/alice/reel.srt", "srt")).toBe("/Users/alice/reel.srt");
+  });
 });

@@ -2,11 +2,14 @@ import { renderHook, act } from "@testing-library/react";
 import { useExportCommand } from "../src/editor/use-export-command.js";
 import type { ExportGateway, ExportTarget } from "../src/editor/export-gateway.js";
 import {
+  cuesFromCaptionClips,
   defaultCrop,
   defaultTimeline,
   defaultTransform,
   exportFcpxml,
   exportXmeml,
+  formatSrt,
+  formatVtt,
   type MediaManifestEntry,
   type SourceTimecode,
   type Timeline,
@@ -15,7 +18,9 @@ import {
 import type { ToolContext } from "@palmier/ai";
 import type { MediaByteSource } from "@palmier/engine";
 
-const fakeTimeline = {} as Timeline;
+// A well-formed (empty) timeline — canExportCaptions inspects .tracks on every render, so this must
+// satisfy Timeline's shape even in tests that don't otherwise care about timeline content.
+const fakeTimeline: Timeline = defaultTimeline();
 const fakeMedia = {} as MediaByteSource;
 
 function realTimeline(): Timeline {
@@ -54,6 +59,42 @@ function timelineWithClip(mediaRef: string): Timeline {
     ],
   };
   return { ...defaultTimeline(), tracks: [track] };
+}
+
+// Two caption clips (a text-typed clip with captionGroupId) out of chronological order, at 30fps.
+function timelineWithCaptionClips(): Timeline {
+  function captionClip(id: string, content: string, startFrame: number): Track["clips"][number] {
+    return {
+      id,
+      mediaRef: `caption-media-${id}`,
+      mediaType: "text",
+      sourceClipType: "text",
+      startFrame,
+      durationFrames: 30,
+      trimStartFrame: 0,
+      trimEndFrame: 0,
+      speed: 1,
+      volume: 1,
+      fadeInFrames: 0,
+      fadeOutFrames: 0,
+      fadeInInterpolation: "linear",
+      fadeOutInterpolation: "linear",
+      opacity: 1,
+      transform: defaultTransform(),
+      crop: defaultCrop(),
+      captionGroupId: "g1",
+      textContent: content,
+    };
+  }
+  const track: Track = {
+    id: "t1",
+    type: "video",
+    muted: false,
+    hidden: false,
+    syncLocked: false,
+    clips: [captionClip("cap2", "Second", 30), captionClip("cap1", "First", 0)],
+  };
+  return { ...defaultTimeline(), fps: 30, tracks: [track] };
 }
 
 type InteropFacade = NonNullable<ToolContext["interopExport"]>;
@@ -382,4 +423,131 @@ test("exportProject() defaults to 'video'", async () => {
   });
 
   expect(gateway.pickTarget).toHaveBeenCalledTimes(1);
+});
+
+// ── srt / vtt caption export (M14A T1) ─────────────────────────────────────────
+
+test("canExportCaptions is false when no interopExport facade, even with caption clips on the timeline", () => {
+  const { result } = renderHook(() =>
+    useExportCommand({
+      getTimeline: timelineWithCaptionClips,
+      media: fakeMedia,
+      suggestedName: () => "Untitled",
+      runProjectCommand: makeRunProjectCommand(),
+    })
+  );
+  expect(result.current.canExportCaptions).toBe(false);
+});
+
+test("canExportCaptions is false when the timeline has no caption clips, even with a facade", () => {
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: makeInteropFacade(),
+      getTimeline: () => fakeTimeline,
+      media: fakeMedia,
+      suggestedName: () => "Untitled",
+      runProjectCommand: makeRunProjectCommand(),
+    })
+  );
+  expect(result.current.canExportCaptions).toBe(false);
+});
+
+test("canExportCaptions is true when a facade is present and the timeline has caption clips", () => {
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: makeInteropFacade(),
+      getTimeline: timelineWithCaptionClips,
+      media: fakeMedia,
+      suggestedName: () => "Untitled",
+      runProjectCommand: makeRunProjectCommand(),
+    })
+  );
+  expect(result.current.canExportCaptions).toBe(true);
+});
+
+test("exportProject('srt') formats cuesFromCaptionClips (chronological) and saves with kind='srt'", async () => {
+  const facade = makeInteropFacade();
+  const runProjectCommand = makeRunProjectCommand();
+  const timeline = timelineWithCaptionClips();
+
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: facade,
+      getTimeline: () => timeline,
+      media: fakeMedia,
+      suggestedName: () => "MyProj",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("srt");
+  });
+
+  const cues = cuesFromCaptionClips(timeline, timeline.fps);
+  expect(cues.map((c) => c.text)).toEqual(["First", "Second"]);
+  const expectedSrt = formatSrt(cues);
+  expect(facade.saveText).toHaveBeenCalledWith("MyProj.srt", expectedSrt, "srt", undefined, true);
+});
+
+test("exportProject('vtt') formats cuesFromCaptionClips and saves with kind='vtt'", async () => {
+  const facade = makeInteropFacade();
+  const runProjectCommand = makeRunProjectCommand();
+  const timeline = timelineWithCaptionClips();
+
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: facade,
+      getTimeline: () => timeline,
+      media: fakeMedia,
+      suggestedName: () => "MyProj",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("vtt");
+  });
+
+  const expectedVtt = formatVtt(cuesFromCaptionClips(timeline, timeline.fps));
+  expect(facade.saveText).toHaveBeenCalledWith("MyProj.vtt", expectedVtt, "vtt", undefined, true);
+});
+
+test("exportProject('srt') is a no-op when the timeline has no caption clips", async () => {
+  const facade = makeInteropFacade();
+  const runProjectCommand = makeRunProjectCommand();
+
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: facade,
+      getTimeline: () => fakeTimeline,
+      media: fakeMedia,
+      suggestedName: () => "MyProj",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("srt");
+  });
+
+  expect(facade.saveText).not.toHaveBeenCalled();
+});
+
+test("exportProject('srt') is a no-op when no interopExport facade", async () => {
+  const runProjectCommand = makeRunProjectCommand();
+  const { result } = renderHook(() =>
+    useExportCommand({
+      getTimeline: timelineWithCaptionClips,
+      media: fakeMedia,
+      suggestedName: () => "Untitled",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("srt");
+  });
+
+  expect(runProjectCommand).not.toHaveBeenCalled();
 });

@@ -7,14 +7,20 @@ export interface WebInteropExportDeps {
   pickSaveFile?: (suggestedName: string, accept: Record<string, string[]>) => Promise<FileSystemFileHandle | null>;
 }
 
-const ACCEPT: Record<"fcpxml" | "xmeml", Record<string, string[]>> = {
+type ExportKind = "fcpxml" | "xmeml" | "srt" | "vtt";
+
+const ACCEPT: Record<ExportKind, Record<string, string[]>> = {
   fcpxml: { "application/xml": [".fcpxml"] },
   xmeml: { "application/xml": [".xml"] },
+  srt: { "application/x-subrip": [".srt"] },
+  vtt: { "text/vtt": [".vtt"] },
 };
 
-const DESCRIPTION: Record<"fcpxml" | "xmeml", string> = {
+const DESCRIPTION: Record<ExportKind, string> = {
   fcpxml: "FCPXML timeline",
   xmeml: "XMEML timeline",
+  srt: "SubRip subtitles",
+  vtt: "WebVTT subtitles",
 };
 
 // Web's ToolContext.interopExport facade (M12B T3) — no filesystem access, so readTimecodes always
