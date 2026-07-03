@@ -208,7 +208,10 @@ export class SourceCoordinator {
       });
     }
 
-    tagged.sort((a, b) => a.zIndex - b.zIndex);
+    // Descending: track index 0 is the topmost track (Swift convention — CompositionBuilder.swift
+    // walks tracks in reverse so index 0 draws last / on top). Draw order here is bottom-to-top,
+    // each layer alpha-blended over the accumulator, so the lowest zIndex must draw LAST.
+    tagged.sort((a, b) => b.zIndex - a.zIndex);
     const layers = tagged.map(t => t.layer);
 
     const cleanup = () => {
@@ -277,7 +280,8 @@ export class SourceCoordinator {
       });
     }
 
-    tagged.sort((a, b) => a.zIndex - b.zIndex);
+    // See layersForScrub for why this is descending — same z-order convention.
+    tagged.sort((a, b) => b.zIndex - a.zIndex);
     return tagged.map(t => t.layer);
   }
 

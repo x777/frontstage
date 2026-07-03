@@ -588,7 +588,11 @@ export function createMatteTool(): ToolSpec {
     description: "Creates a solid-color PNG matte in the media library.",
     inputSchema: z.object({
       hex: z.string(),
-      aspectRatio: z.enum(["Project", "16:9", "9:16", "1:1", "4:3", "9:14", "2.4:1"]).optional(),
+      // Loose string, not z.enum — an enum here would make ToolExecutor.execute()'s safeParse gate
+      // reject before run() ever sees it, killing the case-insensitive "project" handling and the
+      // Swift-verbatim error message below (both are validated manually in run() instead). Same
+      // reasoning as apply_layout's layout/fit/anchor fields (#242 review H2).
+      aspectRatio: z.string().optional(),
       name: z.string().optional(),
       folderId: z.string().optional(),
     }),

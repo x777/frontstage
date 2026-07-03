@@ -35,7 +35,7 @@ async function main(): Promise<void> {
     const natSize = { width: demux.video.codedWidth, height: demux.video.codedHeight };
     const canvasSize = { width: W, height: H };
 
-    // track 0 (bottom): full-frame video base
+    // bottom layer (track index 1 — index 0 = top per Swift z-order convention): full-frame video base
     const videoClip: Clip = {
       id: "clip-video",
       mediaRef: "clip.mp4",
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
       crop: defaultCrop(),
     };
 
-    // track 1 (top): white "HI" text at upper-left (centerX:0.25, centerY:0.25)
+    // top layer (track index 0): white "HI" text at upper-left (centerX:0.25, centerY:0.25)
     const offClip: Clip = {
       id: "clip-offset-text",
       mediaRef: "",
@@ -94,8 +94,8 @@ async function main(): Promise<void> {
       height: H,
       settingsConfigured: true,
       tracks: [
-        { id: "track-video", type: "video", muted: false, hidden: false, syncLocked: false, clips: [videoClip] },
         { id: "track-text", type: "video", muted: false, hidden: false, syncLocked: false, clips: [offClip] },
+        { id: "track-video", type: "video", muted: false, hidden: false, syncLocked: false, clips: [videoClip] },
       ],
     };
 

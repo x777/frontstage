@@ -310,6 +310,11 @@ describe("apply_layout — placement mode", () => {
     }
   });
 
+  // L1 (M13A review, .superpowers/sdd/m13a-broad-review.md): this reducer resolves each slot's
+  // audio track inline per-slot, whereas Swift places all video clips first and audio after — the
+  // resulting clip/link-group SET is identical either way, but with multiple simultaneous linked-
+  // audio placements the physical audio-track *index* a given partner lands on could differ from
+  // Swift's. Not asserted here; no behavior change, note-only.
   test("linked audio is placed and is ONE undo step", async () => {
     const manifest = manifestOf(
       assetEntry("a", { hasAudio: true }),

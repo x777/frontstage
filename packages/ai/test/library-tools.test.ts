@@ -22,6 +22,7 @@ import {
   importMediaTool,
   createMatteTool,
   IMPORT_BYTES_MAX_BASE64_LENGTH,
+  ToolExecutor,
   type ToolContext,
 } from "../src/index.js";
 
@@ -969,5 +970,33 @@ describe("create_matte — happy path", () => {
     const result = await createMatteTool().run({ hex: "#000000" }, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(/disk full/);
+  });
+});
+
+// H2 (M13A review, .superpowers/sdd/m13a-broad-review.md): the tests above call .run() directly,
+// bypassing ToolExecutor.execute()'s schema safeParse gate — the real agent/MCP call path. Before
+// the fix, aspectRatio was a strict z.enum(), so the gate rejected any value the enum didn't list
+// verbatim (including lowercase "project") with a generic Zod message, before run()'s own
+// case-insensitive handling and Swift-verbatim error text could ever run. These go through the
+// executor to prove the schema no longer short-circuits run()'s validation.
+describe("create_matte — through ToolExecutor (H2 regression)", () => {
+  test("lowercase 'project' aspectRatio succeeds through the executor", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const executor = new ToolExecutor([createMatteTool()], ctx);
+    const result = await executor.execute("create_matte", { hex: "#000000", aspectRatio: "project" });
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls[0]).toEqual({ kind: "renderMatte", args: ["#000000", 1920, 1080] });
+  });
+
+  test("a junk aspectRatio gets the Swift-verbatim message through the executor, not a generic Zod error", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const executor = new ToolExecutor([createMatteTool()], ctx);
+    const result = await executor.execute("create_matte", { hex: "#000000", aspectRatio: "16-9" });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(
+      "create_matte: unknown aspectRatio '16-9'. Use one of Project, 16:9, 9:16, 1:1, 4:3, 9:14, 2.4:1.",
+    );
   });
 });

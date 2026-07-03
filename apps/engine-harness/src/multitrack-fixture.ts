@@ -51,7 +51,8 @@ async function main(): Promise<void> {
     const natSize = { width: demux.video.codedWidth, height: demux.video.codedHeight };
     const canvasSize = { width: W, height: H };
 
-    // track 0 (bottom): full-frame video clip, opacity 1
+    // bottom layer (track index 1 — index 0 = top per Swift z-order convention): full-frame video
+    // clip, opacity 1
     const bottomTransform = fitTransform(natSize, canvasSize);
     const bottomClip: Clip = {
       id: "clip-bottom",
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
       crop: defaultCrop(),
     };
 
-    // track 1 (top): solid green IMAGE in the upper-left quadrant, opacity 1
+    // top layer (track index 0): solid green IMAGE in the upper-left quadrant, opacity 1
     // centerX=0.25, centerY=0.25, width=0.5, height=0.5 → covers top-left 50%×50%
     const topTransform = { ...fitTransform({ width: W, height: H }, canvasSize), width: 0.5, height: 0.5, centerX: 0.25, centerY: 0.25 };
     const topClip: Clip = {
@@ -102,8 +103,8 @@ async function main(): Promise<void> {
       height: H,
       settingsConfigured: true,
       tracks: [
-        { id: "track-bottom", type: "video", muted: false, hidden: false, syncLocked: false, clips: [bottomClip] },
         { id: "track-top", type: "video", muted: false, hidden: false, syncLocked: false, clips: [topClip] },
+        { id: "track-bottom", type: "video", muted: false, hidden: false, syncLocked: false, clips: [bottomClip] },
       ],
     };
 
