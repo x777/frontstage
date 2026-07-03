@@ -168,7 +168,10 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
 
   const hasTargets = (estimate?.targetCount ?? 0) > 0;
   const uncachedCount = estimate?.uncachedCount ?? 0;
-  const keyless = hasKey === false && uncachedCount > 0;
+  // Keyless is only a blocker when the local whisper fallback isn't ready either (M14A) — when it
+  // is, generation proceeds locally, free, without ever touching fal.
+  const localReady = transcription.localReady?.() ?? false;
+  const keyless = hasKey === false && uncachedCount > 0 && !localReady;
   const canGenerate = hasTargets && !keyless && !busy;
 
   function buildArgs(): Record<string, unknown> {
@@ -331,12 +334,14 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
               ? "No transcribable clips for this source."
               : estimate.uncachedCount === 0
                 ? "Cached — no credits used"
-                : `Estimated cost: ${formatCredits(estimate.credits)}`}
+                : hasKey === false && localReady
+                  ? "Local — no credits used"
+                  : `Estimated cost: ${formatCredits(estimate.credits)}`}
         </div>
 
         {keyless && (
           <div data-testid="captions-key-hint" style={mutedStyle}>
-            Set your fal.ai key in Settings to generate captions.
+            Set your fal.ai key in Settings, or download the local transcription model, to generate captions.
           </div>
         )}
 

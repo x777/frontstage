@@ -110,16 +110,22 @@ export function addCaptionsTool(): ToolSpec {
 
       let skipped: { mediaRef: string; error: string }[] = [];
       if (uncachedRefs.length > 0) {
-        if (!(await facade.hasKey().catch(() => false))) return keyMissingError("generate captions");
+        // M14A: a keyless call still proceeds when the local whisper fallback is ready (no fal call,
+        // no credits) — only error when NEITHER path can transcribe.
+        const keyed = await facade.hasKey().catch(() => false);
+        const localReady = facade.localReady?.() ?? false;
+        if (!keyed && !localReady) return keyMissingError("generate captions");
 
-        // Cost gate (M10C pattern): only uncached refs cost anything — an all-cached request never
-        // reaches here, so it never gates, matching get_transcript's "keyless + all-cached" rule.
-        const threshold = ctx.generation?.confirmThreshold ?? 50;
-        const estimate = uncachedRefs.reduce(
-          (sum, ref) => sum + facade.estimateCredits(entryById.get(ref)?.duration ?? 0),
-          0,
-        );
-        if (estimate > threshold && !a.confirm) return confirmationResult(estimate);
+        // Cost gate (M10C pattern): only the fal path spends credits — local transcription is
+        // always free, so a keyless+local call skips the confirm-threshold entirely.
+        if (keyed) {
+          const threshold = ctx.generation?.confirmThreshold ?? 50;
+          const estimate = uncachedRefs.reduce(
+            (sum, ref) => sum + facade.estimateCredits(entryById.get(ref)?.duration ?? 0),
+            0,
+          );
+          if (estimate > threshold && !a.confirm) return confirmationResult(estimate);
+        }
 
         const fetched = await transcribeRefs(facade, uncachedRefs, a.language);
         for (const [ref, result] of fetched.resultByRef) resultByRef.set(ref, result);

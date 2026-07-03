@@ -76,6 +76,7 @@ function transcriptOf(words: TranscriptionResult["words"]): TranscriptionResult 
 interface FacadeOpts {
   cached?: Record<string, TranscriptionResult>;
   hasKey?: boolean;
+  localReady?: boolean;
   transcribeImpl?: (mediaRef: string, opts?: { language?: string }) => Promise<TranscriptionResult>;
 }
 
@@ -98,6 +99,7 @@ function makeFacade(opts: FacadeOpts = {}) {
       return opts.hasKey ?? true;
     },
     estimateCredits: () => 1,
+    ...(opts.localReady !== undefined ? { localReady: () => opts.localReady! } : {}),
   };
   return { facade, cachedCalls, transcribeCalls, hasKeyCalls };
 }
@@ -169,6 +171,21 @@ describe("get_transcript tool", () => {
     const result = await getTranscriptTool().run({}, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("Settings");
+  });
+
+  test("keyless + local-ready: transcribes without the key gate", async () => {
+    const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
+    const manifest = manifestOf(mediaEntry("m1", { hasAudio: true }));
+    const { facade } = makeFacade({
+      hasKey: false,
+      localReady: true,
+      transcribeImpl: async () => transcriptOf([{ text: "hi", start: 0, end: 0.5 }]),
+    });
+    const ctx = makeCtx(tl, manifest, facade);
+    const result = await getTranscriptTool().run({}, ctx);
+    expect(result.isError).toBe(false);
+    const out = JSON.parse(textOf(result));
+    expect(out.clips[0].words[0][1]).toBe("hi");
   });
 
   test("a per-ref transcribe failure is collected into skipped, not batch-failing", async () => {

@@ -81,6 +81,7 @@ function makeLibrary(entries: MediaManifestEntry[]) {
 
 interface TranscriptionOpts {
   hasKey?: boolean;
+  localReady?: boolean;
   cached?: Record<string, TranscriptionResult>;
   estimateCredits?: (d: number) => number;
 }
@@ -92,6 +93,7 @@ function makeTranscription(opts: TranscriptionOpts = {}) {
     cachedTranscript: vi.fn(async (ref: string) => cached[ref] ?? null),
     hasKey: vi.fn().mockResolvedValue(opts.hasKey ?? true),
     estimateCredits: opts.estimateCredits ?? ((d: number) => Math.ceil(d)),
+    ...(opts.localReady !== undefined ? { localReady: () => opts.localReady! } : {}),
   };
 }
 
@@ -252,12 +254,13 @@ test("busy overlay covers the tab while add_captions is pending", async () => {
   await waitFor(() => expect(screen.queryByTestId("generating-overlay")).toBeNull());
 });
 
-test("keyless + uncached targets: Generate disabled with the settings hint", async () => {
+test("keyless + uncached targets: Generate disabled with the settings hint (mentions the local model)", async () => {
   const { store, library } = baseSetup();
   const transcription = makeTranscription({ hasKey: false, cached: {} });
   render(<CaptionsTab store={store} executor={makeExecutor()} transcription={transcription} library={library} />);
 
   await waitFor(() => expect(screen.getByTestId("captions-key-hint")).toBeInTheDocument());
+  expect(screen.getByTestId("captions-key-hint")).toHaveTextContent(/local transcription model/);
   expect(screen.getByTestId("captions-generate")).toBeDisabled();
 });
 
@@ -267,6 +270,38 @@ test("keyless but all-cached: Generate stays enabled (no credits needed)", async
   render(<CaptionsTab store={store} executor={makeExecutor()} transcription={transcription} library={library} />);
 
   await waitFor(() => expect(screen.getByTestId("captions-estimate")).toHaveTextContent("Cached — no credits used"));
+  expect(screen.queryByTestId("captions-key-hint")).toBeNull();
+  expect(screen.getByTestId("captions-generate")).not.toBeDisabled();
+});
+
+// ── keyless + local ASR ready (M14A T3) ───────────────────────────────────────
+
+test("keyless + local-ready + uncached targets: 'Local — no credits used', Generate enabled, no hint", async () => {
+  const { store, library } = baseSetup();
+  const transcription = makeTranscription({ hasKey: false, localReady: true, cached: {} });
+  render(<CaptionsTab store={store} executor={makeExecutor()} transcription={transcription} library={library} />);
+
+  await waitFor(() => expect(screen.getByTestId("captions-estimate")).toHaveTextContent("Local — no credits used"));
+  expect(screen.queryByTestId("captions-key-hint")).toBeNull();
+  expect(screen.getByTestId("captions-generate")).not.toBeDisabled();
+});
+
+test("keyless + local-absent + uncached targets: keeps the settings-hint copy, Generate disabled", async () => {
+  const { store, library } = baseSetup();
+  const transcription = makeTranscription({ hasKey: false, localReady: false, cached: {} });
+  render(<CaptionsTab store={store} executor={makeExecutor()} transcription={transcription} library={library} />);
+
+  await waitFor(() => expect(screen.getByTestId("captions-key-hint")).toBeInTheDocument());
+  expect(screen.getByTestId("captions-estimate")).not.toHaveTextContent("Local — no credits used");
+  expect(screen.getByTestId("captions-generate")).toBeDisabled();
+});
+
+test("keyed + local-ready: keyed (fal) behavior is unchanged — shows the credit estimate, not the local copy", async () => {
+  const { store, library } = baseSetup();
+  const transcription = makeTranscription({ hasKey: true, localReady: true, cached: {} });
+  render(<CaptionsTab store={store} executor={makeExecutor()} transcription={transcription} library={library} />);
+
+  await waitFor(() => expect(screen.getByTestId("captions-estimate")).toHaveTextContent("20 credits"));
   expect(screen.queryByTestId("captions-key-hint")).toBeNull();
   expect(screen.getByTestId("captions-generate")).not.toBeDisabled();
 });

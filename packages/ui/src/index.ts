@@ -19,11 +19,14 @@ export type { MediaPanelProps, MediaIndexingFacade } from "./media/MediaPanel.js
 export { MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia } from "./media/media-indexing.js";
 export type {
   IndexStatus,
+  MissingModel,
   FrameTap,
   MediaBlobHandle,
   OpenMedia,
   MediaIndexingHost,
   MediaIndexingEmbedding,
+  MediaIndexingTranscription,
+  MediaIndexingLocalAsr,
   MediaIndexingDeps,
 } from "./media/media-indexing.js";
 export { CaptionsTab } from "./media/CaptionsTab.js";

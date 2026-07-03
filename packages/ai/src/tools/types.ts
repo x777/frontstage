@@ -37,6 +37,10 @@ export interface ToolContext {
     // buildCaptionPhrases' `measure`). Optional — M11D wires a real Canvas2D-backed impl from
     // @palmier/ui; until then, add_captions falls back to a character-count heuristic.
     measureText?(text: string, style: TextStyle): number;
+    // The local whisper fallback's readiness (M14A T3) — LocalAsrService.state === "ready", synchronous
+    // since it's a plain state read. Absent/omitted = treated as not-ready. Backs both the keyless
+    // "Local — no credits used" estimate copy AND the explicit tools' keyless-local gate below.
+    localReady?(): boolean;
   };
   // Media folder/entry CRUD facade backing the 7 folder tools (M12A T2) — mirrors the
   // MediaLibrary folder ops directly, so it stays in lockstep with getManifest().

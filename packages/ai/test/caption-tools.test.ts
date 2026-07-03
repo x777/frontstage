@@ -70,6 +70,7 @@ function transcriptOf(words: TranscriptionResult["words"], segments: Transcripti
 interface FacadeOpts {
   cached?: Record<string, TranscriptionResult>;
   hasKey?: boolean;
+  localReady?: boolean;
   transcribeImpl?: (mediaRef: string, opts?: { language?: string }) => Promise<TranscriptionResult>;
   estimateCredits?: (durationSeconds: number) => number;
   measureText?: TranscriptionFacade["measureText"];
@@ -85,6 +86,7 @@ function makeFacade(opts: FacadeOpts = {}) {
     },
     hasKey: async () => opts.hasKey ?? true,
     estimateCredits: opts.estimateCredits ?? (() => 1),
+    ...(opts.localReady !== undefined ? { localReady: () => opts.localReady! } : {}),
     ...(opts.measureText
       ? {
           measureText: (text, style) => {
@@ -163,6 +165,22 @@ describe("add_captions tool", () => {
     const result = await addCaptionsTool().run({}, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("Settings");
+  });
+
+  test("keyless + local-ready: transcribes via the local path, no Settings error and no confirm gate at a huge estimate", async () => {
+    const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
+    const manifest = manifestOf(mediaEntry("m1", { hasAudio: true, duration: 999 }));
+    const { facade } = makeFacade({
+      hasKey: false,
+      localReady: true,
+      estimateCredits: () => 999999, // would obviously gate if the confirm check were reached
+      transcribeImpl: async () => transcriptOf([{ text: "hi", start: 0, end: 0.5 }]),
+    });
+    const ctx = makeCtx(tl, manifest, facade);
+    const result = await addCaptionsTool().run({}, ctx);
+    expect(result.isError).toBe(false);
+    const out = JSON.parse(textOf(result));
+    expect(out.captionsAdded).toBeGreaterThan(0);
   });
 
   test("an uncached estimate over the default threshold (no ctx.generation) requires confirm", async () => {

@@ -8,14 +8,21 @@ import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTa
 import { FolderTile, isMediaDrag, type MediaDragPayload } from "./FolderTile.js";
 import { MediaBreadcrumbs } from "./MediaBreadcrumbs.js";
 import { MatteSheet } from "./MatteSheet.js";
-import type { IndexStatus } from "./media-indexing.js";
+import type { IndexStatus, MissingModel } from "./media-indexing.js";
+
+const MODEL_LABEL: Record<MissingModel, string> = { embedding: "Search model", transcription: "Transcription model" };
+// Downloaded in this fixed order regardless of Set iteration order — embedding is the older/
+// larger download, so it leads.
+const MODEL_DOWNLOAD_ORDER: MissingModel[] = ["embedding", "transcription"];
 
 export interface MediaIndexingFacade {
   getStatus(): IndexStatus;
   subscribe(cb: () => void): () => void;
-  // Downloads the visual-search model (M12C T4's confirm-gate action, surfaced here too so the
-  // panel doesn't require going through the agent). Omitted -> no download button is rendered.
-  ensureReady?: (onProgress?: (p: { loaded: number; total: number }) => void) => Promise<void>;
+  // Downloads the search-embedding model (M12C T4's confirm-gate action, surfaced here too so the
+  // panel doesn't require going through the agent). Omitted -> not offered by the Download button.
+  ensureEmbeddingReady?: (onProgress?: (p: { loaded: number; total: number }) => void) => Promise<void>;
+  // Downloads the local-transcription model (M14A T3), same shape. Omitted -> not offered either.
+  ensureAsrReady?: (onProgress?: (p: { loaded: number; total: number }) => void) => Promise<void>;
 }
 
 const IDLE_STATUS: IndexStatus = { kind: "idle" };
@@ -24,7 +31,7 @@ const noopSubscribe = () => () => {};
 // Swift MediaTab+IndexStatus spirit: a compact line, nothing while idle.
 function indexStatusLabel(status: IndexStatus): string | null {
   if (status.kind === "indexing") return `Indexing ${Math.min(status.done + 1, status.total)} of ${status.total}…`;
-  if (status.kind === "waiting-model") return "Search index waiting for model";
+  if (status.kind === "waiting-model") return `Waiting for ${status.missing.map((m) => MODEL_LABEL[m]).join(", ")}`;
   return null;
 }
 
@@ -65,15 +72,32 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
     () => indexing?.getStatus() ?? IDLE_STATUS,
   );
   const indexLabel = indexStatusLabel(indexStatus);
-  const [isDownloadingModel, setIsDownloadingModel] = useState(false);
-  const handleDownloadModel = useCallback(() => {
-    if (!indexing?.ensureReady || isDownloadingModel) return;
-    setIsDownloadingModel(true);
-    indexing
-      .ensureReady()
-      .catch(() => {})
-      .finally(() => setIsDownloadingModel(false));
-  }, [indexing, isDownloadingModel]);
+  // Which of the two missing models is downloading right now — null while idle. Drives the button
+  // label/disabled state; the models download strictly one after the other, never in parallel.
+  const [downloadingModel, setDownloadingModel] = useState<MissingModel | null>(null);
+  const ensureFor = useCallback(
+    (model: MissingModel) => (model === "embedding" ? indexing?.ensureEmbeddingReady : indexing?.ensureAsrReady),
+    [indexing],
+  );
+  const handleDownloadModels = useCallback(() => {
+    if (downloadingModel || indexStatus.kind !== "waiting-model") return;
+    const targets = MODEL_DOWNLOAD_ORDER.filter((m) => indexStatus.missing.includes(m) && ensureFor(m) != null);
+    const [first, ...rest] = targets;
+    if (first === undefined) return;
+    // The first download starts synchronously in this click handler (matching the M12C single-model
+    // precedent); later ones chain via .then() once the prior one settles — never in parallel.
+    setDownloadingModel(first);
+    let chain = ensureFor(first)!().catch(() => {});
+    for (const model of rest) {
+      chain = chain.then(() => {
+        setDownloadingModel(model);
+        return ensureFor(model)!().catch(() => {});
+      });
+    }
+    void chain.finally(() => setDownloadingModel(null));
+  }, [downloadingModel, indexStatus, ensureFor]);
+  const downloadableMissing =
+    indexStatus.kind === "waiting-model" ? indexStatus.missing.filter((m) => ensureFor(m) != null) : [];
   // Two independent primitive selectors (not one object-returning selector — see the entries/
   // folders comment below) so an absent store falls back to a stable default without needing a
   // conditional hook call.
@@ -392,11 +416,11 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
               }}
             >
               <span>{indexLabel}</span>
-              {indexStatus.kind === "waiting-model" && indexing?.ensureReady != null && (
+              {downloadableMissing.length > 0 && (
                 <button
                   data-testid="media-index-download-model"
-                  onClick={handleDownloadModel}
-                  disabled={isDownloadingModel}
+                  onClick={handleDownloadModels}
+                  disabled={downloadingModel != null}
                   style={{
                     background: theme.bg.raised,
                     color: theme.text.primary,
@@ -405,11 +429,11 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
                     padding: `0 ${theme.spacing.xxs}`,
                     fontSize: theme.fontSize.xxs,
                     fontWeight: theme.fontWeight.medium,
-                    cursor: isDownloadingModel ? "default" : "pointer",
-                    opacity: isDownloadingModel ? theme.opacity.disabled : 1,
+                    cursor: downloadingModel != null ? "default" : "pointer",
+                    opacity: downloadingModel != null ? theme.opacity.disabled : 1,
                   }}
                 >
-                  {isDownloadingModel ? "Downloading…" : "Download model"}
+                  {downloadingModel != null ? `Downloading ${MODEL_LABEL[downloadingModel]}…` : "Download model"}
                 </button>
               )}
             </div>

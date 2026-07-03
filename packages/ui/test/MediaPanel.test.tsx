@@ -7,7 +7,7 @@ import { MEDIA_DRAG_MIME } from "../src/media/FolderTile.js";
 
 function fakeIndexing(
   initial: IndexStatus,
-  ensureReady?: MediaIndexingFacade["ensureReady"],
+  ensure: { embedding?: MediaIndexingFacade["ensureEmbeddingReady"]; asr?: MediaIndexingFacade["ensureAsrReady"] } = {},
 ): MediaIndexingFacade & { set: (s: IndexStatus) => void } {
   let status = initial;
   const listeners = new Set<() => void>();
@@ -17,7 +17,8 @@ function fakeIndexing(
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
-    ensureReady,
+    ensureEmbeddingReady: ensure.embedding,
+    ensureAsrReady: ensure.asr,
     set: (s) => {
       status = s;
       for (const cb of listeners) cb();
@@ -399,30 +400,36 @@ test("indexing status: shows a 1-indexed 'Indexing N of M…' line, live-updatin
   expect(screen.queryByTestId("media-index-status")).toBeNull();
 });
 
-test("waiting-model status: shows the subtle waiting line", () => {
-  const indexing = fakeIndexing({ kind: "waiting-model" });
+test("waiting-model status (Search model missing): shows the missing-model line", () => {
+  const indexing = fakeIndexing({ kind: "waiting-model", missing: ["embedding"] });
   render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
-  expect(screen.getByTestId("media-index-status")).toHaveTextContent("Search index waiting for model");
+  expect(screen.getByTestId("media-index-status")).toHaveTextContent("Waiting for Search model");
 });
 
-test("waiting-model status without an ensureReady facade: no download button", () => {
-  const indexing = fakeIndexing({ kind: "waiting-model" });
+test("waiting-model status (both models missing): lists both by name", () => {
+  const indexing = fakeIndexing({ kind: "waiting-model", missing: ["embedding", "transcription"] });
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+  expect(screen.getByTestId("media-index-status")).toHaveTextContent("Waiting for Search model, Transcription model");
+});
+
+test("waiting-model status without any ensure facade: no download button", () => {
+  const indexing = fakeIndexing({ kind: "waiting-model", missing: ["embedding"] });
   render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
   expect(screen.queryByTestId("media-index-download-model")).toBeNull();
 });
 
-test("indexing (not waiting-model) status: no download button even with an ensureReady facade", () => {
-  const indexing = fakeIndexing({ kind: "indexing", done: 0, total: 1 }, async () => {});
+test("indexing (not waiting-model) status: no download button even with ensure facades wired", () => {
+  const indexing = fakeIndexing({ kind: "indexing", done: 0, total: 1 }, { embedding: async () => {}, asr: async () => {} });
   render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
   expect(screen.queryByTestId("media-index-download-model")).toBeNull();
 });
 
-// ── Model-download button (M12C T4) ───────────────────────────────────────────
+// ── Model-download button (M12C T4 + M14A T3's two-model gate) ───────────────
 
-test("waiting-model status with an ensureReady facade: shows a Download model button that calls it", async () => {
+test("waiting-model (Search model only) with ensureEmbeddingReady: shows a Download model button that calls it", async () => {
   let resolveDownload: () => void = () => {};
-  const ensureReady = vi.fn(() => new Promise<void>((resolve) => { resolveDownload = resolve; }));
-  const indexing = fakeIndexing({ kind: "waiting-model" }, ensureReady);
+  const ensureEmbeddingReady = vi.fn(() => new Promise<void>((resolve) => { resolveDownload = resolve; }));
+  const indexing = fakeIndexing({ kind: "waiting-model", missing: ["embedding"] }, { embedding: ensureEmbeddingReady });
   render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
 
   const button = screen.getByTestId("media-index-download-model");
@@ -430,8 +437,9 @@ test("waiting-model status with an ensureReady facade: shows a Download model bu
   expect(button).not.toBeDisabled();
 
   fireEvent.click(button);
-  expect(ensureReady).toHaveBeenCalledTimes(1);
+  expect(ensureEmbeddingReady).toHaveBeenCalledTimes(1);
   await waitFor(() => expect(screen.getByTestId("media-index-download-model")).toBeDisabled());
+  expect(screen.getByTestId("media-index-download-model")).toHaveTextContent("Downloading Search model…");
 
   await act(async () => {
     resolveDownload();
@@ -441,19 +449,76 @@ test("waiting-model status with an ensureReady facade: shows a Download model bu
 
   // A second click while already idle-again doesn't re-fire until clicked again.
   fireEvent.click(button);
-  expect(ensureReady).toHaveBeenCalledTimes(2);
+  expect(ensureEmbeddingReady).toHaveBeenCalledTimes(2);
 });
 
-test("clicking Download model while already downloading does not re-fire ensureReady", async () => {
-  const ensureReady = vi.fn(() => new Promise<void>(() => {})); // never resolves
-  const indexing = fakeIndexing({ kind: "waiting-model" }, ensureReady);
+test("clicking Download model while already downloading does not re-fire ensureEmbeddingReady", async () => {
+  const ensureEmbeddingReady = vi.fn(() => new Promise<void>(() => {})); // never resolves
+  const indexing = fakeIndexing({ kind: "waiting-model", missing: ["embedding"] }, { embedding: ensureEmbeddingReady });
   render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
 
   const button = screen.getByTestId("media-index-download-model");
   fireEvent.click(button);
   await waitFor(() => expect(button).toBeDisabled());
-  fireEvent.click(button); // no-op: disabled, and the handler also guards on isDownloadingModel
-  expect(ensureReady).toHaveBeenCalledTimes(1);
+  fireEvent.click(button); // no-op: disabled, and the handler also guards on downloadingModel
+  expect(ensureEmbeddingReady).toHaveBeenCalledTimes(1);
+});
+
+test("both models missing: Download model downloads sequentially, embedding first then ASR, never in parallel", async () => {
+  const order: string[] = [];
+  let resolveEmbedding: () => void = () => {};
+  let resolveAsr: () => void = () => {};
+  const ensureEmbeddingReady = vi.fn(() => {
+    order.push("embedding-start");
+    return new Promise<void>((resolve) => { resolveEmbedding = () => { order.push("embedding-end"); resolve(); }; });
+  });
+  const ensureAsrReady = vi.fn(() => {
+    order.push("asr-start");
+    return new Promise<void>((resolve) => { resolveAsr = () => { order.push("asr-end"); resolve(); }; });
+  });
+  const indexing = fakeIndexing(
+    { kind: "waiting-model", missing: ["embedding", "transcription"] },
+    { embedding: ensureEmbeddingReady, asr: ensureAsrReady },
+  );
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+
+  const button = screen.getByTestId("media-index-download-model");
+  fireEvent.click(button);
+
+  await waitFor(() => expect(ensureEmbeddingReady).toHaveBeenCalledTimes(1));
+  expect(ensureAsrReady).not.toHaveBeenCalled();
+  expect(button).toBeDisabled();
+  expect(button).toHaveTextContent("Downloading Search model…");
+
+  await act(async () => {
+    resolveEmbedding();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(ensureAsrReady).toHaveBeenCalledTimes(1));
+  expect(button).toBeDisabled();
+  expect(button).toHaveTextContent("Downloading Transcription model…");
+
+  await act(async () => {
+    resolveAsr();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(button).not.toBeDisabled());
+
+  expect(order).toEqual(["embedding-start", "embedding-end", "asr-start", "asr-end"]);
+});
+
+test("only the transcription model is missing: the Download button drives ensureAsrReady alone", async () => {
+  const ensureEmbeddingReady = vi.fn(async () => {});
+  const ensureAsrReady = vi.fn(async () => {});
+  const indexing = fakeIndexing(
+    { kind: "waiting-model", missing: ["transcription"] },
+    { embedding: ensureEmbeddingReady, asr: ensureAsrReady },
+  );
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+
+  fireEvent.click(screen.getByTestId("media-index-download-model"));
+  await waitFor(() => expect(ensureAsrReady).toHaveBeenCalledTimes(1));
+  expect(ensureEmbeddingReady).not.toHaveBeenCalled();
 });
 
 // ── "New Matte…" header entry (M13A T1) ───────────────────────────────────────

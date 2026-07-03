@@ -6,7 +6,8 @@
 
 import type { MediaByteSource } from "@palmier/engine";
 import type { EmbeddingModelInfo } from "@palmier/ai";
-import type { EmbeddingHeader, EmbeddingRow, MediaManifestEntry } from "@palmier/core";
+import { canTranscribe } from "@palmier/ai";
+import type { EmbeddingHeader, EmbeddingRow, MediaManifestEntry, TranscriptionResult } from "@palmier/core";
 import {
   assignShots,
   candidateTimes,
@@ -20,10 +21,12 @@ import {
 
 const TAP_SIZE = 256;
 
+export type MissingModel = "embedding" | "transcription";
+
 export type IndexStatus =
   | { kind: "idle" }
   | { kind: "indexing"; done: number; total: number }
-  | { kind: "waiting-model" };
+  | { kind: "waiting-model"; missing: MissingModel[] };
 
 export type FrameTap = (
   entry: MediaManifestEntry,
@@ -52,31 +55,58 @@ export interface MediaIndexingEmbedding {
   embedImage(rgba: Uint8ClampedArray, width: number, height: number): Promise<Float32Array>;
 }
 
+// The background transcript step's write path (M14A T3) — deliberately minimal: the sweep only
+// ever needs the forceLocal call, never TranscriptionService's full surface (caching/dedupe/status
+// already live inside it and are reused as-is).
+export interface MediaIndexingTranscription {
+  transcribe(mediaRef: string, opts: { forceLocal: true }): Promise<TranscriptionResult>;
+}
+
+export interface MediaIndexingLocalAsr {
+  readonly state: "idle" | "downloading" | "ready" | "failed";
+}
+
 export interface MediaIndexingDeps {
   library: MediaIndexingHost;
   embedding: MediaIndexingEmbedding;
   sampleFrames: FrameTap;
   samplerVersion: string;
   openMedia: OpenMedia;
-  // How often to recheck embedding.state while queued work is waiting-model (default 500ms).
+  // Background transcription (M14A T3). Both absent = pre-M14A behavior: no entry is ever
+  // considered to "want" transcript work, so audio-only entries stay unqueued as before.
+  transcription?: MediaIndexingTranscription;
+  localAsr?: MediaIndexingLocalAsr;
+  // How often to recheck a not-ready model while queued work is waiting-model (default 500ms).
   readyPollMs?: number;
   sleep?: (ms: number) => Promise<void>;
+}
+
+/** Swift's SearchIndexCoordinator.wantsTranscript: audio, or video known to carry an audio track. */
+function wantsTranscript(entry: MediaManifestEntry): boolean {
+  return canTranscribe(entry);
 }
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface QueueItem {
+  id: string;
+  visual: boolean;
+  transcript: boolean;
+}
+
 export class MediaIndexingService {
   private readonly deps: MediaIndexingDeps;
   private readonly sleep: (ms: number) => Promise<void>;
   private disposed = false;
-  private queue: string[] = [];
+  private queue: QueueItem[] = [];
   private processingId: string | null = null;
   private total = 0;
   private done = 0;
   private worker: Promise<void> | null = null;
-  private watchingReady = false;
+  private watchingEmbeddingReady = false;
+  private watchingAsrReady = false;
   private sweeping = false;
   private resweepRequested = false;
   private _status: IndexStatus = { kind: "idle" };
@@ -107,10 +137,10 @@ export class MediaIndexingService {
     if (this.disposed) return;
     const entry = this.deps.library.entries().find((e) => e.id === entryId);
     if (!entry) return;
-    void this.needsIndex(entry).then((stale) => {
-      if (this.disposed || !stale) return;
-      if (this.queue.includes(entryId) || entryId === this.processingId) return;
-      this.queue.push(entryId);
+    void this.needsIndex(entry).then((work) => {
+      if (this.disposed || !work) return;
+      if (this.queue.some((w) => w.id === entryId) || entryId === this.processingId) return;
+      this.queue.push({ id: entryId, ...work });
       this.total += 1;
       this.publishStatus();
       this.ensureWorker();
@@ -147,12 +177,15 @@ export class MediaIndexingService {
     try {
       do {
         this.resweepRequested = false;
-        const candidates = snapshot.filter((e) => e.type === "video" || e.type === "image");
-        const newlyStale: string[] = [];
+        // Video/image (visual work) + audio (transcript-only work) — needsIndex resolves per-entry
+        // which of the two, if either, is actually outstanding.
+        const candidates = snapshot.filter((e) => e.type === "video" || e.type === "image" || e.type === "audio");
+        const newlyStale: QueueItem[] = [];
         for (const entry of candidates) {
           if (this.disposed) return;
-          if (this.queue.includes(entry.id) || entry.id === this.processingId) continue;
-          if (await this.needsIndex(entry)) newlyStale.push(entry.id);
+          if (this.queue.some((w) => w.id === entry.id) || entry.id === this.processingId) continue;
+          const work = await this.needsIndex(entry);
+          if (work) newlyStale.push({ id: entry.id, ...work });
         }
         if (this.disposed) return;
         if (newlyStale.length > 0) {
@@ -167,7 +200,13 @@ export class MediaIndexingService {
     this.ensureWorker();
   }
 
-  private async needsIndex(entry: MediaManifestEntry): Promise<boolean> {
+  private async needsIndex(entry: MediaManifestEntry): Promise<{ visual: boolean; transcript: boolean } | null> {
+    const visual = await this.needsVisual(entry);
+    const transcript = this.needsTranscript(entry);
+    return visual || transcript ? { visual, transcript } : null;
+  }
+
+  private async needsVisual(entry: MediaManifestEntry): Promise<boolean> {
     if (entry.type !== "video" && entry.type !== "image") return false;
     if (!entry.embeddingPath) return true;
 
@@ -187,17 +226,29 @@ export class MediaIndexingService {
     return header.sourceBytes !== handle.byteLength;
   }
 
+  // The cheap check (entry.transcriptPath presence) over a cachedTranscript() read: no disk-cache
+  // I/O just to decide whether an entry belongs in the queue. transcribe() itself re-validates the
+  // cache (and falls through to a fresh transcription) if the path turns out to be stale/corrupt.
+  private needsTranscript(entry: MediaManifestEntry): boolean {
+    if (!this.deps.transcription) return false;
+    if (!wantsTranscript(entry)) return false;
+    return !entry.transcriptPath;
+  }
+
   private ensureWorker(): void {
-    if (this.disposed || this.worker) return;
+    if (this.disposed) return;
+    // Armed even while a worker is mid-run: an entry queued during the run may be skip-processed
+    // (its model not ready) before the worker exits — the watcher is what re-sweeps it later.
+    this.armReadyWatchers();
+    if (this.worker) return;
     if (this.queue.length === 0) {
       this.total = 0;
       this.done = 0;
       this.publishStatus();
       return;
     }
-    if (this.deps.embedding.state !== "ready") {
+    if (!this.canMakeProgress()) {
       this.publishStatus();
-      this.armReadyWatcher();
       return;
     }
     this.worker = this.runWorker().finally(() => {
@@ -206,32 +257,60 @@ export class MediaIndexingService {
     });
   }
 
-  private armReadyWatcher(): void {
-    if (this.watchingReady || this.disposed) return;
-    this.watchingReady = true;
-    void this.waitUntilReady().then(() => {
-      this.watchingReady = false;
-      if (!this.disposed) this.ensureWorker();
-    });
+  // A model only counts as "missing" when the current queue actually has work that needs it — an
+  // ASR download gate never blocks a queue that's all video/image, and vice versa.
+  private missingModels(): MissingModel[] {
+    const missing: MissingModel[] = [];
+    if (this.queue.some((w) => w.visual) && this.deps.embedding.state !== "ready") missing.push("embedding");
+    if (this.queue.some((w) => w.transcript) && this.deps.localAsr?.state !== "ready") missing.push("transcription");
+    return missing;
   }
 
-  private async waitUntilReady(): Promise<void> {
-    while (!this.disposed && this.deps.embedding.state !== "ready" && this.queue.length > 0) {
+  private canMakeProgress(): boolean {
+    if (this.queue.some((w) => w.visual) && this.deps.embedding.state === "ready") return true;
+    if (this.queue.some((w) => w.transcript) && this.deps.localAsr?.state === "ready") return true;
+    return false;
+  }
+
+  // Polls (not event-driven — same shape as M12C's single-model watcher) until its model reports
+  // ready or the service is disposed. NOT bounded by queue.length: by the time a model goes ready,
+  // this pass may already have popped (and skip-processed) every entry that needed it — start()
+  // re-sweeps the library from scratch to pick those back up, mirroring the embedding-model hook.
+  private armReadyWatchers(): void {
+    const missing = this.missingModels();
+    if (missing.includes("embedding") && !this.watchingEmbeddingReady) {
+      this.watchingEmbeddingReady = true;
+      void this.waitUntilModelReady(() => this.deps.embedding.state).then(() => {
+        this.watchingEmbeddingReady = false;
+        if (!this.disposed) this.start();
+      });
+    }
+    if (missing.includes("transcription") && !this.watchingAsrReady) {
+      this.watchingAsrReady = true;
+      void this.waitUntilModelReady(() => this.deps.localAsr?.state ?? "idle").then(() => {
+        this.watchingAsrReady = false;
+        if (!this.disposed) this.start();
+      });
+    }
+  }
+
+  private async waitUntilModelReady(stateOf: () => "idle" | "downloading" | "ready" | "failed"): Promise<void> {
+    while (!this.disposed && stateOf() !== "ready") {
       await this.sleep(this.deps.readyPollMs ?? 500);
     }
   }
 
   private async runWorker(): Promise<void> {
-    while (!this.disposed && this.deps.embedding.state === "ready") {
-      const id = this.queue.shift();
-      if (id === undefined) break;
-      this.processingId = id;
-      const entry = this.deps.library.entries().find((e) => e.id === id);
+    while (!this.disposed && this.canMakeProgress()) {
+      const work = this.queue.shift();
+      if (work === undefined) break;
+      this.processingId = work.id;
+      const entry = this.deps.library.entries().find((e) => e.id === work.id);
       if (entry) {
         try {
-          await this.indexOne(entry);
+          await this.indexOne(entry, work);
         } catch (err) {
-          console.warn(`media-indexing: failed to index "${entry.name}" (${id})`, err);
+          console.warn(`media-indexing: failed to index "${entry.name}" (${work.id})`, err);
         }
       }
       this.processingId = null;
@@ -241,7 +320,20 @@ export class MediaIndexingService {
     }
   }
 
-  private async indexOne(entry: MediaManifestEntry): Promise<void> {
+  // Runs whichever of the two steps this entry both needs AND has a ready model for right now; the
+  // other is silently left outstanding for the ready-watcher's later resweep. Swift gates its whole
+  // sweep on one bundled (CoreML) model — TS gates per-step, since both models here are
+  // independently download-gated and shouldn't block each other's progress.
+  private async indexOne(entry: MediaManifestEntry, work: QueueItem): Promise<void> {
+    if (work.visual && this.deps.embedding.state === "ready") {
+      await this.indexVisual(entry);
+    }
+    if (work.transcript && this.deps.transcription && this.deps.localAsr?.state === "ready") {
+      await this.deps.transcription.transcribe(entry.id, { forceLocal: true });
+    }
+  }
+
+  private async indexVisual(entry: MediaManifestEntry): Promise<void> {
     const handle = await this.deps.openMedia(entry);
     try {
       const rows = entry.type === "image" ? await this.sampleImage(entry, handle.url) : await this.sampleVideo(entry, handle.url);
@@ -316,7 +408,12 @@ export class MediaIndexingService {
 
   private computeStatus(): IndexStatus {
     if (this.total === 0) return { kind: "idle" };
-    if (this.deps.embedding.state !== "ready") return { kind: "waiting-model" };
+    // Only report waiting-model while there's still-queued work truly blocked on a model — an
+    // empty queue with total>0 is the tail tick of the last entry completing (done===total),
+    // not a stall; ensureWorker's next call resets total/done to 0 and republishes idle.
+    if (this.queue.length > 0 && !this.canMakeProgress()) {
+      return { kind: "waiting-model", missing: this.missingModels() };
+    }
     return { kind: "indexing", done: this.done, total: this.total };
   }
 }

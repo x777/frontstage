@@ -6,7 +6,7 @@ import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
 import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
@@ -184,6 +184,11 @@ async function bootstrap() {
   const embeddingService = new EmbeddingService(createTransformersPipelines());
   (window as unknown as Record<string, unknown>).__embeddingService = embeddingService;
 
+  // Local whisper ASR runtime (M14A) — long-lived alongside the embedding service for the same
+  // reason: the weights are a one-time download, not per-project state. Lazy transformers import.
+  const localAsrService = new LocalAsrService(createTransformersAsrPipelines());
+  (window as unknown as Record<string, unknown>).__localAsrService = localAsrService;
+
   // Background visual indexing (M12C T3, the GenerationService pattern) — dispose+recreate per
   // project open since its queue is tied to the open project's library entries.
   const mediaIndexingHost: MediaIndexingHost = {
@@ -199,6 +204,10 @@ async function bootstrap() {
       sampleFrames: createDomFrameTap(),
       samplerVersion: SAMPLER_VERSION,
       openMedia: createDomOpenMedia(library.byteSource),
+      // The background transcript step (M14A T3): forceLocal through the CURRENT transcription
+      // service ref so a project reopen's recreated service is picked up.
+      transcription: { transcribe: (mediaRef, opts) => transcriptionServiceRef.current.transcribe(mediaRef, opts) },
+      localAsr: localAsrService,
     });
   }
   const mediaIndexingServiceRef: { current: MediaIndexingService } = { current: makeMediaIndexingService() };
@@ -208,12 +217,13 @@ async function bootstrap() {
   library.subscribe(() => mediaIndexingServiceRef.current.start());
   (window as unknown as Record<string, unknown>).__mediaIndexingService = mediaIndexingServiceRef;
 
-  // The panel's "Download model" action (M12C T4) — same embeddingService the search_media tool's
-  // confirm gate drives, so a click here and a confirm:true tool call share one single-flight download.
+  // The panel's "Download model" actions — the SAME services the tools' confirm gates drive, so a
+  // click here and a confirm:true tool call share one single-flight download per model.
   const indexingFacade: MediaIndexingFacade = {
     getStatus: () => indexingStatusRelay.getStatus(),
     subscribe: (cb) => indexingStatusRelay.subscribe(cb),
-    ensureReady: (onProgress) => embeddingService.ensureReady(onProgress),
+    ensureEmbeddingReady: (onProgress) => embeddingService.ensureReady(onProgress),
+    ensureAsrReady: (onProgress) => localAsrService.ensureReady(onProgress),
   };
 
   // SAME object threaded into the ToolExecutor context; T4 wires the real visual search scope +
@@ -259,7 +269,7 @@ async function bootstrap() {
   };
   const audioExtractor = makeWebAudioExtractor({ openBlob: (mediaRef) => library.byteSource.open(mediaRef) });
   const transcriptionServiceRef: { current: TranscriptionService } = {
-    current: new TranscriptionService(genGateway, transcriptionHost, audioExtractor),
+    current: new TranscriptionService(genGateway, transcriptionHost, audioExtractor, { local: localAsrService }),
   };
   (window as unknown as Record<string, unknown>).__transcriptionService = transcriptionServiceRef;
 
@@ -278,6 +288,8 @@ async function bootstrap() {
     cachedTranscript: (mediaRef: string) => transcriptionServiceRef.current.cachedTranscript(mediaRef),
     hasKey: () => transcriptionServiceRef.current.hasKey(),
     estimateCredits: (durationSeconds: number) => transcriptionServiceRef.current.estimateCredits(durationSeconds),
+    // M14A: the keyless-local gate + the Captions tab's "Local — no credits used" copy.
+    localReady: () => localAsrService.state === "ready",
     // M11D: a real Canvas2D measure, at the timeline's own render width — upgrades add_captions' heuristic.
     measureText: (text: string, style: { fontName: string; fontSize: number }) =>
       measureCaptionWidthFrac(text, style, store.getSnapshot().timeline.width),

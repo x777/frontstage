@@ -1,10 +1,16 @@
 import { describe, expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/react";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry, TranscriptionResult } from "@palmier/core";
 import { candidateTimes, decodeEmbeddings, embeddingRelativePath, encodeEmbeddings } from "@palmier/core";
 import type { EmbeddingHeader } from "@palmier/core";
 import { MediaIndexingService, IndexingStatusRelay } from "../src/media/media-indexing.js";
-import type { FrameTap, MediaIndexingDeps, MediaIndexingEmbedding, MediaIndexingHost } from "../src/media/media-indexing.js";
+import type {
+  FrameTap,
+  MediaIndexingDeps,
+  MediaIndexingEmbedding,
+  MediaIndexingHost,
+  MediaIndexingLocalAsr,
+} from "../src/media/media-indexing.js";
 
 const INFO = { model: "siglip2-base-patch16-256", modelVersion: "test-checkpoint", dim: 2 };
 const SAMPLER_VERSION = "test-v1";
@@ -49,6 +55,31 @@ function imageEntry(id: string, overrides: Partial<MediaManifestEntry> = {}): Me
     duration: 5,
     ...overrides,
   };
+}
+
+function audioEntry(id: string, overrides: Partial<MediaManifestEntry> = {}): MediaManifestEntry {
+  return {
+    id,
+    name: `${id}.wav`,
+    type: "audio",
+    source: { kind: "project", relativePath: `media/${id}.wav` },
+    duration: 5,
+    ...overrides,
+  };
+}
+
+function makeTranscription(impl?: (mediaRef: string) => Promise<TranscriptionResult>) {
+  const calls: { mediaRef: string; opts: { forceLocal: true } }[] = [];
+  const transcribe = vi.fn(async (mediaRef: string, opts: { forceLocal: true }) => {
+    calls.push({ mediaRef, opts });
+    if (impl) return impl(mediaRef);
+    return { text: "hi", words: [], segments: [] };
+  });
+  return { transcription: { transcribe }, calls };
+}
+
+function makeLocalAsr(state: MediaIndexingLocalAsr["state"] = "ready"): MediaIndexingLocalAsr & { state: MediaIndexingLocalAsr["state"] } {
+  return { state };
 }
 
 function makeHost(seed: MediaManifestEntry[] = []) {
@@ -317,7 +348,7 @@ describe("MediaIndexingService: model readiness", () => {
     const svc = new MediaIndexingService({ library: host, embedding, sampleFrames: tap, samplerVersion: SAMPLER_VERSION, openMedia, ...FAST });
 
     svc.start();
-    await waitFor(() => expect(svc.status).toEqual({ kind: "waiting-model" }));
+    await waitFor(() => expect(svc.status).toEqual({ kind: "waiting-model", missing: ["embedding"] }));
     expect(writes).toHaveLength(0);
 
     (embedding as { state: MediaIndexingEmbedding["state"] }).state = "ready";
@@ -404,6 +435,241 @@ describe("MediaIndexingService: per-entry failure isolation", () => {
 
       expect(writes).toHaveLength(1);
       expect(writes[0]!.path).toBe(embeddingRelativePath("b"));
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe("MediaIndexingService: background transcript step (M14A T3)", () => {
+  test("an audio entry wants+uncached+ready is transcribed via forceLocal", async () => {
+    const entry = audioEntry("a");
+    const { host } = makeHost([entry]);
+    const { transcription, calls } = makeTranscription();
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: makeTapFromGrays({}).tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr: makeLocalAsr("ready"),
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+
+    expect(calls).toEqual([{ mediaRef: "a", opts: { forceLocal: true } }]);
+  });
+
+  test("a video entry with hasAudio:false is never transcribed", async () => {
+    const entry = videoEntry("a", { hasAudio: false, embeddingPath: "media/a.embed" });
+    const { host, derived } = makeHost([entry]);
+    seedEmbed(derived, entry); // already-current visual cache, so only the transcript flag is in play
+    const { transcription, calls } = makeTranscription();
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: makeTapFromGrays({}).tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia(1000).openMedia,
+      transcription,
+      localAsr: makeLocalAsr("ready"),
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+
+    expect(calls).toEqual([]);
+  });
+
+  test("an image entry is never transcribed", async () => {
+    const entry = imageEntry("pic");
+    const { host } = makeHost([entry]);
+    const { transcription, calls } = makeTranscription();
+    const { tap } = makeTapFromGrays({ pic: { 0: 1 } });
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr: makeLocalAsr("ready"),
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+
+    expect(calls).toEqual([]);
+  });
+
+  test("an entry that already has a transcriptPath is skipped (cached)", async () => {
+    const entry = audioEntry("a", { transcriptPath: "media/a.transcript.json" });
+    const { host } = makeHost([entry]);
+    const { transcription, calls } = makeTranscription();
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: makeTapFromGrays({}).tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr: makeLocalAsr("ready"),
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+
+    expect(calls).toEqual([]);
+  });
+
+  test("a video entry needing BOTH visual and transcript work gets both in the same pass", async () => {
+    const entry = videoEntry("a", { hasAudio: true, duration: 1, sourceWidth: 10, sourceHeight: 10 });
+    const { host, writes } = makeHost([entry]);
+    const { tap } = makeTapFromGrays({ a: { 0.5: 100 } });
+    const { transcription, calls } = makeTranscription();
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr: makeLocalAsr("ready"),
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+
+    expect(writes).toHaveLength(1); // the visual .embed
+    expect(calls).toEqual([{ mediaRef: "a", opts: { forceLocal: true } }]);
+  });
+
+  test("ASR not ready: skipped silently, no waiting-model block on an unrelated visual-only queue", async () => {
+    const video = videoEntry("v", { duration: 1, sourceWidth: 10, sourceHeight: 10 });
+    const audio = audioEntry("a");
+    const { host, writes } = makeHost([video, audio]);
+    const { tap } = makeTapFromGrays({ v: { 0.5: 9 } });
+    const { transcription, calls } = makeTranscription();
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr: makeLocalAsr("downloading"),
+      ...FAST,
+    });
+
+    svc.start();
+    // The video entry's embedding still completes even though ASR never becomes ready — the two
+    // models don't block each other. The audio entry stays legitimately (and accurately) blocked.
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() => expect(svc.status).toEqual({ kind: "waiting-model", missing: ["transcription"] }));
+    expect(calls).toEqual([]);
+  });
+
+  test("not-ready ASR skips, then a resweep transcribes once the ASR ready-transition fires", async () => {
+    const entry = audioEntry("a");
+    const { host } = makeHost([entry]);
+    const { transcription, calls } = makeTranscription();
+    const localAsr = makeLocalAsr("downloading");
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: makeTapFromGrays({}).tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr,
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "waiting-model", missing: ["transcription"] }));
+    expect(calls).toEqual([]);
+
+    (localAsr as { state: MediaIndexingLocalAsr["state"] }).state = "ready";
+
+    await waitFor(() => expect(calls).toEqual([{ mediaRef: "a", opts: { forceLocal: true } }]));
+    await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+  });
+
+  test("an audio entry queued while the worker is mid-run (ASR not ready) is still re-swept on the ready transition", async () => {
+    const video = videoEntry("v", { duration: 1, sourceWidth: 10, sourceHeight: 10, hasAudio: false });
+    const { host, store, writes } = makeHost([video]);
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const tap: FrameTap = async function* (_entry, _blobUrl, times) {
+      await gate; // holds the worker mid-run while the test resweeps
+      for (const t of times) yield { timeSec: t, rgba: solidRGBA(7), width: 256, height: 256 };
+    };
+    const { transcription, calls } = makeTranscription();
+    const localAsr = makeLocalAsr("idle");
+    const svc = new MediaIndexingService({
+      library: host,
+      embedding: makeEmbedding(),
+      sampleFrames: tap,
+      samplerVersion: SAMPLER_VERSION,
+      openMedia: makeOpenMedia().openMedia,
+      transcription,
+      localAsr,
+      ...FAST,
+    });
+
+    svc.start();
+    await waitFor(() => expect(svc.status).toEqual({ kind: "indexing", done: 0, total: 1 }));
+
+    // The library gains an audio entry while the worker is busy — the resweep queues it; the
+    // worker finishes the video, then parks on the blocked transcript entry (ASR idle).
+    const audio = audioEntry("a");
+    store.set("a", audio);
+    svc.start();
+    releaseGate();
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() => expect(svc.status).toEqual({ kind: "waiting-model", missing: ["transcription"] }));
+    expect(calls).toEqual([]);
+
+    (localAsr as { state: MediaIndexingLocalAsr["state"] }).state = "ready";
+
+    await waitFor(() => expect(calls).toEqual([{ mediaRef: "a", opts: { forceLocal: true } }]));
+  });
+
+  test("failure isolation: a failing transcript entry is skipped with one console.warn; the rest still transcribe", async () => {
+    const a = audioEntry("a");
+    const b = audioEntry("b");
+    const { host } = makeHost([a, b]);
+    const { transcription, calls } = makeTranscription(async (mediaRef) => {
+      if (mediaRef === "a") throw new Error("transcribe boom");
+      return { text: "hi", words: [], segments: [] };
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const svc = new MediaIndexingService({
+        library: host,
+        embedding: makeEmbedding(),
+        sampleFrames: makeTapFromGrays({}).tap,
+        samplerVersion: SAMPLER_VERSION,
+        openMedia: makeOpenMedia().openMedia,
+        transcription,
+        localAsr: makeLocalAsr("ready"),
+        ...FAST,
+      });
+
+      svc.start();
+      await waitFor(() => expect(svc.status).toEqual({ kind: "idle" }));
+
+      expect(calls.map((c) => c.mediaRef).sort()).toEqual(["a", "b"]);
       expect(warn).toHaveBeenCalledTimes(1);
     } finally {
       warn.mockRestore();
