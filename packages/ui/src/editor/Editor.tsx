@@ -24,6 +24,7 @@ import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { TimelinePanel } from "../timeline/TimelinePanel.js";
 import { MediaPanel } from "../media/MediaPanel.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "../media/CaptionsTab.js";
+import type { MediaIndexingFacade } from "../media/MediaPanel.js";
 import { MediaDragController } from "../media/media-drag.js";
 import { FOLDER_DROP_ROOT } from "../media/FolderTile.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
@@ -61,6 +62,7 @@ export interface EditorProps {
   interopExport?: ToolContext["interopExport"];
   engineRef?: { current: PlaybackEngine | null };
   getGenerationLog?: () => GenerationLogEntry[];
+  indexing?: MediaIndexingFacade;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: (kind?: ExportKind) => void; openRecent: (ref: ProjectRef) => void }) => void;
   agent?: {
     session: AgentSession;
@@ -91,7 +93,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog, indexing }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
@@ -476,6 +478,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             store={store}
             executor={agent?.executor}
             transcription={agent?.transcription}
+            indexing={indexing}
             dragOverFolderId={dragSnap?.hoverFolderId}
             onItemPointerDown={(entry, e) => {
               e.preventDefault();

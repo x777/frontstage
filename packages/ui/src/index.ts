@@ -15,7 +15,17 @@ export type { TimelinePanelProps } from "./timeline/TimelinePanel.js";
 export { drawTimeline } from "./timeline/draw-timeline.js";
 export type { TimelinePalette } from "./timeline/draw-timeline.js";
 export { MediaPanel } from "./media/MediaPanel.js";
-export type { MediaPanelProps } from "./media/MediaPanel.js";
+export type { MediaPanelProps, MediaIndexingFacade } from "./media/MediaPanel.js";
+export { MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia } from "./media/media-indexing.js";
+export type {
+  IndexStatus,
+  FrameTap,
+  MediaBlobHandle,
+  OpenMedia,
+  MediaIndexingHost,
+  MediaIndexingEmbedding,
+  MediaIndexingDeps,
+} from "./media/media-indexing.js";
 export { CaptionsTab } from "./media/CaptionsTab.js";
 export type { CaptionsTabProps, CaptionsExecutor, CaptionsTranscriptionFacade } from "./media/CaptionsTab.js";
 export { MediaDragController } from "./media/media-drag.js";

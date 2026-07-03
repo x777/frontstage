@@ -1,7 +1,25 @@
 import { render, screen, within, fireEvent, act } from "@testing-library/react";
 import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { MediaPanel } from "../src/media/MediaPanel.js";
+import type { MediaIndexingFacade } from "../src/media/MediaPanel.js";
+import type { IndexStatus } from "../src/media/media-indexing.js";
 import { MEDIA_DRAG_MIME } from "../src/media/FolderTile.js";
+
+function fakeIndexing(initial: IndexStatus): MediaIndexingFacade & { set: (s: IndexStatus) => void } {
+  let status = initial;
+  const listeners = new Set<() => void>();
+  return {
+    getStatus: () => status,
+    subscribe: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    set: (s) => {
+      status = s;
+      for (const cb of listeners) cb();
+    },
+  };
+}
 
 interface FakeLibraryCalls {
   importFiles: Array<{ files: unknown; folderId: string | undefined }>;
@@ -340,4 +358,35 @@ test("stale currentFolderId: deleting every ancestor externally lands on root", 
 
   fireEvent.click(screen.getByTestId("media-new-folder"));
   expect(lib.calls.createFolder).toEqual([{ name: "New Folder", parentFolderId: undefined }]);
+});
+
+// ── Index status indicator (M12C T3) ──────────────────────────────────────────
+
+test("no indexing facade: renders no status line", () => {
+  render(<MediaPanel library={fakeLibrary([])} />);
+  expect(screen.queryByTestId("media-index-status")).toBeNull();
+});
+
+test("idle status: renders nothing", () => {
+  const indexing = fakeIndexing({ kind: "idle" });
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+  expect(screen.queryByTestId("media-index-status")).toBeNull();
+});
+
+test("indexing status: shows a 1-indexed 'Indexing N of M…' line, live-updating with the facade", () => {
+  const indexing = fakeIndexing({ kind: "indexing", done: 0, total: 3 });
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+  expect(screen.getByTestId("media-index-status")).toHaveTextContent("Indexing 1 of 3…");
+
+  act(() => indexing.set({ kind: "indexing", done: 2, total: 3 }));
+  expect(screen.getByTestId("media-index-status")).toHaveTextContent("Indexing 3 of 3…");
+
+  act(() => indexing.set({ kind: "idle" }));
+  expect(screen.queryByTestId("media-index-status")).toBeNull();
+});
+
+test("waiting-model status: shows the subtle waiting line", () => {
+  const indexing = fakeIndexing({ kind: "waiting-model" });
+  render(<MediaPanel library={fakeLibrary([])} indexing={indexing} />);
+  expect(screen.getByTestId("media-index-status")).toHaveTextContent("Search index waiting for model");
 });

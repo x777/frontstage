@@ -7,6 +7,22 @@ import { CaptionsTab } from "./CaptionsTab.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
 import { FolderTile, isMediaDrag, type MediaDragPayload } from "./FolderTile.js";
 import { MediaBreadcrumbs } from "./MediaBreadcrumbs.js";
+import type { IndexStatus } from "./media-indexing.js";
+
+export interface MediaIndexingFacade {
+  getStatus(): IndexStatus;
+  subscribe(cb: () => void): () => void;
+}
+
+const IDLE_STATUS: IndexStatus = { kind: "idle" };
+const noopSubscribe = () => () => {};
+
+// Swift MediaTab+IndexStatus spirit: a compact line, nothing while idle.
+function indexStatusLabel(status: IndexStatus): string | null {
+  if (status.kind === "indexing") return `Indexing ${Math.min(status.done + 1, status.total)} of ${status.total}…`;
+  if (status.kind === "waiting-model") return "Search index waiting for model";
+  return null;
+}
 
 interface MediaLibraryLike {
   getSnapshot(): { entries: MediaManifestEntry[]; folders: MediaFolder[] };
@@ -27,6 +43,7 @@ export interface MediaPanelProps {
   store?: EditorStore;
   executor?: CaptionsExecutor;
   transcription?: CaptionsTranscriptionFacade;
+  indexing?: MediaIndexingFacade;
   // `data-folder-drop` id currently hovered by the custom pointer-drag (asset tile dragged
   // toward the timeline, per onItemPointerDown), driven by the host (Editor). Only relevant
   // while that gesture is active — drives FolderTile/MediaBreadcrumbs hover styling for it.
@@ -35,7 +52,12 @@ export interface MediaPanelProps {
 
 type PanelTab = "media" | "captions";
 
-export function MediaPanel({ library, onItemPointerDown, store, executor, transcription, dragOverFolderId }: MediaPanelProps) {
+export function MediaPanel({ library, onItemPointerDown, store, executor, transcription, indexing, dragOverFolderId }: MediaPanelProps) {
+  const indexStatus = useSyncExternalStore(
+    indexing?.subscribe ?? noopSubscribe,
+    () => indexing?.getStatus() ?? IDLE_STATUS,
+  );
+  const indexLabel = indexStatusLabel(indexStatus);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<PanelTab>("media");
@@ -307,6 +329,20 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
               }}
             />
           </div>
+
+          {indexLabel != null && (
+            <div
+              data-testid="media-index-status"
+              style={{
+                fontSize: theme.fontSize.xxs,
+                color: indexStatus.kind === "waiting-model" ? theme.text.muted : theme.text.tertiary,
+                padding: `0 ${theme.spacing.sm}`,
+                flexShrink: 0,
+              }}
+            >
+              {indexLabel}
+            </div>
+          )}
 
           {folderError != null && (
             <div

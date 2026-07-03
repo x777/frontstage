@@ -1,11 +1,11 @@
 import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
+import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@palmier/core";
 import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac } from "@palmier/ui";
-import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService } from "@palmier/ai";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia } from "@palmier/ui";
+import type { KeyConfig, FalKeyConfig, MediaIndexingHost } from "@palmier/ui";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost } from "@palmier/ai";
 
 declare global {
@@ -70,12 +70,47 @@ const generationServiceRef: { current: GenerationService } = {
 };
 (window as unknown as Record<string, unknown>).__generationService = generationServiceRef;
 
+// Visual-search embedding runtime (SigLIP2, M12C) — long-lived across project opens; the model
+// weights are a one-time download, not per-project state. createTransformersPipelines' loader
+// keeps the transformers.js import lazy (dynamic import()) until ensureReady() actually runs.
+const embeddingService = new EmbeddingService(createTransformersPipelines());
+(window as unknown as Record<string, unknown>).__embeddingService = embeddingService;
+
+// Background visual indexing (M12C T3, the GenerationService pattern) — dispose+recreate per
+// project open since its queue is tied to the open project's library entries.
+const mediaIndexingHost: MediaIndexingHost = {
+  entries: () => library.getSnapshot().entries,
+  patchEntry: (id, patch) => library.patchEntry(id, patch),
+  writeDerived: (relativePath, bytes) => library.writeDerived(relativePath, bytes),
+  readDerived: (relativePath) => library.readDerived(relativePath),
+};
+function makeMediaIndexingService(): MediaIndexingService {
+  return new MediaIndexingService({
+    library: mediaIndexingHost,
+    embedding: embeddingService,
+    sampleFrames: createDomFrameTap(),
+    samplerVersion: SAMPLER_VERSION,
+    openMedia: createDomOpenMedia(library.byteSource),
+  });
+}
+const mediaIndexingServiceRef: { current: MediaIndexingService } = { current: makeMediaIndexingService() };
+const indexingStatusRelay = new IndexingStatusRelay(mediaIndexingServiceRef.current);
+// Resweeps on every library mutation (new imports/generations finalizing) — registered once on
+// the (stable, never-recreated) library; always dereferences the CURRENT service via the ref.
+library.subscribe(() => mediaIndexingServiceRef.current.start());
+(window as unknown as Record<string, unknown>).__mediaIndexingService = mediaIndexingServiceRef;
+
 // Every successful open resumes in-flight jobs from the loaded manifest;
 // dispose+recreate first since there's no separate "close project" action.
 session.onOpened = () => {
   generationServiceRef.current.dispose();
   generationServiceRef.current = new GenerationService(genGateway, generationHost);
   generationServiceRef.current.resumePending();
+
+  mediaIndexingServiceRef.current.dispose();
+  mediaIndexingServiceRef.current = makeMediaIndexingService();
+  indexingStatusRelay.rewire(mediaIndexingServiceRef.current);
+  mediaIndexingServiceRef.current.start();
 };
 
 // Resolves a library media ref to a fal-fetchable URL — cache-first (6-day TTL), else uploads.
@@ -136,6 +171,17 @@ const transcriptionFacade = {
     measureCaptionWidthFrac(text, style, store.getSnapshot().timeline.width),
 };
 
+// SAME object threaded into the ToolExecutor context; T4 wires the real visual search scope + the
+// model-download confirm gate on top of ready()/ensureReady(). cachedEmbeddings delegates through
+// the indexing service ref so it always reads the current project's cache.
+const embeddingFacade = {
+  ready: () => embeddingService.state === "ready",
+  ensureReady: (onProgress?: (p: { loaded: number; total: number }) => void) => embeddingService.ensureReady(onProgress),
+  embedText: (q: string) => embeddingService.embedText(q),
+  cachedEmbeddings: (mediaRef: string) => mediaIndexingServiceRef.current.cachedEmbeddings(mediaRef),
+  modelInfo: embeddingService.info,
+};
+
 // SAME object threaded into the ToolExecutor context and (once T4 lands) the panel's drag/drop —
 // mirrors the generation/transcription facade pattern above.
 const libraryFacade = {
@@ -174,6 +220,7 @@ const executor = new ToolExecutor(buildCatalog(), {
   },
   generation: generationFacade,
   transcription: transcriptionFacade,
+  embedding: embeddingFacade,
   library: libraryFacade,
   mediaImport: mediaImportFacade,
   interopExport: interopExportFacade,
@@ -308,6 +355,7 @@ function PalmierDesktopApp() {
       interopExport={interopExportFacade}
       engineRef={engineRef}
       getGenerationLog={getGenerationLog}
+      indexing={indexingStatusRelay}
       agent={{
         session: agentSession,
         model: agentModelId,

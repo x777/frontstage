@@ -19,6 +19,11 @@ export interface EmbeddingHeader {
   samplerVersion: string;
   dim: number;
   count: number;
+  // Extension (M12C T3, backward-compatible — an unrecognized JSON field, not a binary-layout
+  // change): the source media's persisted byte length at index time. The renderer indexing
+  // service uses this alongside model/modelVersion/samplerVersion to decide staleness, since a
+  // media entry's path is stable across a file replacement (unlike Swift's content-addressed key).
+  sourceBytes?: number;
 }
 
 export interface EmbeddingRow {
@@ -109,7 +114,9 @@ function parseHeader(x: unknown): EmbeddingHeader | null {
   if (typeof h.samplerVersion !== "string") return null;
   if (typeof h.dim !== "number") return null;
   if (typeof h.count !== "number") return null;
-  return { model: h.model, modelVersion: h.modelVersion, samplerVersion: h.samplerVersion, dim: h.dim, count: h.count };
+  const header: EmbeddingHeader = { model: h.model, modelVersion: h.modelVersion, samplerVersion: h.samplerVersion, dim: h.dim, count: h.count };
+  if (typeof h.sourceBytes === "number") header.sourceBytes = h.sourceBytes;
+  return header;
 }
 
 // --- Float16 (round-to-nearest-even), clamped to +-65504 instead of overflowing to Infinity ---

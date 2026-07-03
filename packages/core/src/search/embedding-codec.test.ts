@@ -47,6 +47,14 @@ describe("encodeEmbeddings / decodeEmbeddings", () => {
     expect(decoded.header.count).toBe(1);
   });
 
+  test("sourceBytes (M12C T3 extension) round-trips when present, is absent when omitted", () => {
+    const withSource = encodeEmbeddings(header({ dim: 1, sourceBytes: 12345 }), [row(0, 0, 0, [1])]);
+    expect(decodeEmbeddings(withSource)!.header.sourceBytes).toBe(12345);
+
+    const withoutSource = encodeEmbeddings(header({ dim: 1 }), [row(0, 0, 0, [1])]);
+    expect(decodeEmbeddings(withoutSource)!.header.sourceBytes).toBeUndefined();
+  });
+
   test("count is derived from rows.length, ignoring a mismatched input header.count", () => {
     const h = header({ dim: 1, count: 999 });
     const bytes = encodeEmbeddings(h, [row(0, 0, 0, [1]), row(1, 0, 0, [2])]);

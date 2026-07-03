@@ -8,6 +8,9 @@ export const HIGH_RES_LONG_EDGE_PX = 3000;
 export const COVERAGE_FLOOR_SEC = 8;
 export const SCENE_DIFF_THRESHOLD = 12;
 export const LUMA_GRID_SIZE = 8;
+// Swift FrameSampler.samplerVersion (an Int there) — bump when this file's sampling algorithm
+// changes, to invalidate every cached .embed regardless of model/modelVersion (M12C T3).
+export const SAMPLER_VERSION = "1";
 
 /** Mean luma (Rec.601) per cell of an 8x8 grid over the frame — a cheap visual-change fingerprint. */
 export function lumaGrid8x8(rgba: Uint8ClampedArray, width: number, height: number): Float32Array {
