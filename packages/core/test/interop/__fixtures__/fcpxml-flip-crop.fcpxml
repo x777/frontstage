@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
+    <format id="r2" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
+    <asset id="asset1" name="media-1.mp4" start="0s" duration="5s" hasVideo="1" videoSources="1" format="r2">
+      <media-rep kind="original-media" src="file:///media/media-1.mp4"/>
+    </asset>
+    <media id="media1" name="media-1.mp4">
+      <sequence format="r2" duration="5s" tcStart="0s" tcFormat="NDF">
+        <spine>
+          <clip name="media-1.mp4" duration="5s" start="0s" offset="0s" format="r2">
+            <video ref="asset1" duration="5s" start="0s" offset="0s"/>
+          </clip>
+        </spine>
+      </sequence>
+    </media>
+  </resources>
+  <library>
+    <event name="Palmier Export">
+      <project name="Timeline Export">
+        <sequence format="r1" duration="2s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+            <gap name="Timeline" offset="0s" start="0s" duration="2s">
+              <ref-clip ref="media1" name="media-1.mp4" lane="1" offset="0s" start="0s" duration="2s" enabled="1" srcEnable="video">
+                <adjust-conform type="fit"/>
+                <adjust-crop mode="trim">
+                  <trim-rect top="5" right="10" bottom="0" left="10"/>
+                </adjust-crop>
+                <adjust-transform scale="-1 1" anchor="0 0" position="0 0"/>
+              </ref-clip>
+            </gap>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>

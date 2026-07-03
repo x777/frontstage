@@ -48,13 +48,14 @@ function sourcePath(source: MediaSource): string {
   return source.kind === "external" ? source.absolutePath : source.relativePath;
 }
 
-function lastPathComponent(path: string): string {
+/** Exported for FCPXML export, which dedupes assets by physical file (not mediaRef) — see fcpxml-exporter.ts. */
+export function lastPathComponent(path: string): string {
   const segments = path.split(/[/\\]/).filter((s) => s.length > 0);
   return segments.length > 0 ? segments[segments.length - 1]! : path;
 }
 
 /** No `projectRoot` (web, no filesystem) → best-effort `file:///<projectName>/<rel>`, `rel` conventionally `media/...`. */
-function resolveFileUrl(source: MediaSource, projectRoot: string | undefined, projectName: string): string {
+export function resolveFileUrl(source: MediaSource, projectRoot: string | undefined, projectName: string): string {
   if (source.kind === "external") return toFileUrl(source.absolutePath);
   const base = projectRoot ?? projectName;
   return toFileUrl(joinPath(base, source.relativePath));

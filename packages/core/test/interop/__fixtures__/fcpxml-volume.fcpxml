@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
+    <asset id="asset1" name="media-a.m4a" start="0s" duration="5s" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+      <media-rep kind="original-media" src="file:///media/media-a.m4a"/>
+    </asset>
+  </resources>
+  <library>
+    <event name="Palmier Export">
+      <project name="Timeline Export">
+        <sequence format="r1" duration="2s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+            <gap name="Timeline" offset="0s" start="0s" duration="2s">
+              <asset-clip ref="asset1" name="media-a.m4a" lane="-1" offset="0s" start="0s" duration="2s" enabled="1">
+                <adjust-volume amount="-6.0206"/>
+              </asset-clip>
+            </gap>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>

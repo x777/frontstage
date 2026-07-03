@@ -73,3 +73,4 @@ export * from "./interop/xml.js";
 export * from "./interop/source-timecode.js";
 export * from "./interop/media-resources.js";
 export * from "./interop/xmeml-exporter.js";
+export * from "./interop/fcpxml-exporter.js";
