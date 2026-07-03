@@ -214,22 +214,20 @@ test("New Folder creates under the current folder", () => {
   expect(lib.calls.createFolder).toEqual([{ name: "New Folder", parentFolderId: "p" }]);
 });
 
-test("internal drag: dropping an asset tile onto a folder tile calls moveEntriesToFolder", () => {
-  const folder: MediaFolder = { id: "f1", name: "Interviews" };
+// Asset tiles do NOT carry native HTML5 drag: in real Chromium, pointerdown.preventDefault()
+// (Editor.tsx's timeline-drag gesture, wired via onItemPointerDown) suppresses native dragstart
+// entirely, so a coexisting `draggable`/`onDragStart` on the tile would never fire in production
+// even though jsdom's fireEvent.dragStart doesn't reproduce that gating. Asset->folder drops
+// instead route through the custom pointer-drag controller — see editor-drag.test.tsx, which
+// exercises that path at the Editor level (where the drop is actually resolved).
+test("regression: MediaItem asset tiles carry no draggable attribute (no native DnD on assets)", () => {
   const asset = baseEntry("a");
-  const lib = fakeLibrary([asset], [folder]);
+  const lib = fakeLibrary([asset], []);
 
   render(<MediaPanel library={lib} />);
 
   const assetTile = screen.getByTestId("media-item");
-  const folderTile = screen.getByTestId("folder-tile");
-  const dt = makeDataTransfer();
-
-  fireEvent.dragStart(assetTile, { dataTransfer: dt });
-  fireEvent.dragOver(folderTile, { dataTransfer: dt });
-  fireEvent.drop(folderTile, { dataTransfer: dt });
-
-  expect(lib.calls.moveEntriesToFolder).toEqual([{ assetIds: ["a"], folderId: "f1" }]);
+  expect(assetTile).not.toHaveAttribute("draggable");
 });
 
 test("internal drag: dropping a folder onto an ancestor breadcrumb calls moveFolderToFolder", () => {

@@ -4,6 +4,9 @@ import { theme } from "../theme/theme.js";
 
 export const MEDIA_DRAG_MIME = "application/x-palmier-media";
 
+// `data-folder-drop` value for the root "Library" chip — folder ids are never this string.
+export const FOLDER_DROP_ROOT = "__root__";
+
 export interface MediaDragPayload {
   kind: "asset" | "folder";
   id: string;
@@ -38,6 +41,9 @@ export interface FolderTileProps {
   childCount: number;
   isSelected: boolean;
   isRenaming: boolean;
+  // True while the custom pointer-drag (asset tile dragged via MediaDragController) hovers
+  // this tile — drives the same hover styling as the native onDragOver path.
+  dragOverActive?: boolean;
   onSelect: () => void;
   onOpen: () => void;
   onRenameStart: () => void;
@@ -52,6 +58,7 @@ export function FolderTile({
   childCount,
   isSelected,
   isRenaming,
+  dragOverActive = false,
   onSelect,
   onOpen,
   onRenameStart,
@@ -84,12 +91,15 @@ export function FolderTile({
     }
   };
 
-  const highlighted = isDropHover || isSelected;
+  const isDropActive = isDropHover || dragOverActive;
+  const highlighted = isDropActive || isSelected;
 
   return (
     <div
       data-testid="folder-tile"
       data-folder-id={folder.id}
+      data-folder-drop={folder.id}
+      data-drop-active={isDropActive ? "true" : undefined}
       aria-label={`Folder ${folder.name}`}
       draggable
       onDragStart={(e) => setMediaDragPayload(e, { kind: "folder", id: folder.id })}

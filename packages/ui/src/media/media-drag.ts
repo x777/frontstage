@@ -5,6 +5,9 @@ export interface MediaDragSnapshot {
   x: number;
   y: number;
   ripple: boolean;
+  // The `data-folder-drop` id under the pointer, or null when not hovering a drop target.
+  // Drives FolderTile/MediaBreadcrumbs hover styling while this custom drag is active.
+  hoverFolderId: string | null;
 }
 
 export class MediaDragController {
@@ -25,13 +28,19 @@ export class MediaDragController {
   }
 
   start(entry: MediaManifestEntry, clientX: number, clientY: number, ripple = false): void {
-    this._snapshot = { entry, x: clientX, y: clientY, ripple };
+    this._snapshot = { entry, x: clientX, y: clientY, ripple, hoverFolderId: null };
     this._emit();
   }
 
-  update(clientX: number, clientY: number, ripple?: boolean): void {
+  update(clientX: number, clientY: number, ripple?: boolean, hoverFolderId?: string | null): void {
     if (!this._snapshot) return;
-    this._snapshot = { ...this._snapshot, x: clientX, y: clientY, ripple: ripple ?? this._snapshot.ripple };
+    this._snapshot = {
+      ...this._snapshot,
+      x: clientX,
+      y: clientY,
+      ripple: ripple ?? this._snapshot.ripple,
+      hoverFolderId: hoverFolderId === undefined ? this._snapshot.hoverFolderId : hoverFolderId,
+    };
     this._emit();
   }
 

@@ -25,6 +25,7 @@ import { TimelinePanel } from "../timeline/TimelinePanel.js";
 import { MediaPanel } from "../media/MediaPanel.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "../media/CaptionsTab.js";
 import { MediaDragController } from "../media/media-drag.js";
+import { FOLDER_DROP_ROOT } from "../media/FolderTile.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { FileMenu } from "./FileMenu.js";
 import { AgentPanel } from "../agent/AgentPanel.js";
@@ -243,13 +244,28 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
   useEffect(() => {
     let listenersAttached = false;
 
+    // Hit-test the custom drag against folder drop targets (FolderTile/MediaBreadcrumbs
+    // both carry `data-folder-drop`) — real Chromium suppresses native HTML5 dragstart once
+    // pointerdown.preventDefault() has fired, so asset->folder drops route through this
+    // pointer-based gesture instead of the native DnD path used by folder tiles.
+    const folderDropTargetAt = (clientX: number, clientY: number): string | null => {
+      const el = document.elementFromPoint(clientX, clientY)?.closest("[data-folder-drop]");
+      return el?.getAttribute("data-folder-drop") ?? null;
+    };
+
     const onPointerMove = (e: PointerEvent) => {
-      dragController.update(e.clientX, e.clientY, e.metaKey || e.ctrlKey);
+      dragController.update(e.clientX, e.clientY, e.metaKey || e.ctrlKey, folderDropTargetAt(e.clientX, e.clientY));
     };
 
     const onPointerUp = (e: PointerEvent) => {
       const result = dragController.end();
       if (result) {
+        const folderId = folderDropTargetAt(result.clientX, result.clientY);
+        if (folderId !== null) {
+          library.moveEntriesToFolder([result.entry.id], folderId === FOLDER_DROP_ROOT ? undefined : folderId);
+          removeListeners();
+          return;
+        }
         const canvas = document.querySelector('[data-testid="timeline-canvas"]') as HTMLCanvasElement | null;
         if (canvas) {
           const rect = canvas.getBoundingClientRect();
@@ -333,7 +349,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
       unsubDrag();
       removeListeners();
     };
-  }, [dragController, store]);
+  }, [dragController, store, library]);
 
   const overlayStyle: React.CSSProperties = {
     position: "fixed",
@@ -455,6 +471,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             store={store}
             executor={agent?.executor}
             transcription={agent?.transcription}
+            dragOverFolderId={dragSnap?.hoverFolderId}
             onItemPointerDown={(entry, e) => {
               e.preventDefault();
               dragController.start(entry, e.clientX, e.clientY, e.metaKey || e.ctrlKey);

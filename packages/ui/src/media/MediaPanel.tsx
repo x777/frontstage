@@ -5,7 +5,7 @@ import { theme } from "../theme/theme.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionsTab } from "./CaptionsTab.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
-import { FolderTile, isMediaDrag, setMediaDragPayload, type MediaDragPayload } from "./FolderTile.js";
+import { FolderTile, isMediaDrag, type MediaDragPayload } from "./FolderTile.js";
 import { MediaBreadcrumbs } from "./MediaBreadcrumbs.js";
 
 interface MediaLibraryLike {
@@ -27,11 +27,15 @@ export interface MediaPanelProps {
   store?: EditorStore;
   executor?: CaptionsExecutor;
   transcription?: CaptionsTranscriptionFacade;
+  // `data-folder-drop` id currently hovered by the custom pointer-drag (asset tile dragged
+  // toward the timeline, per onItemPointerDown), driven by the host (Editor). Only relevant
+  // while that gesture is active — drives FolderTile/MediaBreadcrumbs hover styling for it.
+  dragOverFolderId?: string | null;
 }
 
 type PanelTab = "media" | "captions";
 
-export function MediaPanel({ library, onItemPointerDown, store, executor, transcription }: MediaPanelProps) {
+export function MediaPanel({ library, onItemPointerDown, store, executor, transcription, dragOverFolderId }: MediaPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<PanelTab>("media");
@@ -264,7 +268,13 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             />
           </div>
 
-          <MediaBreadcrumbs folders={folders} currentFolderId={currentFolderId} onNavigate={navigateTo} onDropOn={handleDropOnFolder} />
+          <MediaBreadcrumbs
+            folders={folders}
+            currentFolderId={currentFolderId}
+            onNavigate={navigateTo}
+            onDropOn={handleDropOnFolder}
+            dragOverFolderId={dragOverFolderId}
+          />
 
           {/* Grid */}
           <div
@@ -295,6 +305,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
                 onRenameCancel={() => setRenamingFolderId(undefined)}
                 onDelete={() => handleDeleteFolder(folder)}
                 onDropPayload={(payload) => handleDropOnFolder(folder.id, payload)}
+                dragOverActive={dragOverFolderId === folder.id}
               />
             ))}
             {visibleEntries.map((entry) => (
@@ -334,8 +345,6 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
     <div
       data-testid="media-item"
       data-media-id={entry.id}
-      draggable
-      onDragStart={(e) => setMediaDragPayload(e, { kind: "asset", id: entry.id })}
       onPointerDown={(e) => onPointerDown?.(entry, e)}
       style={{
         display: "flex",
