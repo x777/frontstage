@@ -21,7 +21,7 @@
         <sequence format="r1" duration="2s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
           <spine>
             <gap name="Timeline" offset="0s" start="0s" duration="2s">
-              <ref-clip ref="media1" name="av-1.mp4" lane="1" offset="0s" start="0s" duration="2s" enabled="1">
+              <ref-clip ref="media1" name="av-1.mp4" lane="1" offset="0s" start="0s" duration="2s" enabled="1" srcEnable="video">
                 <adjust-conform type="fit"/>
               </ref-clip>
             </gap>

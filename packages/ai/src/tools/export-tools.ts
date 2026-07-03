@@ -12,9 +12,10 @@ const DESCRIPTION =
   "available from the agent in this build — use the File menu's Export command instead. xml writes " +
   "XMEML timeline XML; fcpxml writes FCPXML. For timeline interchange, pick the format by the target " +
   "editor: Premiere Pro -> xml; DaVinci Resolve or Final Cut Pro -> fcpxml (fcpxml also carries text, " +
-  "transforms, crop, opacity, and keyframes that xml cannot). palmier (self-contained .palmier project " +
-  "package) is not yet available either. Omit outputPath to open a save dialog (desktop) or picker " +
-  "(web); xml and fcpxml finish and report their result inline.";
+  "transforms, crop, opacity, and keyframes that xml cannot). fcpxmlTarget (fcpxml mode only, default " +
+  "resolve) picks DaVinci Resolve vs. Final Cut Pro's crop/position value encoding. palmier " +
+  "(self-contained .palmier project package) is not yet available either. Omit outputPath to open a " +
+  "save dialog (desktop) or picker (web); xml and fcpxml finish and report their result inline.";
 
 const VIDEO_DEFERRED =
   "export_project: mode 'video' is not yet available from the agent in this build. Use the File menu's Export command.";
@@ -23,11 +24,13 @@ const PALMIER_DEFERRED =
 const INTEROP_UNAVAILABLE = "export_project: timeline interchange export is not available in this context";
 
 type ExportMode = "video" | "xml" | "fcpxml" | "palmier";
+type FcpxmlTargetArg = "resolve" | "fcp";
 
 interface ExportProjectArgs {
   mode?: ExportMode;
   outputPath?: string;
   overwrite?: boolean;
+  fcpxmlTarget?: FcpxmlTargetArg;
 }
 
 function extensionForMode(mode: "xml" | "fcpxml"): string {
@@ -42,9 +45,10 @@ export function exportProjectTool(): ToolSpec {
       mode: z.enum(["video", "xml", "fcpxml", "palmier"]).optional(),
       outputPath: z.string().optional(),
       overwrite: z.boolean().optional(),
+      fcpxmlTarget: z.enum(["resolve", "fcp"]).optional(),
     }),
     async run(args, ctx): Promise<ToolResult> {
-      const { mode = "video", outputPath, overwrite } = args as ExportProjectArgs;
+      const { mode = "video", outputPath, overwrite, fcpxmlTarget } = args as ExportProjectArgs;
 
       if (mode === "video") return errorResult(VIDEO_DEFERRED);
       if (mode === "palmier") return errorResult(PALMIER_DEFERRED);
@@ -68,7 +72,7 @@ export function exportProjectTool(): ToolSpec {
       const xml =
         mode === "xml"
           ? exportXmeml(timeline, manifest.entries, { projectRoot, projectName, startTimecodes })
-          : exportFcpxml(timeline, manifest.entries, { projectRoot, projectName, startTimecodes });
+          : exportFcpxml(timeline, manifest.entries, { projectRoot, projectName, startTimecodes, target: fcpxmlTarget });
 
       const ext = extensionForMode(mode);
       const defaultName = `${projectName}.${ext}`;

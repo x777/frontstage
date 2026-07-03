@@ -7,15 +7,6 @@
     <asset id="asset1" name="media-1.mp4" start="0s" duration="41/3s" hasVideo="1" videoSources="1" format="r2">
       <media-rep kind="original-media" src="file:///media/media-1.mp4"/>
     </asset>
-    <media id="media1" name="media-1.mp4">
-      <sequence format="r2" duration="41/3s" tcStart="0s" tcFormat="NDF">
-        <spine>
-          <clip name="media-1.mp4" duration="41/3s" start="0s" offset="0s" format="r2">
-            <video ref="asset1" duration="41/3s" start="0s" offset="0s"/>
-          </clip>
-        </spine>
-      </sequence>
-    </media>
   </resources>
   <library>
     <event name="Palmier Export">
@@ -23,13 +14,13 @@
         <sequence format="r1" duration="20/3s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
           <spine>
             <gap name="Timeline" offset="0s" start="0s" duration="20/3s">
-              <ref-clip ref="media1" name="media-1.mp4" lane="1" offset="0s" start="1/6s" duration="20/3s" enabled="1" srcEnable="video">
+              <asset-clip ref="asset1" name="media-1.mp4" lane="1" offset="0s" start="1/6s" duration="20/3s" enabled="1">
                 <timeMap frameSampling="floor">
                   <timept time="0s" value="0s" interp="linear"/>
                   <timept time="41/6s" value="41/3s" interp="linear"/>
                 </timeMap>
                 <adjust-conform type="fit"/>
-              </ref-clip>
+              </asset-clip>
             </gap>
           </spine>
         </sequence>

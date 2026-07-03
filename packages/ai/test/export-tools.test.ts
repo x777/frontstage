@@ -95,6 +95,14 @@ describe("export_project — mode validation", () => {
     }
   });
 
+  test("accepts resolve/fcp for fcpxmlTarget, rejects anything else", () => {
+    const tool = exportProjectTool();
+    for (const fcpxmlTarget of ["resolve", "fcp"]) {
+      expect(tool.inputSchema.safeParse({ mode: "fcpxml", fcpxmlTarget }).success).toBe(true);
+    }
+    expect(tool.inputSchema.safeParse({ mode: "fcpxml", fcpxmlTarget: "premiere" }).success).toBe(false);
+  });
+
   test("mode defaults to video when omitted", async () => {
     const tool = exportProjectTool();
     const result = await tool.run({}, makeCtx({ interopExport: makeInteropFacade() }));
@@ -223,6 +231,66 @@ describe("export_project — fcpxml happy path", () => {
     expect(defaultName).toBe("MyProj.fcpxml");
     expect(contents).toBe(expectedXml);
     expect(kind).toBe("fcpxml");
+  });
+
+  test("fcpxmlTarget defaults to resolve when omitted (Swift's default)", async () => {
+    const facade = makeInteropFacade();
+    const ctx = makeCtx({ interopExport: facade, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    await tool.run({ mode: "fcpxml" }, ctx);
+
+    const expectedDefault = exportFcpxml(ctx.store.getSnapshot().timeline, ctx.getManifest().entries, {
+      projectName: "MyProj",
+      startTimecodes: new Map(),
+    });
+    const expectedResolve = exportFcpxml(ctx.store.getSnapshot().timeline, ctx.getManifest().entries, {
+      projectName: "MyProj",
+      startTimecodes: new Map(),
+      target: "resolve",
+    });
+    const [, contents] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(contents).toBe(expectedDefault);
+    expect(contents).toBe(expectedResolve);
+  });
+
+  test("fcpxmlTarget='fcp' reaches the exporter and changes crop/position encoding", async () => {
+    // A crop + non-fit transform on a clip whose source aspect differs from the sequence is the
+    // only shape where resolve vs. fcp actually diverge — build a bespoke timeline/manifest for it
+    // rather than the shared (identity-transform) fixtures above.
+    const clip = {
+      ...makeClip("c1", "media-v", 0),
+      transform: { centerX: 0.75, centerY: 0.75, width: 1, height: 81.0 / 256.0, rotation: 0, flipHorizontal: false, flipVertical: false },
+      crop: { left: 0.2, top: 0.05, right: 0.1, bottom: 0.05 },
+    };
+    const timeline: Timeline = { ...defaultTimeline(), width: 1080, height: 1920, tracks: [makeTrack("t1", [clip])] };
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [
+        {
+          id: "media-v",
+          name: "media-v.mp4",
+          type: "video",
+          source: { kind: "external", absolutePath: "/tmp/media-v.mp4" },
+          duration: 2,
+          sourceWidth: 1280,
+          sourceHeight: 720,
+        },
+      ],
+      folders: [],
+    };
+    const facade = makeInteropFacade();
+    const ctx = makeCtx({ store: new EditorStore(timeline), getManifest: () => manifest, interopExport: facade, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    await tool.run({ mode: "fcpxml", fcpxmlTarget: "fcp" }, ctx);
+
+    const expectedFcp = exportFcpxml(timeline, manifest.entries, { projectName: "MyProj", startTimecodes: new Map(), target: "fcp" });
+    const expectedResolve = exportFcpxml(timeline, manifest.entries, { projectName: "MyProj", startTimecodes: new Map(), target: "resolve" });
+    expect(expectedFcp).not.toBe(expectedResolve); // sanity: the two targets really do diverge here
+
+    const [, contents] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(contents).toBe(expectedFcp);
   });
 
   test("propagates readTimecodes' map into the exporter", async () => {

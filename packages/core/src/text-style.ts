@@ -1,3 +1,6 @@
+/** NSAttributedString's percent-of-font-size stroke convention (negative = fill+stroke), ported from Swift's TextStyle.glyphBorderStrokeWidth. */
+export const GLYPH_BORDER_STROKE_WIDTH = -4;
+
 export interface RGBA {
   r: number;
   g: number;

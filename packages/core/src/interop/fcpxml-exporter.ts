@@ -13,43 +13,60 @@ import {
 import { clipTypeIsVisual } from "../clip-type.js";
 import { type Transform, cropIsIdentity } from "../transform.js";
 import type { KeyframeTrack } from "../keyframe.js";
-import { type TextStyle, type RGBA, defaultTextStyle } from "../text-style.js";
+import { type TextStyle, type RGBA, defaultTextStyle, GLYPH_BORDER_STROKE_WIDTH } from "../text-style.js";
 import type { MediaManifestEntry } from "../media.js";
 import { secondsToFrame } from "../time.js";
 
 /**
  * Exports a Timeline as FCPXML (DaVinci Resolve / Final Cut Pro). Faithful port of Swift's
- * `FCPXMLExporter` (`Export/FCPXMLExporter.swift`) — read that file (and the #247 diff, commit
- * 6b9ef98) before touching this one.
+ * `FCPXMLExporter` (`Export/FCPXMLExporter.swift`) — read that file (and the #247/#254 diffs,
+ * commits 6b9ef98/81bc201) before touching this one.
  *
  * Encoding facts (reverse-engineered from Resolve round-trips, ported verbatim):
- * - Position: unit = 1% of frame height, square, origin at center, +Y up.
- * - Scale: multiplier on the conform-fit size (aspect-fit divided out of width/height).
+ * - Position: unit = 1% of frame height, square, origin at center, +Y up; for `target: "resolve"`,
+ *   pre-divided by the clip's per-axis conform-fit fraction (Resolve scales imported positions by
+ *   it at render). `target: "fcp"` writes the spec-literal value (fit 1×1).
+ * - Scale: multiplier on the conform-fit size (aspect-fit divided out of width/height) —
+ *   unconditional, regardless of target.
  * - Rotation: degrees, negated (FCP is counter-clockwise-positive). Flip: negative scale.
- * - Crop: `<adjust-crop>/<trim-rect>`, a percentage of the source per edge, static only.
- * - Retime: a visual clip is a `<ref-clip>` over a compound clip holding the full media; the
- *   `<timeMap>` ramps the whole media (output[0, media/speed] → source[0, media]) and `start`
- *   windows in along the output axis (= source in-point ÷ speed).
+ * - Crop: `<trim-rect>`; for `target: "resolve"` in Resolve's mixed units (left/right: source px ÷
+ *   (seqHeight/100); top/bottom: crop fraction ÷ conform-fit scale), for `target: "fcp"` (or
+ *   unknown source dims) plain percentages of the source per edge.
+ * - Clips are flat `<asset-clip>`s (stills: `<video>`) carrying timeMap/crop/transform/blend
+ *   directly; only an A/V source played one-sided (srcEnable) rides a compound `<media>`/
+ *   `<ref-clip>` — Resolve honors `srcEnable` only on ref-clips. A compound resource is only
+ *   emitted when a ref-clip actually references it (`markUsedCompounds`).
+ * - Retime: a `<timeMap>` on the clip ramps the whole media (output[0, media/speed] → source[0,
+ *   media]) and `start` windows in along the output axis (= source in-point ÷ speed).
  * - Keyframes: child `<param>/<keyframeAnimation>`; `time` is offset by `start` (the output axis).
  *   Volume: `<adjust-volume amount>` in dB, static only.
+ * - Clip adjustment child order is DTD-fixed: timeMap, crop, conform, transform, blend, volume
+ *   (Final Cut validates strictly).
+ * - `<media-rep src>` percent-encodes `'!$&()*+,;=` — the sub-delims Foundation/encodeURIComponent
+ *   leave literal, which XML-escapes to `&apos;` etc. and breaks Resolve's relinker.
  *
  * #247 axis rule: `<asset>` and the compound's INNER clip declare `start=<embedded tc>`; the
- * compound spine and the outer `<ref-clip>`/direct `<asset-clip>` (when there's no compound) stay
- * 0-based, EXCEPT the no-compound `<asset-clip>` case, which has no inner layer to absorb the
- * origin and so folds it into its own `start`/`timeMap` directly (`clipStart`/`timeMapNode`'s
- * `origin` param — 0 for the compound path, `resource.startTimecodeFrames` otherwise).
+ * compound spine and the outer `<ref-clip>`/direct flat clip (when there's no compound) stay
+ * 0-based, EXCEPT the no-compound flat clip case, which has no inner layer to absorb the origin
+ * and so folds it into its own `start`/`timeMap` directly (`clipStart`/`timeMapNode`'s `origin`
+ * param — 0 for the compound path, `resource.startTimecodeFrames` otherwise).
  *
  * What transports: clip placement/trims, speed, lane order, enabled state; text + font/size/
- * color/alignment (face is always "Regular" — no CoreText off-macOS, a documented deviation);
- * position/scale/rotation/flip (+ position/scale/rotation keyframes); crop; opacity (+ keyframes);
- * static volume; source start timecode.
+ * color/alignment/stroke (face is always "Regular" — no CoreText off-macOS, a documented
+ * deviation); position/scale/rotation/flip (+ position/scale/rotation keyframes); crop; opacity
+ * (+ keyframes); static volume; source start timecode.
  *
- * What does NOT: keyframed audio volume, audio fades, text background/border boxes, crop
- * keyframes, title rotation/scale, color & effects, Lottie clips.
+ * What does NOT: keyframed audio volume, audio fades, text background boxes, crop keyframes,
+ * title rotation/scale, color & effects, Lottie clips.
  */
 export type FcpxmlVersion = "1.10" | "1.11" | "1.12" | "1.13" | "1.14";
 
+/** Resolve interprets several FCPXML values off-spec (trim-rect units, imported position scaled by
+ * the conform fit at render); Final Cut is spec-literal. Same structure, different value encoding. */
+export type FcpxmlTarget = "resolve" | "fcp";
+
 const DEFAULT_VERSION: FcpxmlVersion = "1.10";
+const DEFAULT_TARGET: FcpxmlTarget = "resolve";
 const SEQUENCE_FORMAT_ID = "r1";
 const TITLE_EFFECT_ID = "titleBasic";
 
@@ -61,6 +78,7 @@ export function exportFcpxml(
     projectName: string;
     startTimecodes: Map<string, SourceTimecode>;
     version?: FcpxmlVersion;
+    target?: FcpxmlTarget;
   },
 ): string {
   const fps = Math.max(1, timeline.fps);
@@ -76,6 +94,7 @@ export function exportFcpxml(
     opts.projectName,
   );
   const { linkedAudioForVideo, redundantAudioClipIds } = indexLinkedPairs(clips);
+  const usedCompoundIds = markUsedCompounds(clips, resourceIndex, resources, linkedAudioForVideo, redundantAudioClipIds);
   const hasTitles = clips.some((item) => item.clip.mediaType === "text");
 
   const ctx: Ctx = {
@@ -83,11 +102,13 @@ export function exportFcpxml(
     fps,
     seqWidth: timeline.width,
     seqHeight: timeline.height,
+    target: opts.target ?? DEFAULT_TARGET,
     entriesById,
     resources,
     resourceIndex,
     linkedAudioForVideo,
     redundantAudioClipIds,
+    usedCompoundIds,
     nextTextStyleId: { value: 1 },
   };
 
@@ -124,12 +145,15 @@ interface Ctx {
   fps: number;
   seqWidth: number;
   seqHeight: number;
+  target: FcpxmlTarget;
   entriesById: Map<string, MediaManifestEntry>;
   resources: MediaResource[];
   resourceIndex: Map<string, number>;
-  // A synced A/V pair collapses into one ref-clip; the audio partner is dropped, its volume kept.
+  // A synced A/V pair collapses into one flat asset-clip; the audio partner is dropped, its volume kept.
   linkedAudioForVideo: Map<string, Clip>;
   redundantAudioClipIds: Set<string>;
+  // Only referenced compounds (one-sided A/V ref-clips) get a <media> resource emitted.
+  usedCompoundIds: Set<string>;
   nextTextStyleId: { value: number };
 }
 
@@ -170,6 +194,27 @@ function indexLinkedPairs(clips: EmittableClip[]): {
   return { linkedAudioForVideo, redundantAudioClipIds };
 }
 
+// Mirrors assetClipNode's ref-clip condition; only referenced compounds get a <media> resource.
+function markUsedCompounds(
+  clips: EmittableClip[],
+  resourceIndex: Map<string, number>,
+  resources: MediaResource[],
+  linkedAudioForVideo: Map<string, Clip>,
+  redundantAudioClipIds: Set<string>,
+): Set<string> {
+  const used = new Set<string>();
+  for (const item of clips) {
+    if (redundantAudioClipIds.has(item.clip.id)) continue;
+    const i = resourceIndex.get(item.clip.mediaRef);
+    if (i === undefined) continue;
+    const compoundId = resources[i]!.compoundId;
+    if (!compoundId) continue;
+    if (linkedAudioForVideo.has(item.clip.id)) continue;
+    used.add(compoundId);
+  }
+  return used;
+}
+
 // MARK: - Resources
 
 function resourcesNode(ctx: Ctx, hasTitles: boolean): XmlNode {
@@ -200,27 +245,22 @@ function resourcesNode(ctx: Ctx, hasTitles: boolean): XmlNode {
   }
   for (const r of ctx.resources) children.push(assetNode(r, ctx.fps));
   for (const r of ctx.resources) {
-    const c = compoundClipNode(r, ctx.fps);
+    const c = compoundClipNode(r, ctx.fps, ctx.usedCompoundIds);
     if (c) children.push(c);
   }
   return el("resources", undefined, children);
 }
 
-function compoundClipNode(resource: MediaResource, fps: number): XmlNode | undefined {
-  if (!resource.compoundId) return undefined;
+// A compound is only created for an A/V source (hasVideo && hasAudio — see collectResources), so
+// its inner clip always carries audio and is always a flat <asset-clip>.
+function compoundClipNode(resource: MediaResource, fps: number, usedCompoundIds: Set<string>): XmlNode | undefined {
+  if (!resource.compoundId || !usedCompoundIds.has(resource.compoundId)) return undefined;
   const dur = time(resource.durationFrames, fps);
-  // <asset-clip> carries both streams so the outer ref-clip can deliver audio; <clip>/<video>
-  // is video-only. The compound spine is 0-based (its offset), but reads the asset from the
-  // asset's own timecode origin, so `start` must equal the asset's embedded start timecode.
+  // The compound spine is 0-based but reads the asset from its own timecode origin, so `start`
+  // must equal the asset's embedded start timecode.
   const tcStart = time(resource.startTimecodeFrames, fps);
   const format = resource.formatId ?? SEQUENCE_FORMAT_ID;
-  let innerClip: XmlNode;
-  if (resource.hasAudio) {
-    innerClip = el("asset-clip", { ref: resource.assetId, name: resource.fileName, duration: dur, start: tcStart, offset: "0s", format });
-  } else {
-    const video = el("video", { ref: resource.assetId, duration: dur, start: tcStart, offset: "0s" });
-    innerClip = el("clip", { name: resource.fileName, duration: dur, start: tcStart, offset: "0s", format }, [video]);
-  }
+  const innerClip = el("asset-clip", { ref: resource.assetId, name: resource.fileName, duration: dur, start: tcStart, offset: "0s", format });
   const sequence = el("sequence", { format, duration: dur, tcStart: "0s", tcFormat: "NDF" }, [el("spine", undefined, [innerClip])]);
   return el("media", { id: resource.compoundId, name: resource.fileName }, [sequence]);
 }
@@ -259,7 +299,18 @@ function assetNode(resource: MediaResource, fps: number): XmlNode {
     attrs.audioChannels = "2";
     attrs.audioRate = "48000";
   }
-  return el("asset", attrs, [el("media-rep", { kind: "original-media", src: resource.fileUrl })]);
+  return el("asset", attrs, [el("media-rep", { kind: "original-media", src: mediaSrc(resource.fileUrl) })]);
+}
+
+// Percent-encode the sub-delims encodeURIComponent leaves literal — Resolve's relinker fails on
+// their XML-entity forms (&apos;).
+const URL_SUB_DELIMS_TO_ENCODE = "'!$&()*+,;=";
+function mediaSrc(fileUrl: string): string {
+  let out = "";
+  for (const ch of fileUrl) {
+    out += URL_SUB_DELIMS_TO_ENCODE.includes(ch) ? `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}` : ch;
+  }
+  return out;
 }
 
 /** Walks emittable clips once, grouping by resolved physical file (not mediaRef — several refs can share a file). */
@@ -322,7 +373,8 @@ function collectResources(
     resources.push({
       assetId: `asset${id}`,
       formatId: c.hasVideo ? `r${id + 1}` : undefined,
-      compoundId: c.hasVideo ? `media${id}` : undefined,
+      // Only an A/V source can need srcEnable gating, so only it gets a compound.
+      compoundId: c.hasVideo && c.hasAudio ? `media${id}` : undefined,
       entry: c.entry,
       fileName: c.fileName,
       fileUrl: c.fileUrl,
@@ -393,11 +445,13 @@ function assetClipNode(item: EmittableClip, ctx: Ctx): XmlNode | undefined {
   const i = ctx.resourceIndex.get(clip.mediaRef);
   if (i === undefined) return undefined;
   const resource = ctx.resources[i]!;
+  const linkedAudio = ctx.linkedAudioForVideo.get(clip.id);
+  const entry = ctx.entriesById.get(clip.mediaRef);
 
-  // Video/image → <ref-clip>. A linked audio partner rides along (srcEnable omitted = both
-  // streams, its volume carried here); otherwise pin to video so the source's audio stays out.
-  if (clip.mediaType !== "audio" && resource.compoundId) {
-    const linkedAudio = ctx.linkedAudioForVideo.get(clip.id);
+  // One-sided A/V rides the compound (Resolve honors srcEnable only on ref-clips); everything
+  // else — including a linked A/V pair, which plays both streams — exports flat.
+  if (resource.compoundId && !linkedAudio) {
+    const videoOnly = clip.mediaType !== "audio";
     const attrs: Record<string, string> = {
       ref: resource.compoundId,
       name: resource.fileName,
@@ -406,37 +460,25 @@ function assetClipNode(item: EmittableClip, ctx: Ctx): XmlNode | undefined {
       start: clipStart(clip, ctx.fps),
       duration: time(clip.durationFrames, ctx.fps),
       enabled: item.enabled ? "1" : "0",
+      srcEnable: videoOnly ? "video" : "audio",
     };
-    if (!linkedAudio) attrs.srcEnable = "video";
-    const children = [
-      timeMapNode(clip, ctx.fps, resource.durationFrames),
-      el("adjust-conform", { type: "fit" }),
-      cropNode(clip),
-      transformNode(clip, ctx),
-      blendNode(clip, ctx.fps),
-      linkedAudio ? volumeNode(linkedAudio) : undefined,
-    ].filter((n): n is XmlNode => !!n);
-    return el("ref-clip", attrs, children);
+    // Child order is DTD-fixed: timeMap, crop, conform, transform, blend, volume.
+    const children = videoOnly
+      ? [
+          timeMapNode(clip, ctx.fps, resource.durationFrames),
+          cropNode(clip, ctx.target, entry, ctx.seqWidth, ctx.seqHeight),
+          el("adjust-conform", { type: "fit" }),
+          transformNode(clip, ctx),
+          blendNode(clip, ctx.fps),
+        ]
+      : [timeMapNode(clip, ctx.fps, resource.durationFrames), volumeNode(clip)];
+    return el("ref-clip", attrs, children.filter((n): n is XmlNode => !!n));
   }
 
-  // Audio against an A/V source must go through the compound too.
-  if (clip.mediaType === "audio" && resource.compoundId) {
-    const attrs: Record<string, string> = {
-      ref: resource.compoundId,
-      name: resource.fileName,
-      lane: `${item.lane}`,
-      offset: time(clip.startFrame, ctx.fps),
-      start: clipStart(clip, ctx.fps),
-      duration: time(clip.durationFrames, ctx.fps),
-      enabled: item.enabled ? "1" : "0",
-      srcEnable: "audio",
-    };
-    const children = [timeMapNode(clip, ctx.fps, resource.durationFrames), volumeNode(clip)].filter((n): n is XmlNode => !!n);
-    return el("ref-clip", attrs, children);
-  }
-
-  // No compound layer to absorb the origin (audio-only source) — fold it in directly.
+  // No compound layer to absorb the origin (audio-only source, or no compound at all) — fold it
+  // in directly.
   const origin = resource.startTimecodeFrames;
+  const visual = clip.mediaType !== "audio";
   const attrs: Record<string, string> = {
     ref: resource.assetId,
     name: resource.fileName,
@@ -446,8 +488,16 @@ function assetClipNode(item: EmittableClip, ctx: Ctx): XmlNode | undefined {
     duration: time(clip.durationFrames, ctx.fps),
     enabled: item.enabled ? "1" : "0",
   };
-  const children = [timeMapNode(clip, ctx.fps, resource.durationFrames, origin), volumeNode(clip)].filter((n): n is XmlNode => !!n);
-  return el("asset-clip", attrs, children);
+  const children = [
+    timeMapNode(clip, ctx.fps, resource.durationFrames, origin),
+    visual ? cropNode(clip, ctx.target, entry, ctx.seqWidth, ctx.seqHeight) : undefined,
+    visual ? el("adjust-conform", { type: "fit" }) : undefined,
+    visual ? transformNode(clip, ctx) : undefined,
+    visual ? blendNode(clip, ctx.fps) : undefined,
+    resource.hasAudio ? volumeNode(linkedAudio ?? clip) : undefined,
+  ].filter((n): n is XmlNode => !!n);
+  // Stills export as <video>, the shape FCP itself writes.
+  return el(clip.mediaType === "image" ? "video" : "asset-clip", attrs, children);
 }
 
 // MARK: - Titles
@@ -494,13 +544,19 @@ function titleTransformNodes(transform: Transform, seqWidth: number, seqHeight: 
 // passes through as-is and face is always "Regular" (documented deviation from Swift's CoreText path).
 function textStyleAttributes(style: TextStyle): Record<string, string> {
   const fontSize = style.fontSize * style.fontScale;
-  return {
+  const attrs: Record<string, string> = {
     font: style.fontName,
     fontFace: "Regular",
     fontSize: formatNumber(fontSize),
     fontColor: colorString(style.color),
     alignment: style.alignment,
   };
+  if (style.border.enabled) {
+    // GLYPH_BORDER_STROKE_WIDTH is NSAttributedString's percent-of-font-size convention.
+    attrs.strokeColor = colorString(style.border.color);
+    attrs.strokeWidth = formatNumber((Math.abs(GLYPH_BORDER_STROKE_WIDTH) / 100) * fontSize);
+  }
+  return attrs;
 }
 
 function colorString(color: RGBA): string {
@@ -534,10 +590,11 @@ function transformNode(clip: Clip, ctx: Ctx): XmlNode | undefined {
   const scaled = base !== "1 1";
   if (!(moved || rotated || scaled || posFrames.length > 0 || rotFrames.length > 0 || scaleFrames.length > 0)) return undefined;
 
+  const fit = ctx.target === "resolve" ? fitFractions(entry, ctx.seqWidth, ctx.seqHeight) : { w: 1, h: 1 };
   const attrs: Record<string, string> = { scale: base };
   if (rotated || rotFrames.length > 0) attrs.rotation = formatNumber(-t.rotation);
   attrs.anchor = "0 0";
-  attrs.position = positionValue(t, ctx.seqWidth, ctx.seqHeight);
+  attrs.position = positionValue(t, ctx.seqWidth, ctx.seqHeight, fit);
 
   const params: XmlNode[] = [];
   if (scaleFrames.length > 0) {
@@ -549,10 +606,10 @@ function transformNode(clip: Clip, ctx: Ctx): XmlNode | undefined {
     );
   }
   if (posFrames.length > 0) {
-    const base0 = positionValue(t, ctx.seqWidth, ctx.seqHeight);
+    const base0 = positionValue(t, ctx.seqWidth, ctx.seqHeight, fit);
     params.push(
       keyframeParam("position", base0, clip, clip.positionTrack, posFrames, ctx.fps, (f) =>
-        positionValue(transformAt(clip, f), ctx.seqWidth, ctx.seqHeight),
+        positionValue(transformAt(clip, f), ctx.seqWidth, ctx.seqHeight, fit),
       ),
     );
   }
@@ -566,7 +623,7 @@ function transformNode(clip: Clip, ctx: Ctx): XmlNode | undefined {
   return el("adjust-transform", attrs, params);
 }
 
-/** Divide the aspect-fit out of our frame-fraction width/height so only user scaling remains. */
+/** Divide the aspect-fit out of our frame-fraction width/height so only user scaling remains — unconditional, regardless of target. */
 function scaleValue(
   width: number,
   height: number,
@@ -575,37 +632,53 @@ function scaleValue(
   seqWidth: number,
   seqHeight: number,
 ): string {
-  let sx = width;
-  let sy = height;
-  if (entry?.sourceWidth && entry?.sourceHeight && entry.sourceWidth > 0 && entry.sourceHeight > 0) {
-    const sourceAspect = entry.sourceWidth / entry.sourceHeight;
-    const frameAspect = seqWidth / seqHeight;
-    const fitW = sourceAspect >= frameAspect ? 1.0 : sourceAspect / frameAspect;
-    const fitH = sourceAspect >= frameAspect ? frameAspect / sourceAspect : 1.0;
-    sx = width / fitW;
-    sy = height / fitH;
-  }
+  const fit = fitFractions(entry, seqWidth, seqHeight);
+  let sx = width / fit.w;
+  let sy = height / fit.h;
   if (clip.transform.flipHorizontal) sx = -sx;
   if (clip.transform.flipVertical) sy = -sy;
   return `${formatNumber(sx)} ${formatNumber(sy)}`;
 }
 
-function positionValue(transform: Transform, seqWidth: number, seqHeight: number): string {
+/** Per-axis conform-fit fractions of the sequence frame; 1×1 when source dims are unknown. */
+function fitFractions(entry: MediaManifestEntry | undefined, seqWidth: number, seqHeight: number): { w: number; h: number } {
+  if (!entry?.sourceWidth || !entry?.sourceHeight || entry.sourceWidth <= 0 || entry.sourceHeight <= 0) return { w: 1, h: 1 };
+  const sourceAspect = entry.sourceWidth / entry.sourceHeight;
+  const frameAspect = seqWidth / seqHeight;
+  return sourceAspect >= frameAspect ? { w: 1, h: frameAspect / sourceAspect } : { w: sourceAspect / frameAspect, h: 1 };
+}
+
+function positionValue(transform: Transform, seqWidth: number, seqHeight: number, fit: { w: number; h: number } = { w: 1, h: 1 }): string {
   const unit = seqHeight / 100.0;
-  const x = ((transform.centerX - 0.5) * seqWidth) / unit;
-  const y = ((0.5 - transform.centerY) * seqHeight) / unit;
+  const x = ((transform.centerX - 0.5) * seqWidth) / unit / fit.w;
+  const y = ((0.5 - transform.centerY) * seqHeight) / unit / fit.h;
   return `${formatNumber(x)} ${formatNumber(y)}`;
 }
 
-function cropNode(clip: Clip): XmlNode | undefined {
+/** Resolve's trim-rect units: left/right = source px ÷ (seqHeight/100); top/bottom = crop fraction
+ * ÷ conform-fit scale. FCP (and unknown source dims): plain percentages. */
+function cropNode(
+  clip: Clip,
+  target: FcpxmlTarget,
+  entry: MediaManifestEntry | undefined,
+  seqWidth: number,
+  seqHeight: number,
+): XmlNode | undefined {
   const c = clip.crop;
   if (cropIsIdentity(c)) return undefined;
+  let lr = 100.0;
+  let tb = 100.0;
+  if (target === "resolve" && entry?.sourceWidth && entry?.sourceHeight && entry.sourceWidth > 0 && entry.sourceHeight > 0) {
+    const fit = Math.min(seqWidth / entry.sourceWidth, seqHeight / entry.sourceHeight);
+    lr = (entry.sourceWidth * 100.0) / seqHeight;
+    tb = 100.0 / fit;
+  }
   return el("adjust-crop", { mode: "trim" }, [
     el("trim-rect", {
-      top: formatNumber(c.top * 100),
-      right: formatNumber(c.right * 100),
-      bottom: formatNumber(c.bottom * 100),
-      left: formatNumber(c.left * 100),
+      top: formatNumber(c.top * tb),
+      right: formatNumber(c.right * lr),
+      bottom: formatNumber(c.bottom * tb),
+      left: formatNumber(c.left * lr),
     }),
   ]);
 }
