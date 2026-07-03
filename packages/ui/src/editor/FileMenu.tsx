@@ -2,15 +2,18 @@ import { useState, useRef, useEffect } from "react";
 import type { ProjectSession, ConfirmDiscard, ProjectRef } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import type { RunProjectCommand } from "./Editor.js";
+import type { ExportKind } from "./use-export-command.js";
 
 export interface FileMenuProps {
   session: ProjectSession;
   confirmDiscard: ConfirmDiscard;
   runProjectCommand: RunProjectCommand;
-  onExport?: () => void;
+  onExport?: (kind: ExportKind) => void;
+  // XMEML/FCPXML availability is separate from the video gateway — gates the two extra buttons.
+  canExportXml?: boolean;
 }
 
-export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport }: FileMenuProps) {
+export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport, canExportXml }: FileMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentRefs, setRecentRefs] = useState<ProjectRef[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -156,12 +159,30 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport 
             <>
               <div style={sepStyle} />
               <button
-                data-testid="file-export"
+                data-testid="file-export-video"
                 style={itemStyle}
-                onClick={() => { setMenuOpen(false); onExport(); }}
+                onClick={() => { setMenuOpen(false); onExport("video"); }}
               >
-                Export…
+                Export Video (MP4)…
               </button>
+              {canExportXml && (
+                <>
+                  <button
+                    data-testid="file-export-fcpxml"
+                    style={itemStyle}
+                    onClick={() => { setMenuOpen(false); onExport("fcpxml"); }}
+                  >
+                    Export FCPXML (Resolve/FCP)…
+                  </button>
+                  <button
+                    data-testid="file-export-xmeml"
+                    style={itemStyle}
+                    onClick={() => { setMenuOpen(false); onExport("xmeml"); }}
+                  >
+                    Export XMEML (Premiere)…
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

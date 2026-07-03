@@ -10,12 +10,22 @@ export interface ImportScanResult {
   dirs: string[];
 }
 
+// One raw ffprobe reading per path — { tag, fps } — that the renderer turns into a SourceTimecode
+// via @palmier/core's parseTimecodeTag (main.cjs stays free of the @palmier/core ESM dependency).
+export interface RawTimecodeProbe {
+  tag: string;
+  fps: number;
+}
+
 interface DesktopMediaBridge {
   extractAudio(opts: { path?: string; bytes?: ArrayBuffer }): Promise<{ wav: ArrayBuffer; durationSeconds: number } | { error: string }>;
   // Media import (M12A T3) — bytes never cross IPC; main scans/copies/downloads on-disk directly.
   importScan(dir: string, absPath: string): Promise<ImportScanResult | { error: string }>;
   importCopy(dir: string, absPath: string, relPath: string): Promise<{ ok: true } | { error: string }>;
   importDownload(dir: string, url: string, relPath: string): Promise<{ ok: true; size: number } | { error: string }>;
+  // Timeline interchange export (M12B T3) — batched ffprobe timecode reads; missing paths are
+  // simply absent from the result (0-based export), never an error.
+  readTimecode(paths: string[]): Promise<Record<string, RawTimecodeProbe>>;
 }
 
 declare global {

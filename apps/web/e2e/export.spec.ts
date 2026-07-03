@@ -41,7 +41,7 @@ test("WebExportGateway: File→Export writes a valid .mp4 to OPFS", async ({ pag
 
   // Click File menu → Export
   await page.locator('[data-testid="file-menu"]').click();
-  await page.locator('[data-testid="file-export"]').click();
+  await page.locator('[data-testid="file-export-video"]').click();
 
   // Wait for export-progress to appear (required — proves the export started)
   const progressLocator = page.locator('[data-testid="export-progress"]');
@@ -78,7 +78,7 @@ test("WebExportGateway: cancel (null handle) does not start export", async ({ pa
   await page.waitForSelector('[data-testid="preview-canvas"][data-engine-ready="1"]', { timeout: 15_000 });
 
   await page.locator('[data-testid="file-menu"]').click();
-  await page.locator('[data-testid="file-export"]').click();
+  await page.locator('[data-testid="file-export-video"]').click();
 
   // Progress overlay must NOT appear (export was cancelled)
   const progressLocator = page.locator('[data-testid="export-progress"]');

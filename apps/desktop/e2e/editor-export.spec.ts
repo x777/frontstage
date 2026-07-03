@@ -116,7 +116,7 @@ test("DesktopExportGateway: real FFmpeg export to picked path + unauthorized rej
 
     // Trigger export via the File menu
     await page.click('[data-testid="file-menu"]');
-    await page.click('[data-testid="file-export"]');
+    await page.click('[data-testid="file-export-video"]');
 
     // Export progress overlay should appear
     await page.waitForSelector('[data-testid="export-progress"]', { timeout: 10_000 });

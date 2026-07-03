@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, GenerationLogEntry, MediaFolder, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
-import type { AgentSession, ChatSessionStore, ModelEntry } from "@palmier/ai";
+import type { AgentSession, ChatSessionStore, ModelEntry, ToolContext } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
 import type { KeyConfig, FalKeyConfig, McpSettings } from "../agent/SettingsPanel.js";
@@ -33,6 +33,7 @@ import { GenerationPanel } from "../agent/GenerationPanel.js";
 import type { GenerationFacade } from "../agent/GenerationPanel.js";
 import { useStore } from "../store/use-store.js";
 import { useExportCommand } from "./use-export-command.js";
+import type { ExportKind } from "./use-export-command.js";
 import { ExportProgress } from "./ExportProgress.js";
 import type { ExportGateway } from "./export-gateway.js";
 
@@ -57,9 +58,10 @@ export interface EditorProps {
   session?: ProjectSession;
   nativeFileMenu?: boolean;
   exportGateway?: ExportGateway;
+  interopExport?: ToolContext["interopExport"];
   engineRef?: { current: PlaybackEngine | null };
   getGenerationLog?: () => GenerationLogEntry[];
-  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: () => void; openRecent: (ref: ProjectRef) => void }) => void;
+  onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: (kind?: ExportKind) => void; openRecent: (ref: ProjectRef) => void }) => void;
   agent?: {
     session: AgentSession;
     model?: string;
@@ -89,7 +91,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, engineRef, onReady, agent, getGenerationLog }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
@@ -153,9 +155,11 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
     });
   }, []);
 
-  const { exportProject, exportState, canExport } = useExportCommand({
+  const { exportProject, exportState, canExport, canExportXml } = useExportCommand({
     exportGateway,
+    interopExport,
     getTimeline: () => store.getSnapshot().timeline,
+    getMediaEntries: () => library.getSnapshot().entries,
     media,
     suggestedName: () => session?.getState().name ?? "Untitled",
     runProjectCommand,
@@ -205,7 +209,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
       open: () => runProjectCommand(() => session.open(() => confirmDiscardRef.current())),
       save: () => runProjectCommand(() => session.save()),
       saveAs: () => runProjectCommand(() => session.saveAs()),
-      export: () => exportProjectRef.current(),
+      export: (kind?: ExportKind) => exportProjectRef.current(kind),
       openRecent: (ref: ProjectRef) => runProjectCommand(() => session.open(() => confirmDiscardRef.current(), ref)),
     });
   // Run once when session + handlers are stable
@@ -401,7 +405,8 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
                   session={session}
                   confirmDiscard={confirmDiscard}
                   runProjectCommand={runProjectCommand}
-                  onExport={canExport ? exportProject : undefined}
+                  onExport={(canExport || canExportXml) ? exportProject : undefined}
+                  canExportXml={canExportXml}
                 />
               )}
               {agent && (

@@ -40,6 +40,20 @@ export function timelineTotalFrames(t: Timeline): number {
   return maxFrame;
 }
 
+/** Unique mediaRefs in first-appearance order — the set an interop export needs timecodes for. */
+export function timelineMediaRefs(t: Timeline): string[] {
+  const seen = new Set<string>();
+  const refs: string[] = [];
+  for (const track of t.tracks) {
+    for (const clip of track.clips) {
+      if (seen.has(clip.mediaRef)) continue;
+      seen.add(clip.mediaRef);
+      refs.push(clip.mediaRef);
+    }
+  }
+  return refs;
+}
+
 export function findClip(t: Timeline, id: string): ClipLocation | null {
   for (let ti = 0; ti < t.tracks.length; ti++) {
     const ci = t.tracks[ti]!.clips.findIndex((c) => c.id === id);

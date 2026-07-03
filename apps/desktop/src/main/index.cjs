@@ -181,24 +181,42 @@ ipcMain.handle("project:__setNextExportPick", (_e, p) => {
   nextExportPick = p;
 });
 
-ipcMain.handle("project:pickExportSave", async (_e, suggestedName) => {
+ipcMain.handle("project:pickExportSave", async (_e, suggestedName, filter) => {
   let p;
   if (nextExportPick) {
     p = nextExportPick;
     nextExportPick = null;
   } else {
-    const r = await dialog.showSaveDialog({
-      defaultPath: suggestedName,
-      filters: [
-        { name: "MP4 video", extensions: ["mp4"] },
-        { name: "QuickTime", extensions: ["mov"] },
-      ],
-    });
+    const filters = filter && filter.name && Array.isArray(filter.extensions)
+      ? [{ name: filter.name, extensions: filter.extensions }]
+      : [
+          { name: "MP4 video", extensions: ["mp4"] },
+          { name: "QuickTime", extensions: ["mov"] },
+        ];
+    const r = await dialog.showSaveDialog({ defaultPath: suggestedName, filters });
     if (r.canceled || !r.filePath) return null;
     p = r.filePath;
   }
   authorize(path.dirname(p));
   return p;
+});
+
+// Writes text (XMEML/FCPXML export) directly to an absolute, already-authorized path — same
+// output-path containment rule as export:start (authorized dir, picked via pickExportSave, or
+// os.tmpdir() for the e2e/test harness). overwrite=false + an existing file → throws.
+ipcMain.handle("project:writeExportText", async (_e, { outPath, contents, overwrite }) => {
+  const resolved = path.resolve(outPath);
+  const outDir = path.dirname(resolved);
+  const tmpRoot = path.resolve(os.tmpdir());
+  const inTmp = outDir === tmpRoot || outDir.startsWith(tmpRoot + path.sep);
+  if (!inTmp) assertAuthorized(outDir);
+
+  if (overwrite === false && fs.existsSync(resolved)) {
+    throw new Error("output file already exists");
+  }
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(resolved, contents, "utf8");
+  return resolved;
 });
 
 ipcMain.handle("project:pickOpen", async () => {
@@ -392,9 +410,22 @@ function buildMenu() {
           click: (_i, win) => win?.webContents.send("menu:command", "save-as"),
         },
         {
-          label: "Export…",
-          accelerator: "CmdOrCtrl+E",
-          click: (_i, win) => win?.webContents.send("menu:command", "export"),
+          label: "Export",
+          submenu: [
+            {
+              label: "Video (MP4)…",
+              accelerator: "CmdOrCtrl+E",
+              click: (_i, win) => win?.webContents.send("menu:command", "export", "video"),
+            },
+            {
+              label: "FCPXML (Resolve/FCP)…",
+              click: (_i, win) => win?.webContents.send("menu:command", "export", "fcpxml"),
+            },
+            {
+              label: "XMEML (Premiere)…",
+              click: (_i, win) => win?.webContents.send("menu:command", "export", "xmeml"),
+            },
+          ],
         },
         { type: "separator" },
         { role: "quit" },
@@ -956,6 +987,78 @@ ipcMain.handle("media:extractAudio", async (_e, { path: mediaPath, bytes }) => {
     if (bytes != null) proc.stdin.write(Buffer.from(bytes));
     proc.stdin.end();
   });
+});
+
+// ── Media IPC (embedded source timecode for export_project's xml/fcpxml modes, M12B T3) ────
+// Batched ffprobe reads of the tmcd `timecode` tag + `avg_frame_rate`, one process per path (run
+// concurrently). Paths are resolved by the renderer from mediaRefs it already trusts (same
+// no-extra-guard trust boundary as media:extractAudio above, which also runs ffmpeg directly on a
+// caller-supplied path) — never arbitrary agent-supplied strings. A missing ffprobe binary, a
+// missing/malformed timecode tag, or any per-file ffprobe failure simply omits that path from the
+// result (0-based export for that source) — this handler never rejects.
+
+function resolveFfprobePath() {
+  try {
+    const mod = require("ffprobe-static");
+    return (mod && mod.path) || mod || null;
+  } catch {
+    return null;
+  }
+}
+
+function probeOneTimecode(ffprobePath, filePath) {
+  return new Promise((resolve) => {
+    const args = [
+      "-v", "quiet",
+      "-show_entries", "stream_tags=timecode",
+      "-show_entries", "stream=avg_frame_rate",
+      "-of", "json",
+      filePath,
+    ];
+    const proc = spawn(ffprobePath, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    proc.stdout.on("data", (d) => { stdout += d.toString(); });
+    proc.on("error", () => resolve(null));
+    proc.on("close", (code) => {
+      if (code !== 0) { resolve(null); return; }
+      try {
+        const parsed = JSON.parse(stdout);
+        const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+        const withTag = streams.find((s) => s && s.tags && typeof s.tags.timecode === "string");
+        if (!withTag) { resolve(null); return; }
+        const rate = withTag.avg_frame_rate;
+        const fps = parseAvgFrameRate(rate);
+        if (fps == null || fps <= 0) { resolve(null); return; }
+        resolve({ tag: withTag.tags.timecode, fps });
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+// ffprobe's avg_frame_rate is "num/den" (e.g. "30000/1001"), sometimes "0/0" for still/data streams.
+function parseAvgFrameRate(rate) {
+  if (typeof rate !== "string") return null;
+  const [numStr, denStr] = rate.split("/");
+  const num = Number(numStr);
+  const den = Number(denStr ?? "1");
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
+  return num / den;
+}
+
+ipcMain.handle("media:readTimecode", async (_e, paths) => {
+  const ffprobePath = resolveFfprobePath();
+  const result = {};
+  if (!ffprobePath || !Array.isArray(paths)) return result;
+
+  const probes = await Promise.all(
+    paths.filter((p) => typeof p === "string").map(async (p) => [p, await probeOneTimecode(ffprobePath, p)]),
+  );
+  for (const [p, probe] of probes) {
+    if (probe) result[p] = probe;
+  }
+  return result;
 });
 
 // ── Media import IPC (path/url sources for import_media, M12A T3) ──────────

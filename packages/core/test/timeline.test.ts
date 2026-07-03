@@ -4,6 +4,7 @@ import {
   contiguousClipIds,
   defaultTimeline,
   findClip,
+  timelineMediaRefs,
   timelineTotalFrames,
   type Track,
 } from "../src/timeline.js";
@@ -40,5 +41,18 @@ describe("timeline", () => {
   test("contiguousClipIds chains touching clips", () => {
     const tr = track([clip("a", 0, 30), clip("b", 30, 30), clip("c", 90, 30)]);
     expect(contiguousClipIds(tr, 30, "a")).toEqual(new Set(["b"]));
+  });
+  test("timelineMediaRefs dedupes across tracks in first-appearance order", () => {
+    const t = {
+      ...defaultTimeline(),
+      tracks: [
+        track([{ ...clip("a", 0, 30), mediaRef: "m1" }, { ...clip("b", 30, 30), mediaRef: "m2" }]),
+        track([{ ...clip("c", 0, 30), mediaRef: "m2" }, { ...clip("d", 30, 30), mediaRef: "m3" }]),
+      ],
+    };
+    expect(timelineMediaRefs(t)).toEqual(["m1", "m2", "m3"]);
+  });
+  test("timelineMediaRefs on an empty timeline", () => {
+    expect(timelineMediaRefs(defaultTimeline())).toEqual([]);
   });
 });

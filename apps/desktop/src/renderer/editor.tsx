@@ -26,6 +26,7 @@ import { DesktopAiGateway } from "./desktop-ai-gateway.js";
 import { DesktopGenGateway } from "./desktop-gen-gateway.js";
 import { makeDesktopAudioExtractor } from "./desktop-audio-extract.js";
 import { createDesktopMediaImport } from "./desktop-media-import.js";
+import { createDesktopInteropExport } from "./desktop-interop-export.js";
 import type { PlaybackEngine } from "@palmier/engine";
 
 const engineRef: { current: PlaybackEngine | null } = { current: null };
@@ -94,18 +95,21 @@ const transcriptionHost: TranscriptionHost = {
   writeDerived: (relativePath, bytes) => library.writeDerived(relativePath, bytes),
   readDerived: (relativePath) => library.readDerived(relativePath),
 };
+// Shared by the audio extractor and the interop-export timecode facade below.
+function resolveMediaPath(mediaRef: string): string | null {
+  const entry = library.entry(mediaRef);
+  if (!entry) return null;
+  if (entry.source.kind === "external") return entry.source.absolutePath;
+  const ref = session.getState().ref as DesktopProjectRef | null;
+  return ref ? `${ref.path}/${entry.source.relativePath}` : null;
+}
+
 const audioExtractor = makeDesktopAudioExtractor({
   libraryBytes: (mediaRef) => {
     const entry = library.entry(mediaRef);
     return entry ? library.bytesFor(entry) ?? null : null;
   },
-  resolvePath: (mediaRef) => {
-    const entry = library.entry(mediaRef);
-    if (!entry) return null;
-    if (entry.source.kind === "external") return entry.source.absolutePath;
-    const ref = session.getState().ref as DesktopProjectRef | null;
-    return ref ? `${ref.path}/${entry.source.relativePath}` : null;
-  },
+  resolvePath: resolveMediaPath,
 });
 const transcriptionServiceRef: { current: TranscriptionService } = {
   current: new TranscriptionService(genGateway, transcriptionHost, audioExtractor),
@@ -149,6 +153,10 @@ const mediaImportFacade = createDesktopMediaImport({
   getProjectDir: () => (session.getState().ref as DesktopProjectRef | null)?.path,
 });
 
+// SAME object threaded into the ToolExecutor context and useExportCommand's XML/FCPXML path —
+// mirrors the generation/transcription/library facade pattern above.
+const interopExportFacade = createDesktopInteropExport({ resolvePath: resolveMediaPath });
+
 const executor = new ToolExecutor(buildCatalog(), {
   store,
   getManifest: () => library.getManifest(),
@@ -165,6 +173,8 @@ const executor = new ToolExecutor(buildCatalog(), {
   transcription: transcriptionFacade,
   library: libraryFacade,
   mediaImport: mediaImportFacade,
+  interopExport: interopExportFacade,
+  projectName: () => session.getState().name,
 });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -292,6 +302,7 @@ function PalmierDesktopApp() {
       session={session}
       nativeFileMenu={isMac}
       exportGateway={exportGateway}
+      interopExport={interopExportFacade}
       engineRef={engineRef}
       getGenerationLog={getGenerationLog}
       agent={{
@@ -323,13 +334,14 @@ function PalmierDesktopApp() {
         window.desktopProject?.onMenuCommand((c, arg) => {
           if (c === "open-recent") {
             cmds.openRecent(arg as import("@palmier/core").ProjectRef);
+          } else if (c === "export") {
+            cmds.export(arg as import("@palmier/ui").ExportKind | undefined);
           } else {
             const m: Record<string, () => void> = {
               "new": cmds.newProject,
               "open": cmds.open,
               "save": cmds.save,
               "save-as": cmds.saveAs,
-              "export": cmds.export,
             };
             m[c]?.();
           }

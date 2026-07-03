@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { EditorStore, MediaFolder, MediaManifest, MediaManifestEntry, TextStyle, TranscriptionResult } from "@palmier/core";
+import type { EditorStore, MediaFolder, MediaManifest, MediaManifestEntry, SourceTimecode, TextStyle, TranscriptionResult } from "@palmier/core";
 import type { ImageGenInput } from "../agent/image-generator.js";
 import type { StartJobArgs } from "../generation/generation-service.js";
 
@@ -59,6 +59,26 @@ export interface ToolContext {
     // Desktop only — a directory recurses, mirroring its structure as folders.
     fromPath?(absPath: string, folderId?: string): Promise<{ assetIds: string[] }>;
   };
+  // Timeline interchange export facade (XMEML/FCPXML) backing export_project (M12B T3) — the SAME
+  // object is also threaded into the UI's export command, so the agent tool and the File menu share
+  // one save/timecode path per host.
+  interopExport?: {
+    // Desktop: reads embedded tmcd via ffprobe. Web: no filesystem access — resolves an empty map
+    // (0-based export, the #247 regression-locked path).
+    readTimecodes(mediaRefs: string[]): Promise<Map<string, SourceTimecode>>;
+    // Desktop: outputPath given → writes directly there (overwrite=false + existing → throws);
+    // outputPath omitted → a native save dialog picks the destination. Web: outputPath is ignored —
+    // always a showSaveFilePicker-style picker (cancel → { cancelled: true }).
+    saveText(
+      defaultName: string,
+      contents: string,
+      kind: "fcpxml" | "xmeml",
+      outputPath?: string,
+      overwrite?: boolean,
+    ): Promise<{ path?: string; cancelled?: boolean }>;
+  };
+  // Project display name for exporters; falls back to "Project" when absent.
+  projectName?: () => string;
 }
 
 export interface ToolSpec {

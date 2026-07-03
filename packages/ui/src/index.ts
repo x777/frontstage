@@ -39,7 +39,7 @@ export type { ProjectActivityViewProps, ProjectActivityButtonProps } from "./edi
 export { createEditorHost } from "./editor/editor-host.js";
 export type { EditorMediaHost, EditorHostResult } from "./editor/editor-host.js";
 export type { ExportGateway, ExportTarget, ExportProgressFn } from "./editor/export-gateway.js";
-export type { ExportState } from "./editor/use-export-command.js";
+export type { ExportState, ExportKind } from "./editor/use-export-command.js";
 export { AgentPanel } from "./agent/AgentPanel.js";
 export type { AgentPanelProps } from "./agent/AgentPanel.js";
 export { GenerationPanel } from "./agent/GenerationPanel.js";

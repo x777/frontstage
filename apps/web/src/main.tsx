@@ -12,6 +12,7 @@ import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
 import { WebExportGateway } from "./web-export.js";
+import { createWebInteropExport } from "./web-interop-export.js";
 import { WebAiGateway } from "./web-ai-gateway.js";
 import { WebGenGateway } from "./web-gen-gateway.js";
 import { makeWebAudioExtractor } from "./web-audio-extract.js";
@@ -23,6 +24,7 @@ interface PalmierAppProps {
   session: ProjectSession;
   library: Awaited<ReturnType<typeof buildSampleLibrary>>;
   exportGateway: WebExportGateway;
+  interopExport: NonNullable<ToolContext["interopExport"]>;
   agentSession: AgentSession;
   imageGenerator: ImageGenerator;
   sessionStore: ChatSessionStore;
@@ -36,7 +38,7 @@ interface PalmierAppProps {
   transcriptionFacade: NonNullable<ToolContext["transcription"]>;
 }
 
-function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, interopExport, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
@@ -80,6 +82,7 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
       library={library}
       session={session}
       exportGateway={exportGateway}
+      interopExport={interopExport}
       engineRef={engineRef}
       getGenerationLog={getGenerationLog}
       agent={{
@@ -136,6 +139,11 @@ async function bootstrap() {
     | ((suggestedName: string) => Promise<FileSystemFileHandle | null>)
     | undefined;
   const exportGateway = new WebExportGateway(pickSaveFile ? { pickSaveFile } : undefined);
+
+  // SAME facade threaded into the ToolExecutor context and the UI's XML/FCPXML export path.
+  const interopExportFacade = createWebInteropExport(
+    pickSaveFile ? { pickSaveFile: (name) => pickSaveFile(name) } : undefined,
+  );
 
   // Build agent session — __aiGateway seam takes precedence (e2e injects a fake)
   const agentGateway = (window as unknown as Record<string, unknown>).__aiGateway ?? webAiGateway;
@@ -256,6 +264,8 @@ async function bootstrap() {
     transcription: transcriptionFacade,
     library: libraryFacade,
     mediaImport: mediaImportFacade,
+    interopExport: interopExportFacade,
+    projectName: () => session.getState().name,
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -292,6 +302,7 @@ async function bootstrap() {
         session={session}
         library={library}
         exportGateway={exportGateway}
+        interopExport={interopExportFacade}
         agentSession={agentSession}
         imageGenerator={imageGenerator}
         sessionStore={sessionStore}

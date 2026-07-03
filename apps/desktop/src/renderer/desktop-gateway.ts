@@ -2,10 +2,18 @@ import type { ProjectGateway, ProjectRef, BoundProject } from "@palmier/core";
 
 export type DesktopProjectRef = ProjectRef & { path: string };
 
+export interface ExportSaveFilter {
+  name: string;
+  extensions: string[];
+}
+
 interface DesktopProjectBridge {
   pickOpen(): Promise<string | null>;
   pickSaveAs(name: string): Promise<string | null>;
-  pickExportSave(name: string): Promise<string | null>;
+  pickExportSave(name: string, filter?: ExportSaveFilter): Promise<string | null>;
+  // Writes text directly to an already-authorized absolute path (M12B T3 — xml/fcpxml export with
+  // an explicit outputPath). overwrite=false + an existing file → rejects.
+  writeExportText(outPath: string, contents: string, overwrite?: boolean): Promise<string>;
   readText(dir: string, name: string): Promise<string | null>;
   writeText(dir: string, name: string, data: string): Promise<void>;
   writeMedia(dir: string, rel: string, bytes: Uint8Array): Promise<void>;

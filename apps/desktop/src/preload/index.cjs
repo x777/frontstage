@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld("desktopMedia", {
   importScan: (dir, absPath) => ipcRenderer.invoke("media:importScan", dir, absPath),
   importCopy: (dir, absPath, relPath) => ipcRenderer.invoke("media:importCopy", dir, absPath, relPath),
   importDownload: (dir, url, relPath) => ipcRenderer.invoke("media:importDownload", dir, url, relPath),
+  readTimecode: (paths) => ipcRenderer.invoke("media:readTimecode", paths),
 });
 
 contextBridge.exposeInMainWorld("desktopMcp", {
@@ -61,7 +62,8 @@ contextBridge.exposeInMainWorld("desktopMcp", {
 contextBridge.exposeInMainWorld("desktopProject", {
   pickOpen: () => ipcRenderer.invoke("project:pickOpen"),
   pickSaveAs: (n) => ipcRenderer.invoke("project:pickSaveAs", n),
-  pickExportSave: (name) => ipcRenderer.invoke("project:pickExportSave", name),
+  pickExportSave: (name, filter) => ipcRenderer.invoke("project:pickExportSave", name, filter),
+  writeExportText: (outPath, contents, overwrite) => ipcRenderer.invoke("project:writeExportText", { outPath, contents, overwrite }),
   readText: (d, n) => ipcRenderer.invoke("project:readText", d, n),
   writeText: (d, n, x) => ipcRenderer.invoke("project:writeText", d, n, x),
   writeMedia: (d, r, b) => ipcRenderer.invoke("project:writeMedia", d, r, b),
