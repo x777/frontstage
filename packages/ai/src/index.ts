@@ -80,3 +80,12 @@ export type {
   TranscriptionServiceOptions,
 } from "./transcription/transcription-service.js";
 export { TranscriptionService } from "./transcription/transcription-service.js";
+export type {
+  EmbeddingPipelines,
+  EmbeddingModelInfo,
+  EmbeddingProgress,
+  EmbeddingState,
+  EmbeddingServiceDeps,
+} from "./search/embedding-service.js";
+export { EmbeddingService } from "./search/embedding-service.js";
+export { createTransformersPipelines, loadTransformersPipelines, TRANSFORMERS_MODEL_INFO } from "./search/transformers-pipelines.js";

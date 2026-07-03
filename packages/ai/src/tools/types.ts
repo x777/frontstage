@@ -1,7 +1,8 @@
 import type { ZodType } from "zod";
-import type { EditorStore, MediaFolder, MediaManifest, MediaManifestEntry, SourceTimecode, TextStyle, TranscriptionResult } from "@palmier/core";
+import type { EditorStore, EmbeddingRow, MediaFolder, MediaManifest, MediaManifestEntry, SourceTimecode, TextStyle, TranscriptionResult } from "@palmier/core";
 import type { ImageGenInput } from "../agent/image-generator.js";
 import type { StartJobArgs } from "../generation/generation-service.js";
+import type { EmbeddingModelInfo } from "../search/embedding-service.js";
 
 export type ToolBlock =
   | { kind: "text"; text: string }
@@ -82,6 +83,16 @@ export interface ToolContext {
   };
   // Project display name for exporters; falls back to "Project" when absent.
   projectName?: () => string;
+  // SigLIP visual-search facade (M12C T2 shape; wired by T3/T4). Backs search_media's visual scope —
+  // ready()/ensureReady() surface the download-gate state, cachedEmbeddings is a cache-only read
+  // (never indexes) mirroring transcription's cachedTranscript.
+  embedding?: {
+    ready(): boolean;
+    ensureReady(onProgress?: (p: { loaded: number; total: number }) => void): Promise<void>;
+    embedText(q: string): Promise<Float32Array>;
+    cachedEmbeddings(mediaRef: string): Promise<EmbeddingRow[] | null>;
+    modelInfo: EmbeddingModelInfo;
+  };
 }
 
 export interface ToolSpec {
