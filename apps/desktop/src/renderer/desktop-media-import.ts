@@ -24,6 +24,22 @@ function stemName(rel: string): string {
   return dot > 0 ? base.slice(0, dot) : base;
 }
 
+// Directory imports can discover thousands of files at once (bounded by main's scan caps, but
+// still up to hundreds); firing one IPC round-trip per file unthrottled floods the main process.
+// A tiny fixed-size worker pool caps how many importCopy/readMedia calls are in flight at once.
+const IMPORT_COPY_CONCURRENCY = 4;
+
+async function runWithConcurrencyLimit(tasks: Array<() => Promise<void>>, limit: number): Promise<void> {
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < tasks.length) {
+      const task = tasks[next++];
+      if (task) await task();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+}
+
 // Desktop's ToolContext.mediaImport facade (M12A T3): bytes reuse MediaLibrary.importBytes
 // directly (no IPC needed — pure JS decode); url/path stream through main via IPC so raw bytes
 // never cross the renderer boundary in bulk, then read back from disk to probe/finalize.
@@ -100,6 +116,7 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
     }
 
     const assetIds: string[] = [];
+    const tasks: Array<() => Promise<void>> = [];
     for (const file of scan.files as ImportScanFile[]) {
       const type = importTypeForExtension(file.ext);
       if (!type) continue; // main already filtered by extension; defensive only
@@ -114,15 +131,20 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
       assetIds.push(id);
 
       const rel = projectRelativePath(entry);
-      void (async () => {
+      tasks.push(async () => {
         const copyResult = await window.desktopMedia.importCopy(dir, file.abs, rel);
         if ("error" in copyResult) {
           library.markGenerationFailed([id], copyResult.error);
           return;
         }
         await readBackAndFinish(id, dir, rel, type);
-      })();
+      });
     }
+
+    // All placeholders are created synchronously above (placeholder-first ordering is preserved);
+    // the actual copy/probe work runs in the background through a small concurrency-limited pool
+    // so a large directory can't fan out hundreds of simultaneous IPC round-trips at once.
+    void runWithConcurrencyLimit(tasks, IMPORT_COPY_CONCURRENCY);
 
     return { assetIds };
   }

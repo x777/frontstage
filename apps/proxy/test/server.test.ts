@@ -1,5 +1,7 @@
+import dns from "node:dns";
 import http from "node:http";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { Agent } from "undici";
 import { createProxyServer } from "../src/server.js";
 
 const TEST_ORIGIN = "https://app.example.com";
@@ -819,8 +821,18 @@ describe("createProxyServer — POST /import/download", () => {
     proxy.server.close();
   });
 
+  beforeEach(() => {
+    // Hermetic DNS: test hostnames aren't real, so stub dns.promises.lookup instead of hitting
+    // the network. Default resolves any hostname to a public IP; individual tests override this
+    // (via mockImplementationOnce/mockResolvedValueOnce) to exercise the DNS-rebinding guard.
+    vi.spyOn(dns.promises, "lookup").mockImplementation(
+      (() => Promise.resolve([{ address: "93.184.216.34", family: 4 }])) as unknown as typeof dns.promises.lookup,
+    );
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   function postImport(url: string): Promise<{ status: number; headers: http.IncomingMessage["headers"]; body: string }> {
@@ -1011,6 +1023,139 @@ describe("createProxyServer — POST /import/download", () => {
     }));
     const res = await postImport("https://cdn.example.com/huge.mp4");
     expect(res.status).toBe(413);
+  });
+
+  it("oversize mid-stream (no/false Content-Length, body exceeds the cap while streaming) → aborted, no full body sent", async () => {
+    // A tiny cap makes this test fast without allocating gigabytes of fake body; the proxy
+    // supports a test-only importMaxBytes override for exactly this (see ProxyServerOptions).
+    const smallCapProxy = await startProxy(0, { importMaxBytes: 10 });
+    try {
+      vi.stubGlobal("fetch", async () => ({
+        status: 200,
+        headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "video/mp4" : null) }, // no content-length
+        body: (async function* () {
+          yield new TextEncoder().encode("0123456789"); // exactly at the cap, still allowed
+          yield new TextEncoder().encode("more-bytes-that-cross-the-cap");
+          yield new TextEncoder().encode("this-chunk-must-never-be-observed");
+        })(),
+      }));
+      const body = JSON.stringify({ url: "https://cdn.example.com/huge.mp4" });
+      // Headers are already committed (200) before the cap is crossed mid-stream, so the proxy
+      // cuts the connection (res.destroy()) instead of a clean error response — plain httpRequest
+      // would reject on the resulting "socket hang up", so collect what arrived before that here.
+      const result = await new Promise<{ status: number; chunks: string; endedCleanly: boolean }>((resolve, reject) => {
+        const req = http.request(
+          {
+            host: "127.0.0.1",
+            port: smallCapProxy.port,
+            path: "/import/download",
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+          },
+          (res) => {
+            let chunks = "";
+            res.on("data", (c: Buffer) => { chunks += c.toString("utf-8"); });
+            res.on("end", () => resolve({ status: res.statusCode ?? 0, chunks, endedCleanly: true }));
+            res.on("error", () => resolve({ status: res.statusCode ?? 0, chunks, endedCleanly: false }));
+          },
+        );
+        req.on("error", () => resolve({ status: 0, chunks: "", endedCleanly: false }));
+        req.write(body);
+        req.end();
+      });
+      expect(result.chunks).not.toContain("this-chunk-must-never-be-observed");
+      // Either the socket was cut mid-stream (endedCleanly: false) or the client happened to see
+      // the connection close right at the cap — either way, the over-cap chunk must never appear.
+      expect(result.chunks.length).toBeLessThan("0123456789more-bytes-that-cross-the-cap".length);
+    } finally {
+      smallCapProxy.server.close();
+    }
+  });
+
+  describe("DNS-rebinding SSRF guard", () => {
+    it("hostname resolves to a private/metadata IP → 400, no upstream fetch attempted", async () => {
+      vi.spyOn(dns.promises, "lookup").mockImplementation(
+        (() => Promise.resolve([{ address: "169.254.169.254", family: 4 }])) as unknown as typeof dns.promises.lookup,
+      );
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await postImport("https://evil-rebind.example.com/x");
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("hostname resolves to a mix of public + private addresses → 400 (rejects if ANY address is private)", async () => {
+      vi.spyOn(dns.promises, "lookup").mockImplementation(
+        (() =>
+          Promise.resolve([
+            { address: "93.184.216.34", family: 4 },
+            { address: "10.0.0.5", family: 4 },
+          ])) as unknown as typeof dns.promises.lookup,
+      );
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await postImport("https://multi-a-record.example.com/x");
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("hostname resolves to an IPv4-mapped-IPv6 private address (::ffff:10.0.0.1) → 400", async () => {
+      vi.spyOn(dns.promises, "lookup").mockImplementation(
+        (() => Promise.resolve([{ address: "::ffff:10.0.0.1", family: 6 }])) as unknown as typeof dns.promises.lookup,
+      );
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await postImport("https://mapped-rebind.example.com/x");
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("a redirect hop that resolves to a private IP via DNS → 400, redirect target never fetched", async () => {
+      vi.spyOn(dns.promises, "lookup").mockImplementation(((hostname: string) => {
+        if (hostname === "evil-hop.example.com") return Promise.resolve([{ address: "127.0.0.1", family: 4 }]);
+        return Promise.resolve([{ address: "93.184.216.34", family: 4 }]);
+      }) as unknown as typeof dns.promises.lookup);
+      const fetched: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        fetched.push(url);
+        return {
+          status: 302,
+          headers: { get: (k: string) => (k.toLowerCase() === "location" ? "https://evil-hop.example.com/x" : null) },
+          body: null,
+        };
+      });
+      const res = await postImport("https://cdn.example.com/clip.mp4");
+      expect(res.status).toBe(400);
+      expect(fetched).toHaveLength(1); // the DNS-rebinding redirect target was never fetched
+    });
+
+    it("DNS resolution failure (ENOTFOUND) → 400, fails closed rather than open", async () => {
+      vi.spyOn(dns.promises, "lookup").mockImplementation(
+        (() => Promise.reject(Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }))) as unknown as typeof dns.promises.lookup,
+      );
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await postImport("https://does-not-resolve.example.com/x");
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("connection pinning: the validated address is passed to fetch via an undici dispatcher", async () => {
+      let capturedInit: { dispatcher?: unknown } | undefined;
+      vi.stubGlobal("fetch", async (_url: string, init: { dispatcher?: unknown }) => {
+        capturedInit = init;
+        return {
+          status: 200,
+          headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "video/mp4" : null) },
+          body: (async function* () {
+            yield new TextEncoder().encode("bytes");
+          })(),
+        };
+      });
+      const res = await postImport("https://cdn.example.com/clip.mp4");
+      expect(res.status).toBe(200);
+      expect(capturedInit?.dispatcher).toBeInstanceOf(Agent);
+    });
   });
 });
 

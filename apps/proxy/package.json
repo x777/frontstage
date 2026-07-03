@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "main": "./src/server.ts",
-  "exports": { ".": "./src/server.ts" },
+  "exports": {
+    ".": "./src/server.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -14,5 +16,8 @@
     "@types/node": "^22",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "undici": "^6.27.0"
   }
 }

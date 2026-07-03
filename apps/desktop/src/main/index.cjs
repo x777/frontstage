@@ -4,8 +4,10 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, session } = requ
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
+const dns = require("node:dns");
 const { spawn } = require("node:child_process");
 const crypto = require("node:crypto");
+const { Agent } = require("undici");
 
 // ── MCP server state ─────────────────────────────────────────────────────────
 
@@ -978,7 +980,12 @@ function importExt(p) {
 
 // General-host SSRF guard (any https origin, not an allowlist): denies credentials, non-https,
 // "localhost", and any literal IP host (v4 or v6) — see apps/proxy/src/server.ts's
-// isAllowedImportHost for the identical web-side treatment and the reasoning.
+// isAllowedImportHost for the identical web-side treatment and the reasoning. This is a fast
+// syntax-only pre-filter; it does NOT by itself stop DNS-rebinding (an ordinary-looking hostname
+// whose DNS record points at a private/metadata IP) — see validateImportTarget below, which
+// mirrors apps/proxy/src/ssrf-guard.ts's (tested) isPrivateAddress/checkHostResolution logic
+// exactly. Main is CJS and can't import that ESM module, so it's duplicated here — keep in sync
+// manually, same convention as the fal URL builders above.
 function isAllowedImportHost(url) {
   if (url.protocol !== "https:") return false;
   if (url.username || url.password) return false;
@@ -990,31 +997,178 @@ function isAllowedImportHost(url) {
   return true;
 }
 
-function walkImportDir(root, relDir, files, dirs) {
+// ── SSRF: DNS-rebinding guard (mirrors apps/proxy/src/ssrf-guard.ts's isPrivateAddress) ─────────
+
+function parseIPv4(ip) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (!m) return null;
+  const parts = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+  if (parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return parts;
+}
+
+function isPrivateIPv4(a, b, c, d) {
+  void c;
+  void d;
+  if (a === 0) return true; // 0.0.0.0/8
+  if (a === 127) return true; // 127.0.0.0/8 (loopback)
+  if (a === 10) return true; // 10.0.0.0/8
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local, incl. cloud metadata)
+  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
+  return false;
+}
+
+// Expands any legal IPv6 textual form (incl. "::" compression, zone IDs, and a trailing
+// dotted-quad tail like "::ffff:1.2.3.4") into 8 16-bit groups, or null if unparseable.
+function expandIPv6Groups(input) {
+  let addr = input;
+  const pct = addr.indexOf("%");
+  if (pct !== -1) addr = addr.slice(0, pct); // strip zone id, e.g. fe80::1%eth0
+
+  const v4Tail = /^(.*:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(addr);
+  if (v4Tail) {
+    const v4 = parseIPv4(v4Tail[2]);
+    if (!v4) return null;
+    const hi = ((v4[0] << 8) | v4[1]).toString(16);
+    const lo = ((v4[2] << 8) | v4[3]).toString(16);
+    addr = v4Tail[1] + hi + ":" + lo;
+  }
+
+  const halves = addr.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+
+  let groups;
+  if (halves.length === 1) {
+    groups = head;
+    if (groups.length !== 8) return null;
+  } else {
+    const missing = 8 - head.length - tail.length;
+    if (missing < 0) return null;
+    groups = [...head, ...Array(missing).fill("0"), ...tail];
+  }
+  if (groups.length !== 8) return null;
+
+  const nums = groups.map((g) => (g === "" ? 0 : parseInt(g, 16)));
+  if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 0xffff)) return null;
+  return nums;
+}
+
+function isPrivateIPv6(groups) {
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
+  // IPv4-mapped: ::ffff:a.b.c.d — unmap and re-check the v4 rules.
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
+    const a = (g6 >> 8) & 0xff;
+    const b = g6 & 0xff;
+    const c = (g7 >> 8) & 0xff;
+    const d = g7 & 0xff;
+    return isPrivateIPv4(a, b, c, d);
+  }
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0 && g6 === 0 && g7 === 0) return true; // ::
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0 && g6 === 0 && g7 === 1) return true; // ::1
+  if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 (unique local)
+  if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 (link-local)
+  return false;
+}
+
+function isPrivateAddress(ip) {
+  if (ip.includes(":")) {
+    const groups = expandIPv6Groups(ip);
+    if (!groups) return true; // unparseable → fail closed
+    return isPrivateIPv6(groups);
+  }
+  const v4 = parseIPv4(ip);
+  if (!v4) return true; // unparseable → fail closed
+  return isPrivateIPv4(...v4);
+}
+
+// Resolves the hostname and rejects if ANY returned address is private (multi-A-record rebinding
+// defense). DNS failures fail closed (denied), same posture as a private address.
+async function checkHostResolution(hostname) {
+  let addresses;
+  try {
+    addresses = await dns.promises.lookup(hostname, { all: true });
+  } catch {
+    return { ok: false };
+  }
+  if (addresses.length === 0) return { ok: false };
+  if (addresses.some((a) => isPrivateAddress(a.address))) return { ok: false };
+  return { ok: true, addresses };
+}
+
+// Syntax check + DNS resolution + private-address rejection, run before the initial fetch and
+// again on every redirect hop. Returns the resolved address to pin the connection to.
+async function validateImportTarget(url) {
+  if (!isAllowedImportHost(url)) return { ok: false };
+  const resolution = await checkHostResolution(url.hostname);
+  if (!resolution.ok) return { ok: false };
+  const pinnedAddress = resolution.addresses[0];
+  if (!pinnedAddress) return { ok: false };
+  return { ok: true, pinnedAddress };
+}
+
+// Pins the connection to the exact address we just validated instead of trusting a second,
+// independent DNS lookup at connect time (closes the TOCTOU window between "we checked this
+// hostname" and "the socket actually connects").
+function createPinnedDispatcher(pinnedAddress) {
+  return new Agent({
+    connect: {
+      lookup: (_hostname, _options, callback) => {
+        callback(null, [{ address: pinnedAddress.address, family: pinnedAddress.family }]);
+      },
+    },
+  });
+}
+
+// Bounded, async, symlink-safe directory walk: a synchronous unbounded recursion here would
+// freeze the whole Electron main process (all windows, all IPC, native menus) on a huge tree
+// (a home directory, node_modules, or a drive root), and — reachable via import_media's `path`
+// argument, potentially from an untrusted MCP source — is a real DoS surface. fs.promises keeps
+// I/O off the main thread; the depth/file caps bound worst-case work; lstat + skipping symlinks
+// (rather than Dirent.isDirectory()/isFile(), which can misreport reparse points on some
+// Node/libuv versions) means a symlink/junction loop can't cause infinite recursion.
+const IMPORT_MAX_SCAN_DEPTH = 8;
+const IMPORT_MAX_SCAN_FILES = 500;
+
+async function walkImportDir(root, relDir, files, dirs, depth) {
+  if (depth > IMPORT_MAX_SCAN_DEPTH) {
+    throw new Error(`Directory too deep to import (over ${IMPORT_MAX_SCAN_DEPTH} levels)`);
+  }
   const absDir = relDir ? path.join(root, relDir) : root;
   let entries;
   try {
-    entries = fs.readdirSync(absDir, { withFileTypes: true });
+    entries = await fs.promises.readdir(absDir, { withFileTypes: true });
   } catch {
     return;
   }
   for (const ent of entries) {
     const entRel = relDir ? `${relDir}/${ent.name}` : ent.name;
     const entAbs = path.join(absDir, ent.name);
-    if (ent.isDirectory()) {
+    let st;
+    try {
+      st = await fs.promises.lstat(entAbs);
+    } catch {
+      continue; // unreadable, skip
+    }
+    if (st.isSymbolicLink()) continue; // never follow symlinks/junctions/reparse points
+    if (st.isDirectory()) {
       dirs.push(entRel);
-      walkImportDir(root, entRel, files, dirs);
-    } else if (ent.isFile()) {
+      await walkImportDir(root, entRel, files, dirs, depth + 1);
+    } else if (st.isFile()) {
       const ext = importExt(ent.name);
       if (!IMPORT_ALLOWED_EXTENSIONS.has(ext)) continue;
-      let size = 0;
-      try { size = fs.statSync(entAbs).size; } catch { /* skip unreadable */ }
-      files.push({ abs: entAbs, rel: entRel, ext, size });
+      if (files.length >= IMPORT_MAX_SCAN_FILES) {
+        throw new Error(`Directory too large to import (over ${IMPORT_MAX_SCAN_FILES} media files)`);
+      }
+      files.push({ abs: entAbs, rel: entRel, ext, size: st.size });
     }
   }
 }
 
-ipcMain.handle("media:importScan", (_e, dir, absPath) => {
+ipcMain.handle("media:importScan", async (_e, dir, absPath) => {
   assertAuthorized(dir);
   const resolvedDir = path.resolve(dir);
   const resolvedTarget = path.resolve(absPath);
@@ -1024,7 +1178,7 @@ ipcMain.handle("media:importScan", (_e, dir, absPath) => {
 
   let stat;
   try {
-    stat = fs.statSync(resolvedTarget);
+    stat = await fs.promises.stat(resolvedTarget);
   } catch {
     return { error: "path not found: " + absPath };
   }
@@ -1042,7 +1196,11 @@ ipcMain.handle("media:importScan", (_e, dir, absPath) => {
 
   const files = [];
   const dirs = [];
-  walkImportDir(resolvedTarget, "", files, dirs);
+  try {
+    await walkImportDir(resolvedTarget, "", files, dirs, 0);
+  } catch (e) {
+    return { error: e.message };
+  }
   return { files, dirs };
 });
 
@@ -1072,19 +1230,30 @@ ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
   } catch {
     return { error: "invalid url" };
   }
-  if (!isAllowedImportHost(target)) return { error: "url host not allowed" };
+  const initialValidation = await validateImportTarget(target);
+  if (!initialValidation.ok) return { error: "url host not allowed" };
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), IMPORT_TIMEOUT_MS);
+  let dispatcher = createPinnedDispatcher(initialValidation.pinnedAddress);
+  // tmp/renamed track the .part temp file so ANY failure below (timeout, network error, size
+  // cap, write error) unlinks it in the finally — not just the size-cap branch.
+  let tmp = null;
+  let renamed = false;
   try {
-    let res = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+    // Follow redirects manually so every hop is re-resolved, re-validated, and re-pinned.
+    let res = await fetch(target.toString(), { redirect: "manual", signal: controller.signal, dispatcher });
     for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400; hop++) {
       const loc = res.headers.get("location");
       if (!loc) break;
       const next = new URL(loc, target);
-      if (!isAllowedImportHost(next)) return { error: "redirect host not allowed" };
+      const hopValidation = await validateImportTarget(next);
+      if (!hopValidation.ok) return { error: "redirect host not allowed" };
       target = next;
-      res = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+      const prevDispatcher = dispatcher;
+      dispatcher = createPinnedDispatcher(hopValidation.pinnedAddress);
+      void prevDispatcher.close();
+      res = await fetch(target.toString(), { redirect: "manual", signal: controller.signal, dispatcher });
     }
     if (res.status >= 300 && res.status < 400) return { error: "too many redirects" };
     if (!res.ok) return { error: "server returned HTTP " + res.status };
@@ -1096,15 +1265,13 @@ ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
     if (!res.body) return { error: "empty response body" };
 
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    const tmp = dest + ".part";
+    tmp = dest + ".part";
     const fd = fs.openSync(tmp, "w");
     let total = 0;
     try {
       for await (const chunk of res.body) {
         total += chunk.length;
         if (total > IMPORT_MAX_BYTES) {
-          fs.closeSync(fd);
-          fs.unlinkSync(tmp);
           return { error: "remote file exceeds the size cap" };
         }
         fs.writeSync(fd, Buffer.from(chunk));
@@ -1113,10 +1280,15 @@ ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
       try { fs.closeSync(fd); } catch { /* already closed */ }
     }
     fs.renameSync(tmp, dest);
+    renamed = true;
     return { ok: true, size: total };
   } catch (err) {
     return { error: String(err) };
   } finally {
     clearTimeout(timer);
+    void dispatcher.close();
+    if (tmp && !renamed) {
+      try { fs.unlinkSync(tmp); } catch { /* best-effort */ }
+    }
   }
 });

@@ -47,6 +47,9 @@ importers:
       react-dom:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
+      undici:
+        specifier: ^6.27.0
+        version: 6.27.0
     devDependencies:
       '@playwright/test':
         specifier: ^1.48.0
@@ -96,6 +99,10 @@ importers:
         version: 5.4.21(@types/node@22.19.21)
 
   apps/proxy:
+    dependencies:
+      undici:
+        specifier: ^6.27.0
+        version: 6.27.0
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -1816,6 +1823,10 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici@6.27.0:
+    resolution: {integrity: sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==}
+    engines: {node: '>=18.17'}
+
   universalify@0.1.2:
     resolution: {integrity: sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==}
     engines: {node: '>= 4.0.0'}
@@ -3528,6 +3539,8 @@ snapshots:
   typescript@5.9.3: {}
 
   undici-types@6.21.0: {}
+
+  undici@6.27.0: {}
 
   universalify@0.1.2: {}
 

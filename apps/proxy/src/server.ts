@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
+import { Agent } from "undici";
+import { checkHostResolution, type ResolvedAddress } from "./ssrf-guard.js";
 
 export interface ProxyServerOptions {
   apiKey: string;
@@ -9,6 +11,10 @@ export interface ProxyServerOptions {
   falKey?: string;
   falUpstream?: string;
   falRestUpstream?: string;
+  // Override for /import/download's byte cap — test-only escape hatch so the mid-stream
+  // (as opposed to pre-flight Content-Length) enforcement path can be exercised without
+  // actually allocating gigabytes of fake body. Defaults to IMPORT_MAX_BYTES (5GB).
+  importMaxBytes?: number;
 }
 
 function corsHeaders(origin: string): Record<string, string> {
@@ -67,8 +73,10 @@ function isAllowedFalDownloadHost(url: URL): boolean {
 // SSRF guard for /import/download: general-host (any https origin, not just fal's), so instead of
 // an allowlist this denies the shapes an attacker would use to reach internal/cloud-metadata
 // services — credentials, non-https, "localhost", and any literal IP host (v4 or v6, public or
-// private: a bare IP is never a legitimate media CDN hostname, so this subsumes the private-range
-// cases like 127.x/10.x/172.16-31.x/192.168.x/169.254.x/[::1] without needing DNS resolution).
+// private). This is a fast syntax-only pre-filter; it does NOT by itself stop DNS-rebinding (an
+// ordinary-looking hostname whose DNS record points at a private/metadata IP) — that's handled by
+// validateImportTarget below, which resolves the hostname and re-checks the resolved address(es)
+// against ssrf-guard's isPrivateAddress on every request AND every redirect hop.
 const IPV4_LITERAL_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 
 function isAllowedImportHost(url: URL): boolean {
@@ -85,6 +93,35 @@ function isAllowedImportHost(url: URL): boolean {
 const IMPORT_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 const IMPORT_TIMEOUT_MS = 15 * 60 * 1000;
 const MAX_IMPORT_REQUEST_BODY = 8 * 1024;
+
+type ImportTargetValidation = { ok: true; pinnedAddress: ResolvedAddress } | { ok: false };
+
+// Syntax check + DNS resolution + private-address rejection, run before the initial fetch and
+// again on every redirect hop. Returns the resolved address to pin the connection to (closes the
+// TOCTOU window between "we checked this hostname" and "the socket actually connects" — see
+// createPinnedDispatcher).
+async function validateImportTarget(url: URL): Promise<ImportTargetValidation> {
+  if (!isAllowedImportHost(url)) return { ok: false };
+  const resolution = await checkHostResolution(url.hostname);
+  if (!resolution.ok) return { ok: false };
+  const pinnedAddress = resolution.addresses[0];
+  if (!pinnedAddress) return { ok: false };
+  return { ok: true, pinnedAddress };
+}
+
+// Pins the connection to the exact address we just validated instead of trusting a second,
+// independent DNS lookup at connect time — undici's connector calls this in place of a real
+// lookup, so the hostname is resolved exactly once, by us, and the validated result is what's
+// actually dialed (no window for the name to re-resolve to something else in between).
+function createPinnedDispatcher(pinned: ResolvedAddress): Agent {
+  return new Agent({
+    connect: {
+      lookup: (_hostname, _options, callback) => {
+        callback(null, [{ address: pinned.address, family: pinned.family }]);
+      },
+    },
+  });
+}
 
 // SSRF guard for the fal storage upload PUT: the signed URL fal hands back must stay on a
 // fal-controlled host (queue/rest API domains plus the CDN subdomains they redirect uploads to).
@@ -153,6 +190,7 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
   const falUpstream = (opts.falUpstream ?? "https://queue.fal.run").replace(/\/+$/, "");
   // Storage upload initiate lives on the REST host, not the queue host — see fal-wire.ts FAL_REST_BASE.
   const falRestUpstream = (opts.falRestUpstream ?? "https://rest.fal.ai").replace(/\/+$/, "");
+  const importMaxBytes = opts.importMaxBytes ?? IMPORT_MAX_BYTES;
 
   return http.createServer((req, res) => {
     if (req.method === "OPTIONS") {
@@ -263,7 +301,7 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
           res.end(JSON.stringify({ error: "request body too large" }));
           return;
         }
-        return handleImportDownload(body.toString("utf-8"), origin, res);
+        return handleImportDownload(body.toString("utf-8"), origin, res, importMaxBytes);
       });
       return;
     }
@@ -453,8 +491,10 @@ async function handleFalDownload(params: URLSearchParams, origin: string, res: h
 
 // General-host counterpart to handleFalDownload, for import_media's url source (M12A T3): same
 // per-hop SSRF re-validation + media-type neutralization treatment, plus a size cap and a request
-// timeout since the target isn't a trusted CDN and files can be up to 5GB.
-async function handleImportDownload(rawBody: string, origin: string, res: http.ServerResponse): Promise<void> {
+// timeout since the target isn't a trusted CDN and files can be up to 5GB. Every hop is resolved
+// and pinned via validateImportTarget/createPinnedDispatcher (ssrf-guard.ts) rather than trusted by
+// hostname alone — see that module's comment for why.
+async function handleImportDownload(rawBody: string, origin: string, res: http.ServerResponse, importMaxBytes: number): Promise<void> {
   let parsed: { url?: unknown };
   try {
     parsed = JSON.parse(rawBody) as { url?: unknown };
@@ -480,7 +520,8 @@ async function handleImportDownload(rawBody: string, origin: string, res: http.S
     return;
   }
 
-  if (!isAllowedImportHost(target)) {
+  const initialValidation = await validateImportTarget(target);
+  if (!initialValidation.ok) {
     res.writeHead(400, jsonHeaders(origin));
     res.end(JSON.stringify({ error: "url host not allowed" }));
     return;
@@ -488,20 +529,25 @@ async function handleImportDownload(rawBody: string, origin: string, res: http.S
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), IMPORT_TIMEOUT_MS);
+  let dispatcher = createPinnedDispatcher(initialValidation.pinnedAddress);
   try {
-    // Follow redirects manually so every hop stays off the denylist (SSRF guard).
-    let upstreamRes = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+    // Follow redirects manually so every hop is re-resolved, re-validated, and re-pinned.
+    let upstreamRes = await fetch(target.toString(), { redirect: "manual", signal: controller.signal, dispatcher });
     for (let hop = 0; hop < 3 && upstreamRes.status >= 300 && upstreamRes.status < 400; hop++) {
       const loc = upstreamRes.headers.get("location");
       if (!loc) break;
       const next = new URL(loc, target);
-      if (!isAllowedImportHost(next)) {
+      const hopValidation = await validateImportTarget(next);
+      if (!hopValidation.ok) {
         res.writeHead(400, jsonHeaders(origin));
         res.end(JSON.stringify({ error: "redirect host not allowed" }));
         return;
       }
       target = next;
-      upstreamRes = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+      const prevDispatcher = dispatcher;
+      dispatcher = createPinnedDispatcher(hopValidation.pinnedAddress);
+      void prevDispatcher.close();
+      upstreamRes = await fetch(target.toString(), { redirect: "manual", signal: controller.signal, dispatcher });
     }
     if (upstreamRes.status >= 300 && upstreamRes.status < 400) {
       res.writeHead(502, jsonHeaders(origin));
@@ -510,7 +556,7 @@ async function handleImportDownload(rawBody: string, origin: string, res: http.S
     }
 
     const declaredLength = upstreamRes.headers.get("content-length");
-    if (declaredLength && Number(declaredLength) > IMPORT_MAX_BYTES) {
+    if (declaredLength && Number(declaredLength) > importMaxBytes) {
       res.writeHead(413, jsonHeaders(origin));
       res.end(JSON.stringify({ error: "remote file exceeds the size cap" }));
       return;
@@ -532,7 +578,7 @@ async function handleImportDownload(rawBody: string, origin: string, res: http.S
     let total = 0;
     for await (const chunk of upstreamRes.body as AsyncIterable<Uint8Array>) {
       total += chunk.length;
-      if (total > IMPORT_MAX_BYTES) {
+      if (total > importMaxBytes) {
         // Headers are already committed at this point — cut the connection rather than send a
         // clean error body (no Content-Length promise to keep, and no way to un-send a 200).
         res.destroy();
@@ -550,6 +596,7 @@ async function handleImportDownload(rawBody: string, origin: string, res: http.S
     res.end();
   } finally {
     clearTimeout(timer);
+    void dispatcher.close();
   }
 }
 
