@@ -218,6 +218,18 @@ async function bootstrap() {
       measureCaptionWidthFrac(text, style, store.getSnapshot().timeline.width),
   };
 
+  // SAME object threaded into the ToolExecutor context and (once T4 lands) the panel's drag/drop —
+  // mirrors the generation/transcription facade pattern above.
+  const libraryFacade = {
+    listFolders: () => library.getManifest().folders,
+    createFolder: (name: string, parentFolderId?: string) => library.createFolder(name, parentFolderId),
+    renameFolder: (id: string, name: string) => library.renameFolder(id, name),
+    renameEntry: (id: string, name: string) => library.renameEntry(id, name),
+    moveEntriesToFolder: (assetIds: string[], folderId: string | undefined) => library.moveEntriesToFolder(assetIds, folderId),
+    deleteFolders: (ids: string[]) => library.deleteFolders(ids),
+    deleteEntries: (ids: string[]) => library.deleteEntries(ids),
+  };
+
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {
     store,
@@ -233,6 +245,7 @@ async function bootstrap() {
     },
     generation: generationFacade,
     transcription: transcriptionFacade,
+    library: libraryFacade,
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

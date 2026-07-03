@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { EditorStore, MediaManifest, MediaManifestEntry, TextStyle, TranscriptionResult } from "@palmier/core";
+import type { EditorStore, MediaFolder, MediaManifest, MediaManifestEntry, TextStyle, TranscriptionResult } from "@palmier/core";
 import type { ImageGenInput } from "../agent/image-generator.js";
 import type { StartJobArgs } from "../generation/generation-service.js";
 
@@ -36,6 +36,17 @@ export interface ToolContext {
     // buildCaptionPhrases' `measure`). Optional — M11D wires a real Canvas2D-backed impl from
     // @palmier/ui; until then, add_captions falls back to a character-count heuristic.
     measureText?(text: string, style: TextStyle): number;
+  };
+  // Media folder/entry CRUD facade backing the 7 folder tools (M12A T2) — mirrors the
+  // MediaLibrary folder ops directly, so it stays in lockstep with getManifest().
+  library?: {
+    listFolders(): MediaFolder[];
+    createFolder(name: string, parentFolderId?: string): MediaFolder;
+    renameFolder(id: string, name: string): void;
+    renameEntry(id: string, name: string): void;
+    moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void;
+    deleteFolders(ids: string[]): { removedAssetIds: string[] };
+    deleteEntries(ids: string[]): void;
   };
 }
 

@@ -270,3 +270,171 @@ test("readDerived: null when the gateway rejects (e.g. file not found)", async (
 
   await expect(lib.readDerived("media/missing.transcript.json")).resolves.toBeNull();
 });
+
+// ── folder / entry ops (T2) ─────────────────────────────────────────────────
+
+test("createFolder: appends a folder at root and emits", () => {
+  const lib = new MediaLibrary();
+  let calls = 0;
+  lib.subscribe(() => calls++);
+
+  const folder = lib.createFolder("B-roll");
+
+  expect(folder.name).toBe("B-roll");
+  expect(folder.parentFolderId).toBeUndefined();
+  expect(lib.getManifest().folders).toEqual([folder]);
+  expect(calls).toBe(1);
+});
+
+test("createFolder: nests under an existing parent", () => {
+  const lib = new MediaLibrary();
+  const parent = lib.createFolder("Parent");
+  const child = lib.createFolder("Child", parent.id);
+
+  expect(child.parentFolderId).toBe(parent.id);
+  expect(lib.getManifest().folders).toEqual([parent, child]);
+});
+
+test("createFolder: throws on unknown parentFolderId, no mutation", () => {
+  const lib = new MediaLibrary();
+  expect(() => lib.createFolder("Orphan", "missing")).toThrow(/missing/);
+  expect(lib.getManifest().folders).toHaveLength(0);
+});
+
+test("renameFolder: updates name and emits", () => {
+  const lib = new MediaLibrary();
+  const folder = lib.createFolder("Old");
+  let calls = 0;
+  lib.subscribe(() => calls++);
+
+  lib.renameFolder(folder.id, "New");
+
+  expect(lib.getManifest().folders[0]?.name).toBe("New");
+  expect(calls).toBe(1);
+});
+
+test("renameFolder: throws on unknown id", () => {
+  const lib = new MediaLibrary();
+  expect(() => lib.renameFolder("missing", "New")).toThrow(/missing/);
+});
+
+test("renameEntry: updates name, leaves other fields untouched", () => {
+  const lib = new MediaLibrary();
+  const entry = realEntry("a");
+  lib.addEntry(entry, new Uint8Array([1]));
+
+  lib.renameEntry("a", "renamed.mp4");
+
+  const found = lib.getSnapshot().entries.find((e) => e.id === "a");
+  expect(found?.name).toBe("renamed.mp4");
+  expect(found?.duration).toBe(entry.duration);
+});
+
+test("renameEntry: throws on unknown id", () => {
+  const lib = new MediaLibrary();
+  expect(() => lib.renameEntry("missing", "x")).toThrow(/missing/);
+});
+
+test("moveEntriesToFolder: sets folderId on the given assets", () => {
+  const lib = new MediaLibrary();
+  const folder = lib.createFolder("Dest");
+  lib.addEntry(realEntry("a"), new Uint8Array([1]));
+  lib.addEntry(realEntry("b"), new Uint8Array([2]));
+
+  lib.moveEntriesToFolder(["a", "b"], folder.id);
+
+  const entries = lib.getSnapshot().entries;
+  expect(entries.find((e) => e.id === "a")?.folderId).toBe(folder.id);
+  expect(entries.find((e) => e.id === "b")?.folderId).toBe(folder.id);
+});
+
+test("moveEntriesToFolder: undefined folderId moves to root", () => {
+  const lib = new MediaLibrary();
+  const folder = lib.createFolder("Dest");
+  const entry = realEntry("a");
+  entry.folderId = folder.id;
+  lib.addEntry(entry, new Uint8Array([1]));
+
+  lib.moveEntriesToFolder(["a"], undefined);
+
+  expect(lib.getSnapshot().entries.find((e) => e.id === "a")?.folderId).toBeUndefined();
+});
+
+test("moveEntriesToFolder: throws on unknown folder, no mutation", () => {
+  const lib = new MediaLibrary();
+  lib.addEntry(realEntry("a"), new Uint8Array([1]));
+  expect(() => lib.moveEntriesToFolder(["a"], "missing")).toThrow(/missing/);
+  expect(lib.getSnapshot().entries.find((e) => e.id === "a")?.folderId).toBeUndefined();
+});
+
+test("moveFolderToFolder: reparents a folder", () => {
+  const lib = new MediaLibrary();
+  const a = lib.createFolder("A");
+  const b = lib.createFolder("B");
+
+  lib.moveFolderToFolder(b.id, a.id);
+
+  expect(lib.getManifest().folders.find((f) => f.id === b.id)?.parentFolderId).toBe(a.id);
+});
+
+test("moveFolderToFolder: throws moving a folder into its own descendant", () => {
+  const lib = new MediaLibrary();
+  const a = lib.createFolder("A");
+  const b = lib.createFolder("B", a.id);
+
+  expect(() => lib.moveFolderToFolder(a.id, b.id)).toThrow();
+});
+
+test("moveFolderToFolder: throws moving a folder into itself", () => {
+  const lib = new MediaLibrary();
+  const a = lib.createFolder("A");
+  expect(() => lib.moveFolderToFolder(a.id, a.id)).toThrow();
+});
+
+test("moveFolderToFolder: throws on unknown target", () => {
+  const lib = new MediaLibrary();
+  const a = lib.createFolder("A");
+  expect(() => lib.moveFolderToFolder(a.id, "missing")).toThrow();
+});
+
+test("deleteFolders: cascades through subfolders, removes contained assets + their bytes/pending", () => {
+  const lib = new MediaLibrary();
+  const parent = lib.createFolder("Parent");
+  const child = lib.createFolder("Child", parent.id);
+  const inParent = realEntry("a");
+  inParent.folderId = parent.id;
+  const inChild = realEntry("b");
+  inChild.folderId = child.id;
+  lib.addEntry(inParent, new Uint8Array([1]));
+  lib.addEntry(inChild, new Uint8Array([2]));
+
+  const { removedAssetIds } = lib.deleteFolders([parent.id]);
+
+  expect(new Set(removedAssetIds)).toEqual(new Set(["a", "b"]));
+  const manifest = lib.getManifest();
+  expect(manifest.folders).toHaveLength(0);
+  expect(manifest.entries).toHaveLength(0);
+  expect(lib.bytesFor(inParent)).toBeUndefined();
+  expect(lib.pendingMedia().size).toBe(0);
+});
+
+test("deleteFolders: unknown folder id is a no-op (nothing removed)", () => {
+  const lib = new MediaLibrary();
+  const folder = lib.createFolder("Keep");
+  const { removedAssetIds } = lib.deleteFolders(["missing"]);
+  expect(removedAssetIds).toEqual([]);
+  expect(lib.getManifest().folders).toEqual([folder]);
+});
+
+test("deleteEntries: removes entries and drops their bytes/pending", () => {
+  const lib = new MediaLibrary();
+  lib.addEntry(realEntry("a"), new Uint8Array([1]));
+  lib.addEntry(realEntry("b"), new Uint8Array([2]));
+
+  lib.deleteEntries(["a"]);
+
+  const entries = lib.getSnapshot().entries;
+  expect(entries.find((e) => e.id === "a")).toBeUndefined();
+  expect(entries.find((e) => e.id === "b")).toBeDefined();
+  expect(lib.pendingMedia().has("media/a.mp4")).toBe(false);
+});

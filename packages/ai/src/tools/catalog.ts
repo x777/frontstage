@@ -1,9 +1,8 @@
 /**
- * buildCatalog assembles all 27 currently available tools.
+ * buildCatalog assembles all 34 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - import_media        — plan 6.2 (media import pipeline)
- *   - folder ops          — plan 6.2 (media folder CRUD)
  *   - inspect_timeline    — plan 6.3 (deep render analysis)
  */
 
@@ -18,6 +17,15 @@ import { rippleDeleteRangesTool, insertClipsTool } from "./ripple-tools.js";
 import { applyColorTool, applyEffectTool, inspectColorTool } from "./color-tools.js";
 import { getTranscriptTool, removeWordsTool } from "./transcription-tools.js";
 import { addCaptionsTool } from "./caption-tools.js";
+import {
+  listFoldersTool,
+  createFolderTool,
+  moveToFolderTool,
+  renameMediaTool,
+  renameFolderTool,
+  deleteMediaTool,
+  deleteFolderTool,
+} from "./library-tools.js";
 
 export function buildCatalog(): ToolSpec[] {
   return [
@@ -54,5 +62,13 @@ export function buildCatalog(): ToolSpec[] {
     getTranscriptTool(),
     removeWordsTool(),
     addCaptionsTool(),
+    // Media folder tools
+    listFoldersTool(),
+    createFolderTool(),
+    moveToFolderTool(),
+    renameMediaTool(),
+    renameFolderTool(),
+    deleteMediaTool(),
+    deleteFolderTool(),
   ];
 }

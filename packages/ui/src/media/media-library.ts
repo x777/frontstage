@@ -1,4 +1,4 @@
-import { clipTypeFromFileExtension, serializeGenerationStatus } from "@palmier/core";
+import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade } from "@palmier/core";
 import type { MediaFolder, MediaManifest, MediaManifestEntry } from "@palmier/core";
 import type { MediaGateway } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
@@ -174,6 +174,82 @@ export class MediaLibrary {
     const generationStatus = serializeGenerationStatus({ kind: "failed", message });
     this._entries = this._entries.map((e) => (idSet.has(e.id) ? { ...e, generationStatus } : e));
     this.emit();
+  }
+
+  // ── Folder / entry ops (T2) ──────────────────────────────────────────────
+
+  createFolder(name: string, parentFolderId?: string): MediaFolder {
+    if (parentFolderId !== undefined && !this._folders.some((f) => f.id === parentFolderId)) {
+      throw new Error(`unknown parent folder: ${parentFolderId}`);
+    }
+    const folder = makeMediaFolder(name, parentFolderId);
+    this._folders = [...this._folders, folder];
+    this.emit();
+    return folder;
+  }
+
+  renameFolder(folderId: string, name: string): void {
+    if (!this._folders.some((f) => f.id === folderId)) throw new Error(`unknown folder: ${folderId}`);
+    this._folders = this._folders.map((f) => (f.id === folderId ? { ...f, name } : f));
+    this.emit();
+  }
+
+  renameEntry(entryId: string, name: string): void {
+    if (!this._entries.some((e) => e.id === entryId)) throw new Error(`unknown media entry: ${entryId}`);
+    this._entries = this._entries.map((e) => (e.id === entryId ? { ...e, name } : e));
+    this.emit();
+  }
+
+  moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void {
+    if (folderId !== undefined && !this._folders.some((f) => f.id === folderId)) {
+      throw new Error(`unknown folder: ${folderId}`);
+    }
+    const idSet = new Set(assetIds);
+    this._entries = this._entries.map((e) => (idSet.has(e.id) ? { ...e, folderId } : e));
+    this.emit();
+  }
+
+  // canMoveFolder-guarded (self/descendant/unknown-target rejected); T4 drag uses this directly —
+  // no agent tool wraps it (Swift parity: moveFoldersToFolder has no ToolExecutor entry point).
+  moveFolderToFolder(folderId: string, targetId: string | undefined): void {
+    const index = buildFolderIndex(this._folders);
+    if (!index.byId.has(folderId)) throw new Error(`unknown folder: ${folderId}`);
+    if (!canMoveFolder(index, folderId, targetId)) {
+      throw new Error(`cannot move folder ${folderId} into ${targetId ?? "root"}`);
+    }
+    this._folders = this._folders.map((f) => (f.id === folderId ? { ...f, parentFolderId: targetId } : f));
+    this.emit();
+  }
+
+  // Cascades through subfolders (collectFolderCascade); removes contained assets' bytes/pending
+  // state along with their manifest entries so a deleted folder leaves nothing dangling.
+  deleteFolders(folderIds: string[]): { removedAssetIds: string[] } {
+    const { folderIds: doomedFolders, assetIds: doomedAssets } = collectFolderCascade(
+      this._folders,
+      this._entries,
+      folderIds,
+    );
+    this.dropAssetBytes(doomedAssets);
+    this._folders = this._folders.filter((f) => !doomedFolders.has(f.id));
+    this._entries = this._entries.filter((e) => !doomedAssets.has(e.id));
+    this.emit();
+    return { removedAssetIds: [...doomedAssets] };
+  }
+
+  deleteEntries(assetIds: string[]): void {
+    const idSet = new Set(assetIds);
+    this.dropAssetBytes(idSet);
+    this._entries = this._entries.filter((e) => !idSet.has(e.id));
+    this.emit();
+  }
+
+  private dropAssetBytes(assetIds: ReadonlySet<string>): void {
+    for (const e of this._entries) {
+      if (!assetIds.has(e.id) || e.source.kind !== "project") continue;
+      this._bytes.delete(e.source.relativePath);
+      this._persisted.delete(e.source.relativePath);
+      this.thumbnails.delete(e.id);
+    }
   }
 
   async importFiles(files: File[] | FileList): Promise<MediaManifestEntry[]> {

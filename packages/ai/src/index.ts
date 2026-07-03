@@ -8,6 +8,15 @@ export { addCaptionsTool } from "./tools/caption-tools.js";
 export { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./tools/property-tools.js";
 export { removeTracksTool } from "./tools/track-tools.js";
 export { applyColorTool, applyEffectTool, inspectColorTool } from "./tools/color-tools.js";
+export {
+  listFoldersTool,
+  createFolderTool,
+  moveToFolderTool,
+  renameMediaTool,
+  renameFolderTool,
+  deleteMediaTool,
+  deleteFolderTool,
+} from "./tools/library-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";
 export { generateVideoTool, upscaleMediaTool, generateAudioTool, listModelsTool } from "./tools/generate-tools.js";
