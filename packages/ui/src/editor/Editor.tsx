@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { EditorStore, GenerationLogEntry, MediaManifestEntry, ProjectRef } from "@palmier/core";
+import type { EditorStore, GenerationLogEntry, MediaFolder, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
 import type { AgentSession, ChatSessionStore, ModelEntry } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
@@ -37,11 +37,16 @@ import type { ExportGateway } from "./export-gateway.js";
 
 // Duck-typed library interface covering what MediaPanel, InspectorPanel, and drag-drop each need.
 export interface EditorLibrary {
-  getSnapshot(): { entries: MediaManifestEntry[] };
+  getSnapshot(): { entries: MediaManifestEntry[]; folders: MediaFolder[] };
   subscribe(cb: () => void): () => void;
   thumbnail(id: string): string | undefined;
-  importFiles(files: File[] | FileList): Promise<MediaManifestEntry[]>;
+  importFiles(files: File[] | FileList, folderId?: string): Promise<MediaManifestEntry[]>;
   entry(id: string): MediaManifestEntry | undefined;
+  createFolder(name: string, parentFolderId?: string): MediaFolder;
+  renameFolder(folderId: string, name: string): void;
+  deleteFolders(folderIds: string[]): { removedAssetIds: string[] };
+  moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void;
+  moveFolderToFolder(folderId: string, targetId: string | undefined): void;
 }
 
 export interface EditorProps {

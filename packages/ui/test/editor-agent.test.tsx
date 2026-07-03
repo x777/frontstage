@@ -136,11 +136,16 @@ function makeMinimalEditorProps() {
   const store = makeStore();
   const media = {} as import("@palmier/engine").MediaByteSource;
   const library: import("../src/editor/Editor.js").EditorLibrary = {
-    getSnapshot: () => ({ entries: [] }),
+    getSnapshot: () => ({ entries: [], folders: [] }),
     subscribe: () => () => {},
     thumbnail: () => undefined,
     importFiles: async () => [],
     entry: () => undefined,
+    createFolder: () => ({ id: "f", name: "New Folder" }),
+    renameFolder: () => {},
+    deleteFolders: () => ({ removedAssetIds: [] }),
+    moveEntriesToFolder: () => {},
+    moveFolderToFolder: () => {},
   };
   return { store, media, library };
 }

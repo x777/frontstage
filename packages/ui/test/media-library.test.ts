@@ -505,3 +505,90 @@ test("importBytes: a probe failure marks the placeholder failed rather than leav
   expect(entry.generationStatus).toMatch(/^failed: /);
   expect(entry.generationStatus).toMatch(/bad image data/);
 });
+
+// ── importFiles (M12A T4 — #219 async placeholder-first import) ─────────────
+
+// jsdom's File/Blob doesn't implement arrayBuffer() — a minimal fake sidesteps that gap
+// (createImageBitmap is stubbed separately and never touches this object).
+function fakeFile(name: string, type: string, bytes: Uint8Array): File {
+  return { name, type, arrayBuffer: async () => bytes.buffer as ArrayBuffer } as unknown as File;
+}
+
+test("importFiles: placeholders emit before any probe/finalize work runs (placeholder-first order)", () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 1, height: 1, close: () => {} }));
+  const lib = new MediaLibrary();
+  const statuses: Array<Array<string | undefined>> = [];
+  lib.subscribe(() => statuses.push(lib.getSnapshot().entries.map((e) => e.generationStatus)));
+
+  const file1 = fakeFile("a.png", "image/png", new Uint8Array([1]));
+  const file2 = fakeFile("b.png", "image/png", new Uint8Array([2]));
+  void lib.importFiles([file1, file2]);
+
+  // Synchronously after the call (before any microtask flush) both placeholders have already
+  // emitted — placeholder-first, not "probe everything, then emit once" like the old importFiles.
+  expect(statuses).toEqual([["downloading"], ["downloading", "downloading"]]);
+});
+
+test("importFiles: the placeholder exists synchronously with duration 0 and the media/<id>.<ext> path", () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 1, height: 1, close: () => {} }));
+  const lib = new MediaLibrary();
+  const file = fakeFile("photo.png", "image/png", new Uint8Array([1, 2, 3]));
+
+  void lib.importFiles([file]);
+
+  const entries = lib.getSnapshot().entries;
+  expect(entries).toHaveLength(1);
+  expect(entries[0]!.generationStatus).toBe("downloading");
+  expect(entries[0]!.duration).toBe(0);
+  expect(entries[0]!.name).toBe("photo.png");
+  expect(entries[0]!.type).toBe("image");
+  expect((entries[0]!.source as { relativePath: string }).relativePath).toMatch(/^media\/.+\.png$/);
+});
+
+test("importFiles: assigns folderId to each placeholder when a folderId is passed", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 1, height: 1, close: () => {} }));
+  const lib = new MediaLibrary();
+  const file = fakeFile("a.png", "image/png", new Uint8Array([1]));
+
+  const added = await lib.importFiles([file], "folder-1");
+
+  expect(added[0]!.folderId).toBe("folder-1");
+  expect(lib.entry(added[0]!.id)!.folderId).toBe("folder-1");
+});
+
+test("importFiles: probes + finalizes each file in the background (status clears, dimensions land, bytes readable)", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const lib = new MediaLibrary();
+  const file = fakeFile("photo.png", "image/png", new Uint8Array([1, 2, 3, 4]));
+
+  const added = await lib.importFiles([file]);
+  await flushAsync();
+
+  const entry = lib.entry(added[0]!.id)!;
+  expect(entry.generationStatus).toBeUndefined();
+  expect(entry.sourceWidth).toBe(12);
+  expect(entry.sourceHeight).toBe(34);
+  expect(lib.bytesFor(entry)).toEqual(new Uint8Array([1, 2, 3, 4]));
+});
+
+test("importFiles: a failing file is marked failed, the rest still finalize (failure isolation)", async () => {
+  let call = 0;
+  vi.stubGlobal("createImageBitmap", async () => {
+    call++;
+    if (call === 2) throw new Error("bad image data");
+    return { width: 12, height: 34, close: () => {} };
+  });
+  const lib = new MediaLibrary();
+  const fileOk = fakeFile("ok.png", "image/png", new Uint8Array([1, 2, 3]));
+  const fileBad = fakeFile("bad.png", "image/png", new Uint8Array([4, 5, 6]));
+
+  const added = await lib.importFiles([fileOk, fileBad]);
+  await flushAsync();
+
+  const okEntry = lib.entry(added[0]!.id)!;
+  const badEntry = lib.entry(added[1]!.id)!;
+  expect(okEntry.generationStatus).toBeUndefined();
+  expect(okEntry.sourceWidth).toBe(12);
+  expect(badEntry.generationStatus).toMatch(/^failed: /);
+  expect(badEntry.generationStatus).toMatch(/bad image data/);
+});

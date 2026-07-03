@@ -1,17 +1,24 @@
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
-import type { EditorStore, MediaManifestEntry } from "@palmier/core";
-import { parseGenerationStatus } from "@palmier/core";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { EditorStore, MediaFolder, MediaManifestEntry } from "@palmier/core";
+import { collectFolderCascade, parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionsTab } from "./CaptionsTab.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
+import { FolderTile, isMediaDrag, setMediaDragPayload, type MediaDragPayload } from "./FolderTile.js";
+import { MediaBreadcrumbs } from "./MediaBreadcrumbs.js";
 
 interface MediaLibraryLike {
-  getSnapshot(): { entries: MediaManifestEntry[] };
+  getSnapshot(): { entries: MediaManifestEntry[]; folders: MediaFolder[] };
   subscribe(cb: () => void): () => void;
   thumbnail(id: string): string | undefined;
-  importFiles(files: File[] | FileList): Promise<MediaManifestEntry[]>;
+  importFiles(files: File[] | FileList, folderId?: string): Promise<MediaManifestEntry[]>;
   entry(id: string): MediaManifestEntry | undefined;
+  createFolder(name: string, parentFolderId?: string): MediaFolder;
+  renameFolder(folderId: string, name: string): void;
+  deleteFolders(folderIds: string[]): { removedAssetIds: string[] };
+  moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void;
+  moveFolderToFolder(folderId: string, targetId: string | undefined): void;
 }
 
 export interface MediaPanelProps {
@@ -28,10 +35,70 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<PanelTab>("media");
+  const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
+  const [renamingFolderId, setRenamingFolderId] = useState<string | undefined>(undefined);
 
-  const entries = useSyncExternalStore(
-    library.subscribe.bind(library),
-    () => library.getSnapshot().entries,
+  // Two independent selectors (not one object-returning selector) so a host whose getSnapshot()
+  // builds a fresh wrapper each call still gets stable per-field identity — useSyncExternalStore
+  // requires Object.is-stable snapshots between renders or it loops.
+  const entries = useSyncExternalStore(library.subscribe.bind(library), () => library.getSnapshot().entries);
+  const folders = useSyncExternalStore(library.subscribe.bind(library), () => library.getSnapshot().folders);
+
+  const childFolders = useMemo(
+    () =>
+      folders
+        .filter((f) => (f.parentFolderId ?? undefined) === currentFolderId)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [folders, currentFolderId],
+  );
+  const visibleEntries = useMemo(
+    () => entries.filter((e) => (e.folderId ?? undefined) === currentFolderId),
+    [entries, currentFolderId],
+  );
+  const childCount = useCallback(
+    (folderId: string) =>
+      folders.filter((f) => f.parentFolderId === folderId).length +
+      entries.filter((e) => e.folderId === folderId).length,
+    [folders, entries],
+  );
+
+  const navigateTo = useCallback((folderId: string | undefined) => {
+    setCurrentFolderId(folderId);
+    setSelectedFolderId(undefined);
+  }, []);
+
+  const handleNewFolder = useCallback(() => {
+    const folder = library.createFolder("New Folder", currentFolderId);
+    setSelectedFolderId(folder.id);
+    setRenamingFolderId(folder.id);
+  }, [library, currentFolderId]);
+
+  const handleDropOnFolder = useCallback(
+    (folderId: string | undefined, payload: MediaDragPayload) => {
+      if (payload.kind === "asset") {
+        library.moveEntriesToFolder([payload.id], folderId);
+        return;
+      }
+      if (payload.id === folderId) return;
+      try {
+        library.moveFolderToFolder(payload.id, folderId);
+      } catch {
+        // invalid move (self/descendant/unknown target) — silently no-op
+      }
+    },
+    [library],
+  );
+
+  const handleDeleteFolder = useCallback(
+    (folder: MediaFolder) => {
+      const cascade = collectFolderCascade(folders, entries, [folder.id]);
+      const insideCount = cascade.folderIds.size - 1 + cascade.assetIds.size;
+      if (!window.confirm(`Delete "${folder.name}"? Deletes ${insideCount} items inside.`)) return;
+      library.deleteFolders([folder.id]);
+      if (currentFolderId === folder.id) navigateTo(folder.parentFolderId);
+    },
+    [folders, entries, library, currentFolderId, navigateTo],
   );
 
   const handleImportClick = useCallback(() => {
@@ -42,17 +109,17 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (files && files.length > 0) {
-        library.importFiles(files).catch(() => {});
+        library.importFiles(files, currentFolderId).catch(() => {});
       }
       // Reset so re-selecting same file re-fires
       e.target.value = "";
     },
-    [library],
+    [library, currentFolderId],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOver(true);
+    if (!isMediaDrag(e)) setIsDragOver(true);
   }, []);
 
   const handleDragLeave = useCallback(() => {
@@ -61,18 +128,22 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
-      e.preventDefault();
       setIsDragOver(false);
+      // Internal asset/folder moves carry the custom mime and are handled by their own drop
+      // target (FolderTile/breadcrumb) — this only imports real OS files.
+      if (isMediaDrag(e)) return;
+      e.preventDefault();
       const files = e.dataTransfer.files;
       if (files && files.length > 0) {
-        library.importFiles(files).catch(() => {});
+        library.importFiles(files, currentFolderId).catch(() => {});
       }
     },
-    [library],
+    [library, currentFolderId],
   );
 
   return (
     <div
+      data-testid="media-panel"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -159,6 +230,22 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             >
               Import
             </button>
+            <button
+              data-testid="media-new-folder"
+              onClick={handleNewFolder}
+              style={{
+                background: theme.bg.raised,
+                color: theme.text.primary,
+                border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+                borderRadius: theme.radius.xs,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                fontSize: theme.fontSize.xs,
+                fontWeight: theme.fontWeight.medium,
+                cursor: "pointer",
+              }}
+            >
+              New Folder
+            </button>
             <input
               data-testid="media-search"
               type="text"
@@ -177,6 +264,8 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             />
           </div>
 
+          <MediaBreadcrumbs folders={folders} currentFolderId={currentFolderId} onNavigate={navigateTo} onDropOn={handleDropOnFolder} />
+
           {/* Grid */}
           <div
             style={{
@@ -189,7 +278,26 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
               alignContent: "start",
             }}
           >
-            {entries.map((entry) => (
+            {childFolders.map((folder) => (
+              <FolderTile
+                key={folder.id}
+                folder={folder}
+                childCount={childCount(folder.id)}
+                isSelected={selectedFolderId === folder.id}
+                isRenaming={renamingFolderId === folder.id}
+                onSelect={() => setSelectedFolderId(folder.id)}
+                onOpen={() => navigateTo(folder.id)}
+                onRenameStart={() => setRenamingFolderId(folder.id)}
+                onRenameCommit={(name) => {
+                  library.renameFolder(folder.id, name);
+                  setRenamingFolderId(undefined);
+                }}
+                onRenameCancel={() => setRenamingFolderId(undefined)}
+                onDelete={() => handleDeleteFolder(folder)}
+                onDropPayload={(payload) => handleDropOnFolder(folder.id, payload)}
+              />
+            ))}
+            {visibleEntries.map((entry) => (
               <MediaItem
                 key={entry.id}
                 entry={entry}
@@ -226,6 +334,8 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
     <div
       data-testid="media-item"
       data-media-id={entry.id}
+      draggable
+      onDragStart={(e) => setMediaDragPayload(e, { kind: "asset", id: entry.id })}
       onPointerDown={(e) => onPointerDown?.(entry, e)}
       style={{
         display: "flex",

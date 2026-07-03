@@ -5,6 +5,7 @@ import {
   defaultTransform,
   defaultCrop,
   type Clip,
+  type MediaFolder,
   type MediaManifestEntry,
   type Timeline,
   type Track,
@@ -63,12 +64,18 @@ function transcriptOf(words: TranscriptionResult["words"] = []): TranscriptionRe
 
 function makeLibrary(entries: MediaManifestEntry[]) {
   const map = new Map(entries.map((e) => [e.id, e]));
+  const folders: MediaFolder[] = [];
   return {
-    getSnapshot: () => ({ entries }),
+    getSnapshot: () => ({ entries, folders }),
     subscribe: () => () => {},
     thumbnail: () => undefined,
     importFiles: async () => [],
     entry: (id: string) => map.get(id),
+    createFolder: () => ({ id: "f", name: "New Folder" }),
+    renameFolder: () => {},
+    deleteFolders: () => ({ removedAssetIds: [] }),
+    moveEntriesToFolder: () => {},
+    moveFolderToFolder: () => {},
   };
 }
 

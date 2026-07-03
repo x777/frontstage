@@ -100,15 +100,23 @@ test("importFiles adds an image entry with thumbnail", async ({ page }) => {
     });
     const file = new File([blob], "test-image.png", { type: "image/png" });
 
+    type Entry = { id: string; type: string; generationStatus?: string };
     type Lib = {
-      importFiles(files: File[]): Promise<Array<{ id: string; type: string }>>;
+      importFiles(files: File[]): Promise<Entry[]>;
       getSnapshot(): { entries: unknown[] };
       thumbnail(id: string): string | undefined;
+      entry(id: string): Entry | undefined;
     };
     const lib = (window as unknown as { __mediaLibrary: Lib }).__mediaLibrary;
+    // #219: importFiles is placeholder-first — the returned entry is a "downloading" placeholder,
+    // not yet probed. Wait for the background finalize before checking the thumbnail.
     const added = await lib.importFiles([file]);
-    const snapshot = lib.getSnapshot();
     const entry = added[0];
+    const start = Date.now();
+    while (entry && lib.entry(entry.id)?.generationStatus !== undefined && Date.now() - start < 5000) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const snapshot = lib.getSnapshot();
     const thumb = entry ? lib.thumbnail(entry.id) : undefined;
 
     return {
@@ -144,16 +152,22 @@ test("importFiles: project-relative source, manifest, and pending bytes", async 
     const file = new File([blob], "persist-test.png", { type: "image/png" });
 
     type MediaSource = { kind: string; relativePath?: string };
-    type Entry = { id: string; type: string; source: MediaSource };
+    type Entry = { id: string; type: string; source: MediaSource; generationStatus?: string };
     type Manifest = { version: number; entries: Entry[]; folders: unknown[] };
     type Lib = {
       importFiles(files: File[]): Promise<Entry[]>;
       getManifest(): Manifest;
       pendingMedia(): Map<string, Uint8Array>;
+      entry(id: string): Entry | undefined;
     };
     const lib = (window as unknown as { __mediaLibrary: Lib }).__mediaLibrary;
     const added = await lib.importFiles([file]);
     const entry = added[0];
+    // #219: bytes land in pendingMedia only once the background finalize completes.
+    const start = Date.now();
+    while (entry && lib.entry(entry.id)?.generationStatus !== undefined && Date.now() - start < 5000) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
     const manifest = lib.getManifest();
     const pending = lib.pendingMedia();
 

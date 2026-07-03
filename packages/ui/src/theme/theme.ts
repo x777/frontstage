@@ -185,6 +185,12 @@ export const theme = {
     track: "var(--color-generating-track)",
     fill: "var(--color-generating-fill)",
   },
+  folder: {
+    tileBg: "var(--color-folder-tile-bg)",
+    icon: "var(--color-folder-icon)",
+    badgeBg: "var(--color-folder-badge-bg)",
+    badgeText: "var(--color-folder-badge-text)",
+  },
   anim: {
     shimmerDuration: "var(--anim-shimmer-duration)",
     progressDuration: "var(--anim-progress-duration)",

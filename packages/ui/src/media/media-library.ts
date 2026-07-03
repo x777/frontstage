@@ -6,6 +6,7 @@ import { extensionForImportMime, importTypeForExtension } from "@palmier/ai";
 
 interface LibrarySnapshot {
   entries: MediaManifestEntry[];
+  folders: MediaFolder[];
 }
 
 export class MediaLibrary {
@@ -16,7 +17,7 @@ export class MediaLibrary {
   private thumbnails = new Map<string, string>();
   private _entries: MediaManifestEntry[] = [];
   private _folders: MediaFolder[] = [];
-  private _snapshot: LibrarySnapshot = { entries: [] };
+  private _snapshot: LibrarySnapshot = { entries: [], folders: [] };
   private _manifest: MediaManifest = { version: 2, entries: [], folders: [] };
   private _manifestVersion = 2;
   private listeners = new Set<() => void>();
@@ -33,8 +34,9 @@ export class MediaLibrary {
 
   private emit(): void {
     const entries = [...this._entries];
-    this._snapshot = { entries };
-    this._manifest = { version: this._manifestVersion, entries, folders: [...this._folders] };
+    const folders = [...this._folders];
+    this._snapshot = { entries, folders };
+    this._manifest = { version: this._manifestVersion, entries, folders };
     for (const l of this.listeners) l();
   }
 
@@ -253,44 +255,51 @@ export class MediaLibrary {
     }
   }
 
-  async importFiles(files: File[] | FileList): Promise<MediaManifestEntry[]> {
+  // OS file drop / file-input import (#219): placeholder-first, mirrors importBytes — each file's
+  // entry lands (and emits) synchronously before any probing starts, so the panel shows the tile
+  // immediately; probe + finalize happen in the background per file, one failure doesn't stop the rest.
+  async importFiles(files: File[] | FileList, folderId?: string): Promise<MediaManifestEntry[]> {
     const added: MediaManifestEntry[] = [];
 
     for (const file of Array.from(files)) {
-      try {
-        const ext = file.name.split(".").pop() ?? "";
-        const type = clipTypeFromFileExtension(ext);
-        if (!type) continue;
+      const ext = file.name.split(".").pop() ?? "";
+      const type = clipTypeFromFileExtension(ext);
+      if (!type) continue;
 
-        const blob = file as Blob;
-        const probed = await probeMediaBlob(blob, type);
-
-        const id = crypto.randomUUID();
-        const fileExt = ext || defaultExtForType(type);
-        const relativePath = `media/${id}.${fileExt}`;
-        const entry: MediaManifestEntry = {
-          id,
-          name: file.name,
-          type,
-          source: { kind: "project", relativePath },
-          duration: probed.duration,
-          ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
-          ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
-          ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
-        };
-
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        this._bytes.set(relativePath, bytes);
-        if (probed.thumb) this.thumbnails.set(id, probed.thumb);
-        this._entries.push(entry);
-        added.push(entry);
-      } catch {
-        // tolerate failures per file
-      }
+      const id = crypto.randomUUID();
+      const fileExt = ext || defaultExtForType(type);
+      const relativePath = `media/${id}.${fileExt}`;
+      const entry: MediaManifestEntry = {
+        id,
+        name: file.name,
+        type,
+        source: { kind: "project", relativePath },
+        duration: 0,
+        generationStatus: "downloading",
+        ...(folderId !== undefined ? { folderId } : {}),
+      };
+      this.addPlaceholder(entry);
+      added.push(entry);
+      void this.finishFileImport(id, file, type);
     }
 
-    if (added.length > 0) this.emit();
     return added;
+  }
+
+  private async finishFileImport(id: string, file: File, type: ClipType): Promise<void> {
+    try {
+      const probed = await probeMediaBlob(file as Blob, type);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (probed.thumb) this.thumbnails.set(id, probed.thumb);
+      this.finalizeGenerated(id, bytes, {
+        duration: probed.duration,
+        ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
+        ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
+        ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
+      });
+    } catch (err) {
+      this.markGenerationFailed([id], err instanceof Error ? err.message : String(err));
+    }
   }
 
   // Sets/replaces an entry's thumbnail data URL (M12A T3: host-side url/path import flows finish
