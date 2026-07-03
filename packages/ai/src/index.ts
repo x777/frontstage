@@ -82,8 +82,20 @@ export type {
   AudioExtractor,
   TranscriptionHost,
   TranscriptionServiceOptions,
+  TranscribeOptions,
 } from "./transcription/transcription-service.js";
 export { TranscriptionService } from "./transcription/transcription-service.js";
+export type {
+  LocalAsrPipelines,
+  LocalAsrInfo,
+  LocalAsrProgress,
+  LocalAsrState,
+  LocalAsrServiceDeps,
+  RawLocalWord,
+  RawLocalTranscript,
+} from "./transcription/local-asr.js";
+export { LocalAsrService, LOCAL_ASR_SAMPLE_RATE } from "./transcription/local-asr.js";
+export { createTransformersAsrPipelines, loadTransformersAsrPipelines, TRANSFORMERS_ASR_INFO } from "./transcription/transformers-asr-pipelines.js";
 export type {
   EmbeddingPipelines,
   EmbeddingModelInfo,

@@ -1,10 +1,14 @@
 import type { MediaManifestEntry, TranscriptionResult, TranscriptRecord } from "@palmier/core";
 import { parseTranscriptRecord, serializeGenerationStatus, transcriptRelativePath } from "@palmier/core";
+// Deep import (not the package barrel): the barrel re-exports the WebGPU renderer, which needs DOM
+// lib types ai's tsconfig deliberately omits (ai stays host-agnostic/Node-safe).
+import { decodeWavPcm16Mono } from "@palmier/engine/audio/wav-encode.js";
 import type { GenJobGateway } from "../generation/gen-gateway.js";
 import { nextPollDelay } from "../generation/poll-schedule.js";
 import { genModel } from "../generation/gen-catalog.js";
 import { estimateCredits } from "../generation/cost-estimator.js";
 import { parseWhisperResult } from "../generation/whisper-wire.js";
+import { LOCAL_ASR_SAMPLE_RATE, type LocalAsrService } from "./local-asr.js";
 
 export type AudioExtractor = (mediaRef: string) => Promise<{ wav: Uint8Array; durationSeconds: number }>;
 
@@ -20,9 +24,20 @@ export interface TranscriptionHost {
 export interface TranscriptionServiceOptions {
   sleep?: (ms: number) => Promise<void>;
   pollDelay?: typeof nextPollDelay;
+  // The keyless-fallback / always-free-background provider (M14A). Absent = fal-only, matching pre-M14A behavior.
+  local?: LocalAsrService;
+}
+
+export interface TranscribeOptions {
+  language?: string;
+  // The background sweep's path: never touch fal even when keyed (never spends credits).
+  forceLocal?: boolean;
 }
 
 const WHISPER_ENDPOINT = "fal-ai/whisper";
+
+const LOCAL_MODEL_UNAVAILABLE_MESSAGE =
+  "No fal.ai API key configured. Add one in Settings to transcribe, or download the local transcription model.";
 
 function toMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -71,6 +86,7 @@ export class TranscriptionService {
   // extract/upload/submit, without silently merging two different forced-language requests.
   private readonly inFlight = new Map<string, Promise<TranscriptionResult>>();
   private readonly extractionGate = new ExtractionGate();
+  private readonly local?: LocalAsrService;
 
   constructor(gateway: GenJobGateway, host: TranscriptionHost, extract: AudioExtractor, opts?: TranscriptionServiceOptions) {
     this.gateway = gateway;
@@ -78,9 +94,10 @@ export class TranscriptionService {
     this.extract = extract;
     this.sleep = opts?.sleep ?? defaultSleep;
     this.pollDelay = opts?.pollDelay ?? nextPollDelay;
+    this.local = opts?.local;
   }
 
-  async transcribe(mediaRef: string, opts?: { language?: string }): Promise<TranscriptionResult> {
+  async transcribe(mediaRef: string, opts?: TranscribeOptions): Promise<TranscriptionResult> {
     const key = `${mediaRef}|${opts?.language ?? ""}`;
     const existing = this.inFlight.get(key);
     if (existing) return existing;
@@ -92,7 +109,7 @@ export class TranscriptionService {
 
   async transcribeMany(
     refs: string[],
-    opts?: { language?: string },
+    opts?: TranscribeOptions,
   ): Promise<{ ref: string; result?: TranscriptionResult; error?: string }[]> {
     const unique = [...new Set(refs)];
     return Promise.all(
@@ -122,8 +139,9 @@ export class TranscriptionService {
     return this.gateway.hasKey();
   }
 
-  private async run(mediaRef: string, opts?: { language?: string }): Promise<TranscriptionResult> {
+  private async run(mediaRef: string, opts?: TranscribeOptions): Promise<TranscriptionResult> {
     const language = opts?.language;
+    const forceLocal = opts?.forceLocal ?? false;
     const entry = this.host.entries().find((e) => e.id === mediaRef);
     if (!entry) throw new Error("media not found: " + mediaRef);
 
@@ -137,16 +155,15 @@ export class TranscriptionService {
     this.host.patchEntry(mediaRef, { generationStatus: serializeGenerationStatus({ kind: "transcribing" }) });
 
     try {
-      const { wav, durationSeconds } = await this.extractionGate.run(() => this.extract(mediaRef));
-      const url = await this.gateway.uploadFile(wav, "audio/wav", `${mediaRef}.wav`);
-      const whisper = requireWhisperEntry();
-      const input = whisper.buildInput({ sourceUrl: url, language });
-      const { jobId } = await this.gateway.submitJob(WHISPER_ENDPOINT, input);
-      const resultJson = await this.poll(jobId);
-      const parsed = parseWhisperResult(resultJson);
+      // forceLocal short-circuits before hasKey() is ever evaluated — the background path must
+      // never touch fal, not even to check for a key.
+      const useFal = !forceLocal && (await this.gateway.hasKey());
+      const { parsed, durationSeconds, provider, model } = useFal
+        ? await this.runFal(mediaRef, language)
+        : await this.runLocal(mediaRef, language);
 
       if (language === undefined) {
-        const record: TranscriptRecord = { ...parsed, sourceDurationSeconds: durationSeconds, model: WHISPER_ENDPOINT };
+        const record: TranscriptRecord = { ...parsed, sourceDurationSeconds: durationSeconds, model, provider };
         const relativePath = transcriptRelativePath(mediaRef);
         this.host.writeDerived(relativePath, new TextEncoder().encode(JSON.stringify(record)));
         this.host.patchEntry(mediaRef, { transcriptPath: relativePath, generationStatus: undefined });
@@ -160,6 +177,38 @@ export class TranscriptionService {
       this.host.patchEntry(mediaRef, { generationStatus: serializeGenerationStatus({ kind: "failed", message }) });
       throw err;
     }
+  }
+
+  private async runFal(
+    mediaRef: string,
+    language: string | undefined,
+  ): Promise<{ parsed: TranscriptionResult; durationSeconds: number; provider: "fal"; model: string }> {
+    const { wav, durationSeconds } = await this.extractionGate.run(() => this.extract(mediaRef));
+    const url = await this.gateway.uploadFile(wav, "audio/wav", `${mediaRef}.wav`);
+    const whisper = requireWhisperEntry();
+    const input = whisper.buildInput({ sourceUrl: url, language });
+    const { jobId } = await this.gateway.submitJob(WHISPER_ENDPOINT, input);
+    const resultJson = await this.poll(jobId);
+    const parsed = parseWhisperResult(resultJson);
+    return { parsed, durationSeconds, provider: "fal", model: WHISPER_ENDPOINT };
+  }
+
+  private async runLocal(
+    mediaRef: string,
+    language: string | undefined,
+  ): Promise<{ parsed: TranscriptionResult; durationSeconds: number; provider: "local"; model: string }> {
+    if (!this.local || this.local.state !== "ready") {
+      // NO auto-download here — the model gate (T3) owns triggering ensureReady().
+      throw new Error(LOCAL_MODEL_UNAVAILABLE_MESSAGE);
+    }
+    const local = this.local;
+    const { wav, durationSeconds } = await this.extractionGate.run(() => this.extract(mediaRef));
+    const decoded = decodeWavPcm16Mono(wav);
+    if (decoded.sampleRate !== LOCAL_ASR_SAMPLE_RATE) {
+      throw new Error(`local transcription expects ${LOCAL_ASR_SAMPLE_RATE}Hz audio, got ${decoded.sampleRate}Hz`);
+    }
+    const parsed = await local.transcribe(decoded.samples, language);
+    return { parsed, durationSeconds, provider: "local", model: local.info.modelVersion };
   }
 
   private async readCache(relativePath: string): Promise<TranscriptionResult | null> {

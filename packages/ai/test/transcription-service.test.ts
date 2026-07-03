@@ -1,8 +1,11 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { MediaManifestEntry, TranscriptRecord } from "@palmier/core";
+import { encodeWavPcm16Mono } from "@palmier/engine/audio/wav-encode.js";
 import type { GenJobGateway, JobStatus } from "../src/generation/gen-gateway.js";
 import { TranscriptionService } from "../src/transcription/transcription-service.js";
 import type { AudioExtractor, TranscriptionHost } from "../src/transcription/transcription-service.js";
+import { LocalAsrService } from "../src/transcription/local-asr.js";
+import type { LocalAsrPipelines, RawLocalTranscript } from "../src/transcription/local-asr.js";
 
 function makeEntry(overrides: Partial<MediaManifestEntry> = {}): MediaManifestEntry {
   return {
@@ -81,6 +84,176 @@ function makeGateway(opts: {
 }
 
 const NO_DELAY = { sleep: async () => {}, pollDelay: () => 0 };
+
+/** A LocalAsrService already in the "ready" state, with an instrumented transcribe(). */
+async function makeReadyLocal(
+  transcribeImpl?: LocalAsrPipelines["transcribe"],
+): Promise<{ local: LocalAsrService; transcribe: ReturnType<typeof vi.fn> }> {
+  const transcribe = vi.fn(
+    transcribeImpl ?? (async (): Promise<RawLocalTranscript> => ({ text: "local hi", words: [{ text: "local", start: 0, end: 0.5 }] })),
+  );
+  const local = new LocalAsrService({
+    loadPipelines: async () => ({ transcribe }),
+    info: { model: "whisper-base", modelVersion: "onnx-community/whisper-base" },
+  });
+  await local.ensureReady();
+  return { local, transcribe };
+}
+
+function makeIdleLocal(): LocalAsrService {
+  return new LocalAsrService({
+    loadPipelines: () => new Promise(() => {}), // never resolves -> stays idle unless ensureReady() is called
+    info: { model: "whisper-base", modelVersion: "onnx-community/whisper-base" },
+  });
+}
+
+async function makeFailedLocal(): Promise<LocalAsrService> {
+  const local = new LocalAsrService({
+    loadPipelines: async () => {
+      throw new Error("download failed");
+    },
+    info: { model: "whisper-base", modelVersion: "onnx-community/whisper-base" },
+  });
+  await local.ensureReady().catch(() => {});
+  return local;
+}
+
+const SIXTEEN_KHZ_WAV = encodeWavPcm16Mono(new Float32Array([0.1, 0.2, -0.1, 0]), 16000, 16000);
+
+describe("TranscriptionService.transcribe: the provider seam", () => {
+  test("keyed + local ready -> still uses fal, local is UNTOUCHED", async () => {
+    const entry = makeEntry();
+    const { host, writes } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({
+      statuses: [{ status: "succeeded", resultJson: { text: "fal hi", chunks: [{ text: "fal hi", timestamp: [0, 1] }], inferred_languages: [] } }],
+    });
+    const extract: AudioExtractor = async () => ({ wav: new Uint8Array([1]), durationSeconds: 2 });
+    const { local, transcribe } = await makeReadyLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    const result = await service.transcribe("m1");
+
+    expect(result.text).toBe("fal hi");
+    expect(calls.submit).toBe(1);
+    expect(calls.upload).toBe(1);
+    expect(transcribe).not.toHaveBeenCalled();
+    const record = JSON.parse(new TextDecoder().decode(writes[0]!.bytes));
+    expect(record.provider).toBe("fal");
+    expect(record.model).toBe("fal-ai/whisper");
+  });
+
+  test("keyless + local ready -> uses local.transcribe, fal is UNTOUCHED, writes provider:'local'", async () => {
+    const entry = makeEntry();
+    const { host, writes, store } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({ hasKey: async () => false });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const { local, transcribe } = await makeReadyLocal(async (pcm, sampleRate, language) => {
+      expect(sampleRate).toBe(16000);
+      expect(language).toBeUndefined();
+      return { text: "local hi", words: [{ text: "local", start: 0, end: 0.5 }, { text: "hi", start: 0.5, end: 1 }] };
+    });
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    const result = await service.transcribe("m1");
+
+    expect(result.text).toBe("local hi");
+    expect(calls.submit).toBe(0);
+    expect(calls.upload).toBe(0);
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    const record = JSON.parse(new TextDecoder().decode(writes[0]!.bytes));
+    expect(record.provider).toBe("local");
+    expect(record.model).toBe("onnx-community/whisper-base");
+    expect(store.get("m1")!.transcriptPath).toBe("media/m1.transcript.json");
+  });
+
+  test("keyless + no local configured -> the extended keyless error, no fal calls, no writes", async () => {
+    const entry = makeEntry();
+    const { host, writes, store } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({ hasKey: async () => false });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const service = new TranscriptionService(gateway, host, extract, NO_DELAY);
+
+    await expect(service.transcribe("m1")).rejects.toThrow(/download the local transcription model/);
+
+    expect(calls.submit).toBe(0);
+    expect(calls.upload).toBe(0);
+    expect(writes).toHaveLength(0);
+    expect(store.get("m1")!.generationStatus).toMatch(/^failed: /);
+  });
+
+  test("keyless + local present but idle (not ready, not downloading) -> the extended keyless error", async () => {
+    const entry = makeEntry();
+    const { host, writes } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({ hasKey: async () => false });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const local = makeIdleLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    await expect(service.transcribe("m1")).rejects.toThrow(/download the local transcription model/);
+    expect(calls.submit).toBe(0);
+    expect(writes).toHaveLength(0);
+  });
+
+  test("keyless + local failed -> the extended keyless error (no implicit retry)", async () => {
+    const entry = makeEntry();
+    const { host } = makeHost([entry]);
+    const { gateway } = makeGateway({ hasKey: async () => false });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const local = await makeFailedLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    await expect(service.transcribe("m1")).rejects.toThrow(/download the local transcription model/);
+  });
+
+  test("forceLocal ignores the key: never calls gateway.hasKey/upload/submit, even though keyed", async () => {
+    const entry = makeEntry();
+    const { host, writes } = makeHost([entry]);
+    const hasKey = vi.fn(async () => true);
+    const { gateway, calls } = makeGateway({ hasKey });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const { local, transcribe } = await makeReadyLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    const result = await service.transcribe("m1", { forceLocal: true });
+
+    expect(result.text).toBe("local hi");
+    expect(hasKey).not.toHaveBeenCalled();
+    expect(calls.submit).toBe(0);
+    expect(calls.upload).toBe(0);
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    const record = JSON.parse(new TextDecoder().decode(writes[0]!.bytes));
+    expect(record.provider).toBe("local");
+  });
+
+  test("forceLocal + local not ready -> the extended error, still never touches fal", async () => {
+    const entry = makeEntry();
+    const { host } = makeHost([entry]);
+    const hasKey = vi.fn(async () => true);
+    const { gateway, calls } = makeGateway({ hasKey });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const local = makeIdleLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    await expect(service.transcribe("m1", { forceLocal: true })).rejects.toThrow(/download the local transcription model/);
+    expect(hasKey).not.toHaveBeenCalled();
+    expect(calls.submit).toBe(0);
+  });
+
+  test("dedupe key is unchanged by forceLocal: concurrent forceLocal/non-forceLocal calls for the same (ref, language) share one run", async () => {
+    const entry = makeEntry();
+    const { host } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({ hasKey: async () => false });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const { local, transcribe } = await makeReadyLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    const [a, b] = await Promise.all([service.transcribe("m1"), service.transcribe("m1", { forceLocal: true })]);
+
+    expect(a).toEqual(b);
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(calls.submit).toBe(0);
+  });
+});
 
 describe("TranscriptionService.transcribe: cache-first", () => {
   test("cache hit: transcriptPath set + a valid cache record -> returns the full result, no gateway/extract calls at all", async () => {
@@ -163,6 +336,7 @@ describe("TranscriptionService.transcribe: miss happy path", () => {
       segments: [{ text: "hi there", start: 0, end: 1 }],
       sourceDurationSeconds: 12,
       model: "fal-ai/whisper",
+      provider: "fal",
     });
 
     const final = store.get("m1")!;

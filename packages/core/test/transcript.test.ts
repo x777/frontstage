@@ -102,6 +102,32 @@ describe("parseTranscriptRecord", () => {
     expect(parsed).toEqual(record);
   });
 
+  it("round-trips provider: fal and provider: local", () => {
+    const falRecord: TranscriptRecord = { ...result(), sourceDurationSeconds: 2, model: "fal-ai/whisper", provider: "fal" };
+    expect(parseTranscriptRecord(JSON.stringify(falRecord))).toEqual(falRecord);
+
+    const localRecord: TranscriptRecord = {
+      ...result(),
+      sourceDurationSeconds: 2,
+      model: "onnx-community/whisper-base",
+      provider: "local",
+    };
+    expect(parseTranscriptRecord(JSON.stringify(localRecord))).toEqual(localRecord);
+  });
+
+  it("an old untagged cache (no provider field) still parses -- cached-is-cached regardless of provider (#232)", () => {
+    const untagged = { ...result(), sourceDurationSeconds: 2, model: "fal-ai/whisper" };
+    const parsed = parseTranscriptRecord(JSON.stringify(untagged));
+    expect(parsed).not.toBeNull();
+    expect(parsed?.provider).toBeUndefined();
+    expect(parsed?.text).toBe(untagged.text);
+  });
+
+  it("returns null for an invalid provider value", () => {
+    const bad = { ...result(), sourceDurationSeconds: 2, model: "m", provider: "openai" };
+    expect(parseTranscriptRecord(JSON.stringify(bad))).toBeNull();
+  });
+
   it("returns null for invalid JSON", () => {
     expect(parseTranscriptRecord("{ not json")).toBeNull();
   });

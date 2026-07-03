@@ -23,6 +23,9 @@ export interface TranscriptionResult {
 export interface TranscriptRecord extends TranscriptionResult {
   sourceDurationSeconds: number;
   model: string;
+  // M14A: absent on pre-existing caches (fal was the only provider then) — cached-is-cached
+  // regardless of provider, so parsing/cache-hit logic never requires this field (#232).
+  provider?: "fal" | "local";
 }
 
 /**
@@ -94,6 +97,7 @@ export function parseTranscriptRecord(json: string): TranscriptRecord | null {
   if (typeof obj.sourceDurationSeconds !== "number") return null;
   if (typeof obj.model !== "string") return null;
   if (obj.language !== undefined && typeof obj.language !== "string") return null;
+  if (obj.provider !== undefined && obj.provider !== "fal" && obj.provider !== "local") return null;
   const words = parseWords(obj.words);
   if (words === null) return null;
   const segments = parseSegments(obj.segments);
@@ -103,6 +107,7 @@ export function parseTranscriptRecord(json: string): TranscriptRecord | null {
     language: obj.language as string | undefined,
     sourceDurationSeconds: obj.sourceDurationSeconds,
     model: obj.model,
+    provider: obj.provider as "fal" | "local" | undefined,
     words,
     segments,
   };
