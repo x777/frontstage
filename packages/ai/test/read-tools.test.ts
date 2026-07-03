@@ -379,6 +379,10 @@ function makeEmbeddingFacade(opts: { ready: boolean; queryVector?: Float32Array;
     ready: () => ready,
     ensureReady: async () => {
       calls.ensureReady += 1;
+      // A real macrotask, not a resolved microtask: if the caller's `await ensureReady()` regressed to
+      // fire-and-forget, `ready` would still be false when the caller's next line runs, and the
+      // subsequent `embedding.ready()` gate check below would (wrongly) skip the visual search.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       ready = true;
     },
     embedText: async (q) => {
@@ -553,5 +557,38 @@ describe("search_media visual model download gate", () => {
     const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
     const matches = matchesOf(text);
     expect(matches).toEqual([{ id: "media-a", name: "storm-clouds.mp4", type: "video", visualMatches: [{ timeSec: 5, score: 1 }] }]);
+  });
+
+  test("scope: 'both' + confirm: true: gate is charged exactly once, spoken results still come through", async () => {
+    const transcript: TranscriptionResult = { text: "", segments: [{ text: "storm warning", start: 0, end: 1 }], words: [] };
+    const manifest: MediaManifest = {
+      version: 2,
+      entries: [visualEntry("media-a", "clip.mp4", { embeddingPath: "media/media-a.embed", transcriptPath: "media/media-a.transcript.json" })],
+      folders: [],
+    };
+    const { facade: transcription } = makeTranscriptionFacade({ "media-a": transcript });
+    const { facade: embedding, calls } = makeEmbeddingFacade({
+      ready: false,
+      rows: { "media-a": [{ time: 5, shotStart: 0, shotEnd: 10, vector: new Float32Array([1, 0, 0]) }] },
+    });
+    const ctx: ToolContext = { store: new EditorStore(makeTimeline()), getManifest: () => manifest, newId: () => "test-id", embedding, transcription };
+    const result = await new ToolExecutor([searchMediaTool()], ctx).execute("search_media", {
+      query: "storm",
+      scope: "both",
+      confirm: true,
+    });
+    expect(result.isError).toBe(false);
+    expect(calls.ensureReady).toBe(1); // one gate/download for the whole call, not once per scope
+    const text = result.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    const matches = matchesOf(text);
+    expect(matches).toEqual([
+      {
+        id: "media-a",
+        name: "clip.mp4",
+        type: "video",
+        visualMatches: [{ timeSec: 5, score: 1 }],
+        spokenMatches: [{ start: 0, end: 1, text: "storm warning" }],
+      },
+    ]);
   });
 });

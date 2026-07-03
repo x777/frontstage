@@ -287,7 +287,7 @@ export class MediaIndexingService {
       grids.push(lumaGrid8x8(frame.rgba, frame.width, frame.height));
     }
 
-    const isSceneChange = (i: number) => i > 0 && gridDiff(grids[i - 1]!, grids[i]!) >= SCENE_DIFF_THRESHOLD;
+    const isSceneChange = (i: number) => i > 0 && gridDiff(grids[i - 1]!, grids[i]!) > SCENE_DIFF_THRESHOLD;
     const shots = assignShots(
       frames.map((f) => f.timeSec),
       isSceneChange,

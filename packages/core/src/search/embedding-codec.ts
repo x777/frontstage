@@ -6,7 +6,11 @@
 // Deviation from Swift: `modelVersion`/`samplerVersion` are strings here (a resolved checkpoint id /
 // sampler version tag), not Swift's integer version numbers — the JS model ecosystem identifies
 // checkpoints by string, not an incrementing int. This only affects the JSON header payload, not the
-// fixed binary row layout, so it doesn't change PALMEMB1's on-disk shape.
+// fixed binary row layout, so it doesn't change PALMEMB1's on-disk shape. Consequence: a `.embed` file
+// still does NOT cross-decode between Swift and TS — Swift's JSONDecoder rejects a string
+// modelVersion/samplerVersion and TS's parseHeader rejects a JSON number for the same fields, so each
+// side can only read files it wrote itself. Harmless today (`.embed` is a project-local derived file,
+// never shared across machines/platforms), but worth knowing if that ever changes.
 
 const MAGIC = "PALMEMB1";
 const MAGIC_BYTES = new TextEncoder().encode(MAGIC);

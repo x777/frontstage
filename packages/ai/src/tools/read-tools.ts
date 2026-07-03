@@ -140,9 +140,9 @@ export function searchMediaTool(): ToolSpec {
     name: "search_media",
     description:
       "Searches media manifest entries. scope='visual' matches by semantic similarity to the query over the indexed " +
-      "visual library (SigLIP embeddings of sampled frames), falling back to name matching (case-insensitive substring) " +
-      "for entries without a visual index; if the visual model isn't downloaded yet, the first visual/both search asks " +
-      "for confirmation (confirm: true) before starting the one-time download. " +
+      "visual library (SigLIP embeddings of sampled frames), plus name matching (case-insensitive substring) which " +
+      "always runs over every entry regardless of visual-index status; if the visual model isn't downloaded yet, the " +
+      "first visual/both search asks for confirmation (confirm: true) before starting the one-time download. " +
       "scope='spoken' matches cached transcript text (case/diacritic-insensitive, never transcribes); " +
       "scope='both' (default) unions the two.",
     inputSchema: z.object({

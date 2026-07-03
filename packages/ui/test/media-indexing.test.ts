@@ -232,6 +232,63 @@ describe("MediaIndexingService: per-entry pipeline (sample -> detect -> embed ->
     expect(events).toEqual([`write:${embeddingRelativePath("a")}`, "patch:a"]);
   });
 
+  test("scene-change threshold is strict: a diff of exactly 12.0 does not start a new shot", async () => {
+    const entry = videoEntry("a", { duration: 11, sourceWidth: 100, sourceHeight: 100 });
+    expect(candidateTimes({ durationSec: 11, longEdgePx: 100 })).toEqual([1, 3, 5, 7, 9]);
+
+    const { host, writes } = makeHost([entry]);
+    // t=1..7 are identical (diff 0 — well under the 8s floor measured from t=1, so 3/5/7 are dropped).
+    // t=9's diff from t=7 is exactly 12.0 (SCENE_DIFF_THRESHOLD): Swift's strict `>` keeps this the
+    // same shot — only the 8s coverage floor (9 - 1 == 8) re-samples it. A regression to `>=` would
+    // (wrongly) start a new shot at t=9 instead.
+    const { tap, tapCalls } = makeTapFromGrays({ a: { 1: 100, 3: 100, 5: 100, 7: 100, 9: 112 } });
+    const embedding = makeEmbedding();
+    const { openMedia } = makeOpenMedia();
+    const svc = new MediaIndexingService({ library: host, embedding, sampleFrames: tap, samplerVersion: SAMPLER_VERSION, openMedia, ...FAST });
+
+    svc.start();
+    await waitFor(() => expect(writes).toHaveLength(1));
+
+    expect(tapCalls).toEqual([{ id: "a", times: [1, 3, 5, 7, 9] }]);
+    expect(embedding.embedCalls).toHaveLength(2); // t=1 (shot start) + t=9 (coverage-floor re-sample)
+
+    const decoded = decodeEmbeddings(writes[0]!.bytes)!;
+    expect(decoded.rows).toEqual([
+      { time: 1, shotStart: 0, shotEnd: 11, vector: expect.any(Float32Array) },
+      { time: 9, shotStart: 0, shotEnd: 11, vector: expect.any(Float32Array) }, // same shot as t=1, not a new one
+    ]);
+  });
+
+  test("multi-row trailing shot: every row of the trailing shot gets the shotEnd patch, not just the first", async () => {
+    const entry = videoEntry("a", { duration: 19, sourceWidth: 100, sourceHeight: 100 });
+    expect(candidateTimes({ durationSec: 19, longEdgePx: 100 })).toEqual([1, 3, 5, 7, 9, 11, 13, 15, 17]);
+
+    const { host, writes } = makeHost([entry]);
+    // Shot 0: just t=1 (gray 100). Scene change at t=3 (gray 200, diff 100) starts shot 1 (shotStart=3),
+    // which stays gray 200 (diff 0) for the rest of the clip — no further scene changes. Inside shot 1,
+    // the 8s coverage floor re-samples once more at t=11 (11-3==8), giving the trailing shot 2 kept rows
+    // (t=3, t=11). Both must get shotEnd patched to entry.duration; shot 0 (non-trailing) must not.
+    const { tap, tapCalls } = makeTapFromGrays({
+      a: { 1: 100, 3: 200, 5: 200, 7: 200, 9: 200, 11: 200, 13: 200, 15: 200, 17: 200 },
+    });
+    const embedding = makeEmbedding();
+    const { openMedia } = makeOpenMedia();
+    const svc = new MediaIndexingService({ library: host, embedding, sampleFrames: tap, samplerVersion: SAMPLER_VERSION, openMedia, ...FAST });
+
+    svc.start();
+    await waitFor(() => expect(writes).toHaveLength(1));
+
+    expect(tapCalls).toEqual([{ id: "a", times: [1, 3, 5, 7, 9, 11, 13, 15, 17] }]);
+    expect(embedding.embedCalls).toHaveLength(3); // t=1, t=3 (scene change), t=11 (floor re-sample)
+
+    const decoded = decodeEmbeddings(writes[0]!.bytes)!;
+    expect(decoded.rows).toEqual([
+      { time: 1, shotStart: 0, shotEnd: 3, vector: expect.any(Float32Array) }, // non-trailing shot: unpatched
+      { time: 3, shotStart: 3, shotEnd: 19, vector: expect.any(Float32Array) }, // trailing shot, row 1: patched
+      { time: 11, shotStart: 3, shotEnd: 19, vector: expect.any(Float32Array) }, // trailing shot, row 2: patched
+    ]);
+  });
+
   test("image entry: exactly one embedding row with a zero-length shot range", async () => {
     const entry = imageEntry("pic");
     const { host, writes } = makeHost([entry]);
