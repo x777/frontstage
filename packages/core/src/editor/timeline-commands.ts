@@ -247,8 +247,9 @@ export function clipFromAsset(
   fps: number,
   startFrame: number,
   newId: () => string = () => crypto.randomUUID(),
+  durationFramesOverride?: number,
 ): Clip {
-  const durationFrames = Math.max(1, Math.round(entry.duration * fps));
+  const durationFrames = durationFramesOverride ?? Math.max(1, Math.round(entry.duration * fps));
   return {
     id: newId(),
     mediaRef: entry.id,
@@ -293,6 +294,7 @@ export function addClipCommand(
   fps: number,
   coalesceKey?: string,
   newId: () => string = () => crypto.randomUUID(),
+  durationFramesOverride?: number,
 ): Command {
   return {
     label: "Add Clip",
@@ -300,7 +302,7 @@ export function addClipCommand(
     apply(timeline: Timeline): Timeline {
       const clampedStart = Math.max(0, startFrame);
       const shouldLink = entry.type === "video" && entry.hasAudio === true;
-      const base = clipFromAsset(entry, fps, clampedStart, newId); // newId() #1 = visual clip id
+      const base = clipFromAsset(entry, fps, clampedStart, newId, durationFramesOverride); // newId() #1 = visual clip id
       const linkGroupId = shouldLink ? newId() : undefined;        // newId() #2 = linkGroupId
       const clip: Clip = { ...base, linkGroupId };
 
@@ -325,7 +327,7 @@ export function addClipCommand(
 
       // Place the linked audio half on a resolved-or-created audio track.
       const audioClip: Clip = {
-        ...clipFromAsset(entry, fps, clampedStart, newId),
+        ...clipFromAsset(entry, fps, clampedStart, newId, durationFramesOverride),
         mediaType: "audio",
         sourceClipType: entry.type,
         durationFrames: clip.durationFrames,

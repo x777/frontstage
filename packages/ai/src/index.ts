@@ -27,6 +27,7 @@ export {
   importTypeForExtension,
   extensionForImportUrl,
 } from "./tools/library-tools.js";
+export { applyLayoutTool } from "./tools/layout-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { exportProjectTool } from "./tools/export-tools.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";

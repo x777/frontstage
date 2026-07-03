@@ -32,6 +32,7 @@ const EXPECTED_NAMES = [
   "list_models",
   "ripple_delete_ranges",
   "insert_clips",
+  "apply_layout",
   "apply_color",
   "apply_effect",
   "inspect_color",
@@ -106,15 +107,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 37 specs", () => {
+  test("returns exactly 38 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(37);
+    expect(catalog).toHaveLength(38);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(37);
+    expect(new Set(names).size).toBe(38);
   });
 
   test("names match the expected list exactly", () => {

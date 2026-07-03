@@ -1,5 +1,5 @@
 /**
- * buildCatalog assembles all 37 currently available tools.
+ * buildCatalog assembles all 38 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - inspect_timeline    — plan 6.3 (deep render analysis)
@@ -8,6 +8,7 @@
 import type { ToolSpec } from "./types.js";
 import { getTimelineTool, getMediaTool, inspectMediaTool, searchMediaTool } from "./read-tools.js";
 import { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClipsTool, trimClipsTool } from "./clip-tools.js";
+import { applyLayoutTool } from "./layout-tools.js";
 import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./property-tools.js";
 import { removeTracksTool } from "./track-tools.js";
 import { generateImageTool } from "./generate-image-tool.js";
@@ -46,6 +47,7 @@ export function buildCatalog(): ToolSpec[] {
     trimClipsTool(),
     rippleDeleteRangesTool(),
     insertClipsTool(),
+    applyLayoutTool(),
     // Property / keyframe / text tools
     setClipPropertiesTool(),
     setKeyframesTool(),

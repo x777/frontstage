@@ -46,6 +46,7 @@ export * from "./editor/ripple-commands.js";
 export * from "./editor/effect-commands.js";
 export * from "./editor/selection.js";
 export * from "./editor/store-actions.js";
+export * from "./layout/video-layout.js";
 export * from "./timeline/geometry.js";
 export * from "./timeline/overwrite.js";
 export * from "./timeline/snap.js";
