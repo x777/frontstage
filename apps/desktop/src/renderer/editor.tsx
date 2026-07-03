@@ -6,7 +6,7 @@ import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines } from "@palmier/ai";
-import type { GenerationHost, StartJobArgs, TranscriptionHost } from "@palmier/ai";
+import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@palmier/ai";
 
 declare global {
   interface Window {
@@ -17,9 +17,17 @@ declare global {
       onBridgeRequest(cb: (msg: { id: number; kind: string; payload?: unknown }) => void): void;
       bridgeRespond(id: number, payload: { result?: unknown; error?: string }): void;
     };
+    // M13B T1 project-nav registry (get_projects/open_project/new_project's desktop facade).
+    desktopProjectNav?: {
+      list(): Promise<Array<{ id: string; name: string; path: string; lastOpenedAt: string; isAccessible: boolean }>>;
+      resolve(id: string): Promise<string | null>;
+      create(name: string): Promise<{ path: string } | { error: string }>;
+      upsert(projectPath: string, name: string): Promise<{ id: string; name: string; path: string; lastOpenedAt: string }>;
+      authorizePath(projectPath: string): Promise<{ path: string } | { error: string }>;
+    };
   }
 }
-import { DesktopGateway } from "./desktop-gateway.js";
+import { DesktopGateway, refFor } from "./desktop-gateway.js";
 import type { DesktopProjectRef } from "./desktop-gateway.js";
 import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
@@ -217,7 +225,72 @@ const interopExportFacade = createDesktopInteropExport({
   getProjectDir: () => (session.getState().ref as DesktopProjectRef | null)?.path,
 });
 
-const executor = new ToolExecutor(buildCatalog(), {
+// Project navigation facade (M13B T1, get_projects/open_project/new_project) — desktop only, over
+// window.desktopProjectNav (the main-process registry) + the session (auto-save/open/create-as).
+// The "Now editing" chat notice (spec M13B-1) is OMITTED: the chat message model
+// (packages/ai/src/agent/conversation.ts) has no display-only row kind — role is a closed
+// "user" | "assistant" | "tool" union — so there's nowhere to post a notice excluded from model
+// context without inventing one. Approved deviation, recorded in task-1-report.md.
+
+async function autoSaveCurrentProject(): Promise<void> {
+  if (!session.isDirty()) return;
+  const saved = await session.save();
+  if (!saved) throw new Error("Couldn't save the current project before switching.");
+}
+
+async function openProjectAtPath(targetPath: string): Promise<void> {
+  await autoSaveCurrentProject();
+  const authorized = await window.desktopProjectNav!.authorizePath(targetPath);
+  if ("error" in authorized) throw new Error(authorized.error);
+  const ref = refFor(authorized.path);
+  const opened = await session.open(async () => true, ref);
+  if (!opened) throw new Error(`No project at ${authorized.path}.`);
+  await window.desktopProjectNav!.upsert(ref.path, ref.name);
+}
+
+async function openProjectById(id: string): Promise<void> {
+  const target = await window.desktopProjectNav!.resolve(id);
+  if (!target) throw new Error(`No project with id ${id}. Call get_projects for valid ids.`);
+  await openProjectAtPath(target);
+}
+
+async function createProjectByName(name: string): Promise<{ path: string }> {
+  await autoSaveCurrentProject();
+  const created = await window.desktopProjectNav!.create(name);
+  if ("error" in created) throw new Error(created.error);
+  const ref = refFor(created.path);
+  const reset = await session.newProject(async () => true);
+  if (!reset) throw new Error("Couldn't reset the current project before creating a new one.");
+  const saved = await session.saveAs(ref);
+  if (!saved) throw new Error(`Couldn't create the project at ${created.path}.`);
+  await window.desktopProjectNav!.upsert(ref.path, ref.name);
+  return { path: ref.path };
+}
+
+async function listProjects() {
+  const entries = await window.desktopProjectNav!.list();
+  const ref = session.getState().ref as DesktopProjectRef | null;
+  const projects = entries.map((e) => ({
+    id: e.id,
+    name: e.name,
+    path: e.path,
+    isOpen: ref !== null && e.path === ref.path,
+    isActive: ref !== null && e.path === ref.path,
+    isAccessible: e.isAccessible,
+  }));
+  const active = ref ? { name: session.getState().name, path: ref.path } : undefined;
+  return { projects, active };
+}
+
+function activeProjectPath(): string | undefined {
+  return (session.getState().ref as DesktopProjectRef | null)?.path;
+}
+
+const projectsFacade: ToolContext["projects"] = window.desktopProjectNav
+  ? { list: listProjects, openByPath: openProjectAtPath, openById: openProjectById, create: createProjectByName, activePath: activeProjectPath }
+  : undefined;
+
+const toolContext: ToolContext = {
   store,
   getManifest: () => library.getManifest(),
   newId: () => crypto.randomUUID(),
@@ -236,7 +309,11 @@ const executor = new ToolExecutor(buildCatalog(), {
   mediaImport: mediaImportFacade,
   interopExport: interopExportFacade,
   projectName: () => session.getState().name,
-});
+};
+// In-app agent: 38 tools, never the project-nav ones (see buildCatalog's "inApp" default).
+const executor = new ToolExecutor(buildCatalog(), toolContext);
+// MCP server only: 38 + get_projects/open_project/new_project (41) — projects facade added here only.
+const mcpExecutor = new ToolExecutor(buildCatalog("mcp"), { ...toolContext, projects: projectsFacade });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   gateway: agentGateway as any,
@@ -255,15 +332,16 @@ const mentionItems = library.getManifest().entries.map((e) => ({
   contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
 }));
 
-// Register MCP bridge handler (main↔renderer IPC)
+// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (41 tools: the 38 + project-nav)
+// backs the MCP server; the in-app agent keeps the plain 38-tool executor above.
 window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
   try {
     let result: unknown;
     if (kind === "listTools") {
-      result = toolsToMcp(executor.list());
+      result = toolsToMcp(mcpExecutor.list());
     } else if (kind === "callTool") {
       const p = payload as { name: string; args: unknown };
-      result = await executor.execute(p.name, p.args);
+      result = await mcpExecutor.execute(p.name, p.args);
     } else if (kind === "listResources") {
       result = [
         { uri: "palmier://models", name: "Models", description: "Available AI models", mimeType: "application/json" },

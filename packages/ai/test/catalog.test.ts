@@ -51,6 +51,8 @@ const EXPECTED_NAMES = [
   "export_project",
 ] as const;
 
+const MCP_ONLY_NAMES = ["get_projects", "open_project", "new_project"] as const;
+
 function makeClip(id: string) {
   return {
     id,
@@ -134,6 +136,29 @@ describe("buildCatalog", () => {
       expect(spec.inputSchema).toBeDefined();
       expect(typeof spec.run).toBe("function");
     }
+  });
+
+  test('defaults to "inApp" — buildCatalog() === buildCatalog("inApp")', () => {
+    expect(buildCatalog().map((s) => s.name)).toEqual(buildCatalog("inApp").map((s) => s.name));
+  });
+
+  test('"inApp" never includes the project-nav tools', () => {
+    const names = buildCatalog("inApp").map((s) => s.name);
+    for (const n of MCP_ONLY_NAMES) expect(names).not.toContain(n);
+  });
+
+  test('"mcp" returns exactly 41 specs: the 38 inApp tools + the 3 project-nav tools, in order', () => {
+    const mcp = buildCatalog("mcp");
+    expect(mcp).toHaveLength(41);
+    const inAppNames = buildCatalog("inApp").map((s) => s.name);
+    const mcpNames = mcp.map((s) => s.name);
+    expect(mcpNames.slice(0, 38)).toEqual(inAppNames);
+    expect(mcpNames.slice(38)).toEqual(MCP_ONLY_NAMES);
+  });
+
+  test('"mcp" names are unique', () => {
+    const names = buildCatalog("mcp").map((s) => s.name);
+    expect(new Set(names).size).toBe(41);
   });
 });
 

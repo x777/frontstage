@@ -1,5 +1,7 @@
 /**
- * buildCatalog assembles all 38 currently available tools.
+ * buildCatalog assembles the tool specs for one consumer. "inApp" (default) is the 38 tools the
+ * in-app agent and web have always had, unchanged order. "mcp" appends get_projects/open_project/
+ * new_project (41) — MCP-catalog-only, desktop-only (M13B T1, #238 ADAPTED).
  *
  * DEFERRED tools (require host interfaces from later plans):
  *   - inspect_timeline    — plan 6.3 (deep render analysis)
@@ -29,9 +31,15 @@ import {
   createMatteTool,
 } from "./library-tools.js";
 import { exportProjectTool } from "./export-tools.js";
+import { getProjectsTool, openProjectTool, newProjectTool } from "./project-tools.js";
 
-export function buildCatalog(): ToolSpec[] {
-  return [
+// mcp = inApp's 38 + the 3 project-nav tools (Swift's mcpServer/inAppAgent split, #238 ADAPTED —
+// see project-tools.ts). The in-app agent and web never see the nav tools: buildCatalog() defaults
+// to "inApp", so every pre-existing call site is unaffected.
+export type CatalogKind = "inApp" | "mcp";
+
+export function buildCatalog(kind: CatalogKind = "inApp"): ToolSpec[] {
+  const specs = [
     // Read tools
     getTimelineTool(),
     getMediaTool(),
@@ -79,4 +87,6 @@ export function buildCatalog(): ToolSpec[] {
     // Export tools
     exportProjectTool(),
   ];
+  if (kind === "mcp") specs.push(getProjectsTool(), openProjectTool(), newProjectTool());
+  return specs;
 }

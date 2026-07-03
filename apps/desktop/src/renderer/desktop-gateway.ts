@@ -34,7 +34,7 @@ declare global {
   }
 }
 
-function refFor(p: string): DesktopProjectRef {
+export function refFor(p: string): DesktopProjectRef {
   const name = p.split(/[\\/]/).pop()!;
   return { id: p, name, path: p };
 }

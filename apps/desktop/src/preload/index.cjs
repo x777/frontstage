@@ -59,6 +59,14 @@ contextBridge.exposeInMainWorld("desktopMcp", {
   bridgeRespond: (id, payload) => ipcRenderer.send("mcp:response", { id, ...payload }),
 });
 
+contextBridge.exposeInMainWorld("desktopProjectNav", {
+  list: () => ipcRenderer.invoke("projects:list"),
+  resolve: (id) => ipcRenderer.invoke("projects:resolve", id),
+  create: (name) => ipcRenderer.invoke("projects:create", name),
+  upsert: (projectPath, name) => ipcRenderer.invoke("projects:upsert", { path: projectPath, name }),
+  authorizePath: (p) => ipcRenderer.invoke("project:authorizePath", p),
+});
+
 contextBridge.exposeInMainWorld("desktopProject", {
   pickOpen: () => ipcRenderer.invoke("project:pickOpen"),
   pickSaveAs: (n) => ipcRenderer.invoke("project:pickSaveAs", n),

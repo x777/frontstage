@@ -308,6 +308,69 @@ ipcMain.handle("project:removeRecent", (_e, id) => {
   rebuildMenu();
 });
 
+// ── Project navigation IPC (M13B T1: get_projects/open_project/new_project's desktop registry) ──
+// recent-projects.json (stable uuids, most-recent-first) is separate from recent.json above (the
+// File > Open Recent menu, keyed by path) — this one backs the MCP nav tools' facade only.
+
+let _projectRegistryMod = null;
+async function loadProjectRegistry() {
+  if (!_projectRegistryMod) _projectRegistryMod = await import("./project-registry.mjs");
+  return _projectRegistryMod;
+}
+
+function defaultProjectsDir() {
+  return path.join(app.getPath("documents"), "Palmier Projects");
+}
+
+ipcMain.handle("projects:list", async () => {
+  const reg = await loadProjectRegistry();
+  return reg.registryList(app.getPath("userData")).map((e) => ({ ...e, isAccessible: fs.existsSync(e.path) }));
+});
+
+ipcMain.handle("projects:resolve", async (_e, id) => {
+  const reg = await loadProjectRegistry();
+  const entry = reg.registryResolve(app.getPath("userData"), id);
+  return entry ? entry.path : null;
+});
+
+// Returns {error} rather than throwing: ipcRenderer.invoke rejections get an
+// "Error invoking remote method ...:" prefix slapped on by Electron, which would corrupt the
+// Swift-verbatim message text these tools surface to the agent — same reasoning as the other
+// {error}-shaped handlers above (e.g. gen:falSubmit).
+ipcMain.handle("projects:create", async (_e, name) => {
+  const reg = await loadProjectRegistry();
+  const validated = reg.validateProjectName(name);
+  if (!validated.ok) {
+    return { error: `“${validated.name}” isn't a valid project name. Use a plain name without slashes or path components.` };
+  }
+  const dir = defaultProjectsDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(dir, validated.name);
+  if (fs.existsSync(target)) {
+    return { error: `A project named “${validated.name}” already exists in that folder. Pick another name.` };
+  }
+  fs.mkdirSync(target, { recursive: true });
+  authorize(target);
+  return { path: target };
+});
+
+ipcMain.handle("projects:upsert", async (_e, { path: projectPath, name }) => {
+  const reg = await loadProjectRegistry();
+  return reg.registryUpsert(app.getPath("userData"), projectPath, name);
+});
+
+// Validates existence + authorizes an explicit dir with NO save/open picker — the un-picker'd
+// trust decision approved for #238's desktop-only MCP nav (arbitrary absolute paths, same as
+// recent.json's startup authorization above).
+ipcMain.handle("project:authorizePath", async (_e, p) => {
+  const resolved = path.resolve(p);
+  if (!fs.existsSync(resolved)) {
+    return { error: `No project at ${resolved}.` };
+  }
+  authorize(resolved);
+  return { path: resolved };
+});
+
 // ── Window state persistence ─────────────────────────────────────────────────
 
 function windowStatePath() {

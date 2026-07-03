@@ -121,8 +121,10 @@ export class ProjectSession {
     return true;
   }
 
-  async saveAs(): Promise<boolean> {
-    const r = await this.gateway.pickSaveAs(this.state.name);
+  // ref bypasses the picker — an explicit target (e.g. the MCP nav facade opening/creating at a
+  // fixed path), same convention as open()'s optional ref.
+  async saveAs(ref?: ProjectRef): Promise<boolean> {
+    const r = ref ?? (await this.gateway.pickSaveAs(this.state.name));
     if (!r) return false;
     const newBound = await this.gateway.bind(r);
 

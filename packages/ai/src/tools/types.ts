@@ -96,6 +96,21 @@ export interface ToolContext {
     cachedEmbeddings(mediaRef: string): Promise<EmbeddingRow[] | null>;
     modelInfo: EmbeddingModelInfo;
   };
+  // Project navigation facade (M13B T1, get_projects/open_project/new_project) — desktop only,
+  // wired over IPC to the main-process recent-projects registry. Absent on web and in the in-app
+  // agent's context (those tools are MCP-catalog-only regardless). Single-window/in-place model:
+  // there is at most one open project, so isOpen === isActive everywhere in list().
+  projects?: {
+    list(): Promise<{
+      projects: Array<{ id: string; name: string; path: string; isOpen: boolean; isActive: boolean; isAccessible: boolean }>;
+      active?: { name: string; path: string };
+    }>;
+    // path is tilde-expanded upstream (by the tool); auto-save-first happens inside.
+    openByPath(path: string): Promise<void>;
+    openById(id: string): Promise<void>;
+    create(name: string): Promise<{ path: string }>;
+    activePath(): string | undefined;
+  };
 }
 
 export interface ToolSpec {

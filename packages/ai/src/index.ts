@@ -28,8 +28,10 @@ export {
   extensionForImportUrl,
 } from "./tools/library-tools.js";
 export { applyLayoutTool } from "./tools/layout-tools.js";
+export type { CatalogKind } from "./tools/catalog.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { exportProjectTool } from "./tools/export-tools.js";
+export { getProjectsTool, openProjectTool, newProjectTool } from "./tools/project-tools.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";
 export { generateVideoTool, upscaleMediaTool, generateAudioTool, listModelsTool } from "./tools/generate-tools.js";
 export { ImageGenerator } from "./agent/image-generator.js";
