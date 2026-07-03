@@ -1,8 +1,7 @@
 /**
- * buildCatalog assembles all 34 currently available tools.
+ * buildCatalog assembles all 35 currently available tools.
  *
  * DEFERRED tools (require host interfaces from later plans):
- *   - import_media        — plan 6.2 (media import pipeline)
  *   - inspect_timeline    — plan 6.3 (deep render analysis)
  */
 
@@ -25,6 +24,7 @@ import {
   renameFolderTool,
   deleteMediaTool,
   deleteFolderTool,
+  importMediaTool,
 } from "./library-tools.js";
 
 export function buildCatalog(): ToolSpec[] {
@@ -70,5 +70,6 @@ export function buildCatalog(): ToolSpec[] {
     renameFolderTool(),
     deleteMediaTool(),
     deleteFolderTool(),
+    importMediaTool(),
   ];
 }

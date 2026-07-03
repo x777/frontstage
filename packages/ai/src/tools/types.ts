@@ -48,6 +48,17 @@ export interface ToolContext {
     deleteFolders(ids: string[]): { removedAssetIds: string[] };
     deleteEntries(ids: string[]): void;
   };
+  // Placeholder-first import facade backing import_media (M12A T3). Each method registers a
+  // placeholder synchronously and finalizes it asynchronously (probe → finalizeGenerated /
+  // markGenerationFailed) — the tool returns as soon as the facade call resolves with the id(s).
+  // mimeType is an extra (beyond the plan's literal signature) optional override for fromUrl so a
+  // signed URL with no usable path extension can still be typed, mirroring the Swift override.
+  mediaImport?: {
+    fromBytes(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }>;
+    fromUrl(url: string, name?: string, folderId?: string, mimeType?: string): Promise<{ assetId: string }>;
+    // Desktop only — a directory recurses, mirroring its structure as folders.
+    fromPath?(absPath: string, folderId?: string): Promise<{ assetIds: string[] }>;
+  };
 }
 
 export interface ToolSpec {

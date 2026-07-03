@@ -1,7 +1,8 @@
-import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade } from "@palmier/core";
-import type { MediaFolder, MediaManifest, MediaManifestEntry } from "@palmier/core";
+import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry } from "@palmier/core";
+import type { ClipType, MediaFolder, MediaManifest, MediaManifestEntry } from "@palmier/core";
 import type { MediaGateway } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
+import { extensionForImportMime, importTypeForExtension } from "@palmier/ai";
 
 interface LibrarySnapshot {
   entries: MediaManifestEntry[];
@@ -262,37 +263,7 @@ export class MediaLibrary {
         if (!type) continue;
 
         const blob = file as Blob;
-        let duration = 5;
-        let sourceWidth: number | undefined;
-        let sourceHeight: number | undefined;
-        let hasAudio: boolean | undefined;
-        let thumbUrl: string | undefined;
-
-        if (type === "video" || type === "audio") {
-          const result = await withVideoElement(blob, type, async (el) => {
-            const probed = await probeMediaElement(el, type);
-            let thumb: string | undefined;
-            if (type === "video") {
-              thumb = await captureVideoThumbnail(el, probed.duration);
-            }
-            return { ...probed, thumb };
-          });
-          duration = result.duration;
-          sourceWidth = result.width;
-          sourceHeight = result.height;
-          hasAudio = result.hasAudio;
-          thumbUrl = result.thumb;
-        } else if (type === "image") {
-          duration = 5;
-          const bmp = await createImageBitmap(blob);
-          try {
-            sourceWidth = bmp.width;
-            sourceHeight = bmp.height;
-            thumbUrl = bitmapToThumbnail(bmp);
-          } finally {
-            bmp.close();
-          }
-        }
+        const probed = await probeMediaBlob(blob, type);
 
         const id = crypto.randomUUID();
         const fileExt = ext || defaultExtForType(type);
@@ -302,15 +273,15 @@ export class MediaLibrary {
           name: file.name,
           type,
           source: { kind: "project", relativePath },
-          duration,
-          ...(sourceWidth !== undefined ? { sourceWidth } : {}),
-          ...(sourceHeight !== undefined ? { sourceHeight } : {}),
-          ...(hasAudio !== undefined ? { hasAudio } : {}),
+          duration: probed.duration,
+          ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
+          ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
+          ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
         };
 
         const bytes = new Uint8Array(await file.arrayBuffer());
         this._bytes.set(relativePath, bytes);
-        if (thumbUrl) this.thumbnails.set(id, thumbUrl);
+        if (probed.thumb) this.thumbnails.set(id, probed.thumb);
         this._entries.push(entry);
         added.push(entry);
       } catch {
@@ -320,6 +291,42 @@ export class MediaLibrary {
 
     if (added.length > 0) this.emit();
     return added;
+  }
+
+  // Sets/replaces an entry's thumbnail data URL (M12A T3: host-side url/path import flows finish
+  // outside this class — via IPC/proxy — so they need a public seam into the private thumbnails map).
+  setThumbnail(id: string, dataUrl: string): void {
+    this.thumbnails.set(id, dataUrl);
+  }
+
+  // import_media's bytes source (both hosts, M12A T3): placeholder-first — registers the
+  // placeholder synchronously and returns; probe + finalize happen in the background.
+  async importBytes(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }> {
+    const ext = extensionForImportMime(mimeType);
+    const type = ext ? importTypeForExtension(ext) : undefined;
+    if (!ext || !type) throw new Error(`Unsupported mimeType '${mimeType}'`);
+
+    const id = crypto.randomUUID();
+    const entry = createImportPlaceholderEntry({ id, type, name: name ?? "Imported asset", ext, folderId });
+    this.addPlaceholder(entry);
+    void this.finishBytesImport(id, bytes, mimeType, type);
+    return { assetId: id };
+  }
+
+  private async finishBytesImport(id: string, bytes: Uint8Array, mimeType: string, type: ClipType): Promise<void> {
+    try {
+      const blob = new Blob([bytes as BlobPart], { type: mimeType });
+      const probed = await probeMediaBlob(blob, type);
+      if (probed.thumb) this.thumbnails.set(id, probed.thumb);
+      this.finalizeGenerated(id, bytes, {
+        duration: probed.duration,
+        ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
+        ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
+        ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
+      });
+    } catch (err) {
+      this.markGenerationFailed([id], err instanceof Error ? err.message : String(err));
+    }
   }
 }
 
@@ -336,6 +343,43 @@ interface ProbeResult {
   height?: number;
   hasAudio?: boolean;
   thumb?: string;
+}
+
+export interface ProbedMedia {
+  duration: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  hasAudio?: boolean;
+  thumb?: string;
+}
+
+// Shared by importFiles (OS file drop) and import_media's host flows (bytes/url/path) — one probe
+// implementation, reused everywhere a raw Blob needs duration/dimensions/thumbnail before an entry
+// can be finalized.
+export async function probeMediaBlob(blob: Blob, type: ClipType): Promise<ProbedMedia> {
+  if (type === "video" || type === "audio") {
+    const result = await withVideoElement(blob, type, async (el) => {
+      const probed = await probeMediaElement(el, type);
+      const thumb = type === "video" ? await captureVideoThumbnail(el, probed.duration) : undefined;
+      return { ...probed, thumb };
+    });
+    return {
+      duration: result.duration,
+      sourceWidth: result.width,
+      sourceHeight: result.height,
+      hasAudio: result.hasAudio,
+      thumb: result.thumb,
+    };
+  }
+  if (type === "image") {
+    const bmp = await createImageBitmap(blob);
+    try {
+      return { duration: 5, sourceWidth: bmp.width, sourceHeight: bmp.height, thumb: bitmapToThumbnail(bmp) };
+    } finally {
+      bmp.close();
+    }
+  }
+  return { duration: 5 };
 }
 
 async function withVideoElement<T>(

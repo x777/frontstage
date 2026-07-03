@@ -806,6 +806,244 @@ describe("createProxyServer — fal routes without falKey configured", () => {
   });
 });
 
+// ── POST /import/download — SSRF guard (general host, M12A T3) ──────────────
+
+describe("createProxyServer — POST /import/download", () => {
+  let proxy: { server: http.Server; port: number };
+
+  beforeAll(async () => {
+    proxy = await startProxy(0);
+  });
+
+  afterAll(() => {
+    proxy.server.close();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function postImport(url: string): Promise<{ status: number; headers: http.IncomingMessage["headers"]; body: string }> {
+    const body = JSON.stringify({ url });
+    return httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/import/download",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      },
+      body,
+    );
+  }
+
+  const deniedHosts = [
+    ["a public literal IPv4 host", "https://8.8.8.8/x"],
+    ["localhost", "https://localhost/x"],
+    ["a .localhost host", "https://foo.localhost/x"],
+    ["loopback 127.x", "https://127.0.0.1/x"],
+    ["private 10.x", "https://10.1.2.3/x"],
+    ["private 172.16-31.x (172.16.0.1)", "https://172.16.0.1/x"],
+    ["private 172.16-31.x (172.31.255.255)", "https://172.31.255.255/x"],
+    ["private 192.168.x", "https://192.168.1.1/x"],
+    ["link-local 169.254.x (cloud metadata)", "https://169.254.169.254/latest/meta-data"],
+    ["literal IPv6 [::1]", "https://[::1]/x"],
+  ] as const;
+
+  for (const [label, url] of deniedHosts) {
+    it(`${label} → 400, no upstream fetch attempted`, async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const res = await postImport(url);
+      expect(res.status).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  }
+
+  it("http (not https) → 400, no upstream fetch attempted", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const res = await postImport("http://example.com/x.mp4");
+    expect(res.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("embedded credentials → 400, no upstream fetch attempted", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const res = await postImport("https://user:pass@example.com/x.mp4");
+    expect(res.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("missing url → 400", async () => {
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/import/download",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": 2 },
+      },
+      "{}",
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("invalid JSON body → 400", async () => {
+    const res = await httpRequest(
+      {
+        host: "127.0.0.1",
+        port: proxy.port,
+        path: "/import/download",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": 5 },
+      },
+      "not json",
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("happy path: allowed https host is fetched, media content-type piped through", async () => {
+    let capturedUrl: string | undefined;
+    vi.stubGlobal("fetch", async (url: string) => {
+      capturedUrl = url;
+      return {
+        status: 200,
+        headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "video/mp4" : null) },
+        body: (async function* () {
+          yield new TextEncoder().encode("fake-video-bytes");
+        })(),
+      };
+    });
+    const res = await postImport("https://cdn.example.com/clip.mp4");
+    expect(capturedUrl).toBe("https://cdn.example.com/clip.mp4");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("video/mp4");
+    expect(res.headers["content-disposition"]).toBe("attachment");
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.body).toBe("fake-video-bytes");
+  });
+
+  it("a non-media content-type is neutralized to application/octet-stream", async () => {
+    vi.stubGlobal("fetch", async () => ({
+      status: 200,
+      headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "text/html" : null) },
+      body: (async function* () {
+        yield new TextEncoder().encode("<script>boom</script>");
+      })(),
+    }));
+    const res = await postImport("https://cdn.example.com/clip.mp4");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/octet-stream");
+  });
+
+  it("a redirect to a denied host → 400 (per-hop SSRF re-validation), target never fetched", async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      fetched.push(url);
+      return {
+        status: 302,
+        headers: { get: (k: string) => (k.toLowerCase() === "location" ? "https://169.254.169.254/latest/meta-data" : null) },
+        body: null,
+      };
+    });
+    const res = await postImport("https://cdn.example.com/clip.mp4");
+    expect(res.status).toBe(400);
+    expect(fetched).toHaveLength(1); // the redirect target was never fetched
+  });
+
+  it("an allowed redirect hop is followed", async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      fetched.push(url);
+      if (fetched.length === 1) {
+        return {
+          status: 302,
+          headers: { get: (k: string) => (k.toLowerCase() === "location" ? "https://cdn2.example.com/real.mp4" : null) },
+          body: null,
+        };
+      }
+      return {
+        status: 200,
+        headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? "video/mp4" : null) },
+        body: (async function* () {
+          yield new TextEncoder().encode("real-bytes");
+        })(),
+      };
+    });
+    const res = await postImport("https://cdn.example.com/clip.mp4");
+    expect(fetched).toEqual(["https://cdn.example.com/clip.mp4", "https://cdn2.example.com/real.mp4"]);
+    expect(res.status).toBe(200);
+    expect(res.body).toBe("real-bytes");
+  });
+
+  it("more than 3 redirect hops → 502", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      return {
+        status: 302,
+        headers: { get: (k: string) => (k.toLowerCase() === "location" ? "https://cdn.example.com/next" : null) },
+        body: null,
+      };
+    });
+    const res = await postImport("https://cdn.example.com/clip.mp4");
+    expect(res.status).toBe(502);
+    expect(calls).toBe(4); // initial + 3 hops, then gives up
+  });
+
+  it("oversize (Content-Length over the cap) → 413, no bytes streamed", async () => {
+    const overCap = 5 * 1024 * 1024 * 1024 + 1;
+    vi.stubGlobal("fetch", async () => ({
+      status: 200,
+      headers: {
+        get: (k: string) => {
+          const kl = k.toLowerCase();
+          if (kl === "content-length") return String(overCap);
+          if (kl === "content-type") return "video/mp4";
+          return null;
+        },
+      },
+      body: (async function* () {
+        yield new TextEncoder().encode("should never be read");
+      })(),
+    }));
+    const res = await postImport("https://cdn.example.com/huge.mp4");
+    expect(res.status).toBe(413);
+  });
+});
+
+describe("createProxyServer — POST /import/download — proxyToken auth", () => {
+  it("bad proxyToken → 401, upstream not called", async () => {
+    const gated = await startProxy(0, { proxyToken: "right-token" });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const body = JSON.stringify({ url: "https://cdn.example.com/clip.mp4" });
+      const res = await httpRequest(
+        {
+          host: "127.0.0.1",
+          port: gated.port,
+          path: "/import/download",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body),
+            Authorization: "Bearer wrong-token",
+          },
+        },
+        body,
+      );
+      expect(res.status).toBe(401);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      gated.server.close();
+    }
+  });
+});
+
 // ── Trailing-slash base URL normalization ────────────────────────────────────
 
 describe("createProxyServer — trailing-slash base URL normalization", () => {

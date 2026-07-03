@@ -19,6 +19,8 @@ import {
   renameFolderTool,
   deleteMediaTool,
   deleteFolderTool,
+  importMediaTool,
+  IMPORT_BYTES_MAX_BASE64_LENGTH,
   type ToolContext,
 } from "../src/index.js";
 
@@ -550,5 +552,282 @@ describe("delete_folder", () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(/folderId not found: missing/);
     expect(lib.folders).toEqual([folder]);
+  });
+});
+
+// ── import_media ──────────────────────────────────────────────────────────────
+
+function b64(bytes: number[]): string {
+  return Buffer.from(bytes).toString("base64");
+}
+
+class FakeMediaImport {
+  calls: { kind: string; args: unknown[] }[] = [];
+  fromBytesResult: { assetId: string } | Error = { assetId: "asset-bytes" };
+  fromUrlResult: { assetId: string } | Error = { assetId: "asset-url" };
+  fromPathResult: { assetIds: string[] } | Error = { assetIds: ["asset-path-1"] };
+  hasFromPath = true;
+
+  async fromBytes(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }> {
+    this.calls.push({ kind: "fromBytes", args: [bytes, mimeType, name, folderId] });
+    if (this.fromBytesResult instanceof Error) throw this.fromBytesResult;
+    return this.fromBytesResult;
+  }
+
+  async fromUrl(url: string, name?: string, folderId?: string, mimeType?: string): Promise<{ assetId: string }> {
+    this.calls.push({ kind: "fromUrl", args: [url, name, folderId, mimeType] });
+    if (this.fromUrlResult instanceof Error) throw this.fromUrlResult;
+    return this.fromUrlResult;
+  }
+
+  get fromPath(): ((absPath: string, folderId?: string) => Promise<{ assetIds: string[] }>) | undefined {
+    if (!this.hasFromPath) return undefined;
+    return async (absPath: string, folderId?: string) => {
+      this.calls.push({ kind: "fromPath", args: [absPath, folderId] });
+      if (this.fromPathResult instanceof Error) throw this.fromPathResult;
+      return this.fromPathResult;
+    };
+  }
+}
+
+function makeImportCtx(mediaImport: FakeMediaImport | undefined, library?: FakeLibrary): ToolContext {
+  return {
+    store: new EditorStore(makeTimeline()),
+    getManifest: () => (library ?? new FakeLibrary()).getManifest(),
+    newId: () => `gen-${Math.random()}`,
+    ...(library ? { library } : {}),
+    ...(mediaImport ? { mediaImport } : {}),
+  };
+}
+
+describe("import_media — facade absent", () => {
+  test("errors cleanly when ctx.mediaImport is absent", async () => {
+    const ctx = makeImportCtx(undefined);
+    const result = await importMediaTool().run({ source: { bytes: b64([1, 2, 3]), mimeType: "image/png" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/media import is not available/);
+  });
+});
+
+describe("import_media — source validation", () => {
+  test("missing source: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({}, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Missing required 'source'/);
+  });
+
+  test("neither url/path/bytes set: rejected (got 0)", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: {} }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/exactly one.*got 0/);
+  });
+
+  test("both url and bytes set: rejected (got 2)", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run(
+      { source: { url: "https://example.com/a.mp4", bytes: b64([1]), mimeType: "video/mp4" } },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/exactly one.*got 2/);
+  });
+
+  test("unknown folderId (ctx.library present): rejected, facade not called", async () => {
+    const mediaImport = new FakeMediaImport();
+    const lib = new FakeLibrary();
+    const ctx = makeImportCtx(mediaImport, lib);
+    const result = await importMediaTool().run(
+      { source: { bytes: b64([1, 2, 3]), mimeType: "image/png" }, folderId: "missing" },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/folderId not found: missing/);
+    expect(mediaImport.calls).toHaveLength(0);
+  });
+});
+
+describe("import_media — bytes", () => {
+  test("mimeType required when bytes set", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { bytes: b64([1, 2, 3]) } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/mimeType is required/);
+  });
+
+  test("base64 over the cap: rejected before decoding", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const huge = "A".repeat(IMPORT_BYTES_MAX_BASE64_LENGTH + 1);
+    const result = await importMediaTool().run({ source: { bytes: huge, mimeType: "image/png" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/too large/);
+  });
+
+  test("unsupported mimeType: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { bytes: b64([1]), mimeType: "application/pdf" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Unsupported mimeType 'application\/pdf'/);
+  });
+
+  test("json/Lottie mimeType: rejected with the Lottie-deviation message", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { bytes: b64([1]), mimeType: "application/json" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Lottie.*not supported/);
+  });
+
+  test("invalid base64: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { bytes: "not-base64!!!", mimeType: "image/png" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/not valid non-empty base64/);
+  });
+
+  test("happy path: decodes bytes, calls facade.fromBytes, returns placeholder id", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run(
+      { source: { bytes: b64([1, 2, 3, 4]), mimeType: "image/png" }, name: "My PNG", folderId: "f1" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls).toEqual([
+      { kind: "fromBytes", args: [new Uint8Array([1, 2, 3, 4]), "image/png", "My PNG", "f1"] },
+    ]);
+    expect(textOf(result)).toMatch(/asset-bytes/);
+  });
+
+  test("facade throws: surfaced as an error result", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.fromBytesResult = new Error("disk full");
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { bytes: b64([1, 2]), mimeType: "image/png" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/disk full/);
+  });
+
+  test("placeholder-then-finalize ordering: the tool resolves once the placeholder is registered, before finalize", async () => {
+    const events: string[] = [];
+    const mediaImport = new FakeMediaImport();
+    let finalizeDone!: () => void;
+    const finalizePromise = new Promise<void>((resolve) => { finalizeDone = resolve; });
+    mediaImport.fromBytes = async (bytes, mimeType, name, folderId) => {
+      events.push("placeholder");
+      // A macrotask (not a microtask): guarantees "finalize" lands strictly after the tool's
+      // `await facade.fromBytes(...)` continuation, which is itself microtask-scheduled.
+      setTimeout(() => {
+        events.push("finalize");
+        finalizeDone();
+      }, 0);
+      void bytes; void mimeType; void name; void folderId;
+      return { assetId: "asset-bytes" };
+    };
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { bytes: b64([9]), mimeType: "image/png" } }, ctx);
+    expect(result.isError).toBe(false);
+    expect(events).toEqual(["placeholder"]); // finalize hasn't happened yet when the tool resolves
+    await finalizePromise;
+    expect(events).toEqual(["placeholder", "finalize"]);
+  });
+});
+
+describe("import_media — url", () => {
+  test("invalid URL: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { url: "not a url" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/not a valid URL/);
+  });
+
+  test("http (not https): rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { url: "http://example.com/a.mp4" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/must use https/);
+  });
+
+  test("embedded credentials: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { url: "https://user:pass@example.com/a.mp4" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/must not embed credentials/);
+  });
+
+  test("no extension and no mimeType override: rejected", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { url: "https://example.com/asset" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Cannot infer media type/);
+  });
+
+  test("json extension: rejected with the Lottie-deviation message", async () => {
+    const ctx = makeImportCtx(new FakeMediaImport());
+    const result = await importMediaTool().run({ source: { url: "https://example.com/a.json" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Lottie.*not supported/);
+  });
+
+  test("happy path (extension inferred from the URL): calls facade.fromUrl", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { url: "https://example.com/clip.mp4" }, name: "Clip" }, ctx);
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls).toEqual([{ kind: "fromUrl", args: ["https://example.com/clip.mp4", "Clip", undefined, undefined] }]);
+    expect(textOf(result)).toMatch(/asset-url/);
+  });
+
+  test("mimeType override lets an extensionless signed URL through", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run(
+      { source: { url: "https://example.com/signed?token=abc", mimeType: "video/mp4" } },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls).toEqual([
+      { kind: "fromUrl", args: ["https://example.com/signed?token=abc", undefined, undefined, "video/mp4"] },
+    ]);
+  });
+});
+
+describe("import_media — path", () => {
+  test("no fromPath on the facade (web host): rejected", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.hasFromPath = false;
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { path: "/Users/x/clip.mp4" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/not available on web/);
+  });
+
+  test("happy path: calls facade.fromPath, reports the placeholder ids", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.fromPathResult = { assetIds: ["a1", "a2", "a3"] };
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { path: "/Users/x/Movies" }, folderId: undefined }, ctx);
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls).toEqual([{ kind: "fromPath", args: ["/Users/x/Movies", undefined] }]);
+    expect(textOf(result)).toMatch(/3 placeholder asset/);
+    expect(textOf(result)).toMatch(/a1, a2, a3/);
+  });
+
+  test("no supported media found: rejected", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.fromPathResult = { assetIds: [] };
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { path: "/Users/x/empty" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/No supported media found/);
+  });
+
+  test("facade throws (e.g. path escapes the project dir): surfaced as an error result", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.fromPathResult = new Error("path not found: /nope");
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { path: "/nope" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/path not found: \/nope/);
   });
 });

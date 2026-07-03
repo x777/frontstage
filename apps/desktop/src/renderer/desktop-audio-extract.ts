@@ -1,5 +1,21 @@
+export interface ImportScanFile {
+  abs: string;
+  rel: string;
+  ext: string;
+  size: number;
+}
+
+export interface ImportScanResult {
+  files: ImportScanFile[];
+  dirs: string[];
+}
+
 interface DesktopMediaBridge {
   extractAudio(opts: { path?: string; bytes?: ArrayBuffer }): Promise<{ wav: ArrayBuffer; durationSeconds: number } | { error: string }>;
+  // Media import (M12A T3) — bytes never cross IPC; main scans/copies/downloads on-disk directly.
+  importScan(dir: string, absPath: string): Promise<ImportScanResult | { error: string }>;
+  importCopy(dir: string, absPath: string, relPath: string): Promise<{ ok: true } | { error: string }>;
+  importDownload(dir: string, url: string, relPath: string): Promise<{ ok: true; size: number } | { error: string }>;
 }
 
 declare global {

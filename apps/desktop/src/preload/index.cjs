@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld("desktopGen", {
 
 contextBridge.exposeInMainWorld("desktopMedia", {
   extractAudio: (opts) => ipcRenderer.invoke("media:extractAudio", opts),
+  importScan: (dir, absPath) => ipcRenderer.invoke("media:importScan", dir, absPath),
+  importCopy: (dir, absPath, relPath) => ipcRenderer.invoke("media:importCopy", dir, absPath, relPath),
+  importDownload: (dir, url, relPath) => ipcRenderer.invoke("media:importDownload", dir, url, relPath),
 });
 
 contextBridge.exposeInMainWorld("desktopMcp", {

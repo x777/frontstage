@@ -45,6 +45,7 @@ const EXPECTED_NAMES = [
   "rename_folder",
   "delete_media",
   "delete_folder",
+  "import_media",
 ] as const;
 
 function makeClip(id: string) {
@@ -103,15 +104,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 34 specs", () => {
+  test("returns exactly 35 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(34);
+    expect(catalog).toHaveLength(35);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(34);
+    expect(new Set(names).size).toBe(35);
   });
 
   test("names match the expected list exactly", () => {

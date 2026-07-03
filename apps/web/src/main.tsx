@@ -15,6 +15,7 @@ import { WebExportGateway } from "./web-export.js";
 import { WebAiGateway } from "./web-ai-gateway.js";
 import { WebGenGateway } from "./web-gen-gateway.js";
 import { makeWebAudioExtractor } from "./web-audio-extract.js";
+import { createWebMediaImport } from "./web-media-import.js";
 import "./web-fs-test-entry.js";
 
 interface PalmierAppProps {
@@ -230,6 +231,14 @@ async function bootstrap() {
     deleteEntries: (ids: string[]) => library.deleteEntries(ids),
   };
 
+  // Reads localStorage at call time (not just the bootstrap-time aiProxyUrl) so a proxy URL/token
+  // change in Settings takes effect without a reload — mirrors keyConfig's persistence keys above.
+  const mediaImportFacade = createWebMediaImport({
+    library,
+    proxyUrl: () => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl,
+    proxyToken: () => localStorage.getItem("palmier.ai.proxyToken") ?? undefined,
+  });
+
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {
     store,
@@ -246,6 +255,7 @@ async function bootstrap() {
     generation: generationFacade,
     transcription: transcriptionFacade,
     library: libraryFacade,
+    mediaImport: mediaImportFacade,
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

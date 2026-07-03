@@ -1,7 +1,11 @@
-import { test, expect } from "vitest";
+import { test, expect, afterEach, vi } from "vitest";
 import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { decodeProjectFiles, defaultTimeline, emptyGenerationLog, encodeProjectFiles, PROJECT_FILES } from "@palmier/core";
 import { MediaLibrary } from "../src/media/media-library.js";
+
+function flushAsync(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function placeholderEntry(id: string): MediaManifestEntry {
   return {
@@ -437,4 +441,67 @@ test("deleteEntries: removes entries and drops their bytes/pending", () => {
   expect(entries.find((e) => e.id === "a")).toBeUndefined();
   expect(entries.find((e) => e.id === "b")).toBeDefined();
   expect(lib.pendingMedia().has("media/a.mp4")).toBe(false);
+});
+
+// ── importBytes / setThumbnail (M12A T3 — import_media's bytes host flow) ────
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+test("setThumbnail: sets the thumbnail returned by thumbnail(id)", () => {
+  const lib = new MediaLibrary();
+  lib.addEntry(realEntry("a"), new Uint8Array([1]));
+  expect(lib.thumbnail("a")).toBeUndefined();
+  lib.setThumbnail("a", "data:image/png;base64,xyz");
+  expect(lib.thumbnail("a")).toBe("data:image/png;base64,xyz");
+});
+
+test("importBytes: unsupported mimeType rejects synchronously, no placeholder registered", async () => {
+  const lib = new MediaLibrary();
+  await expect(lib.importBytes(new Uint8Array([1]), "application/pdf")).rejects.toThrow(/Unsupported mimeType/);
+  expect(lib.getSnapshot().entries).toHaveLength(0);
+});
+
+test("importBytes: the placeholder exists synchronously, before the returned promise is even awaited", () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const lib = new MediaLibrary();
+
+  void lib.importBytes(new Uint8Array([1, 2, 3, 4]), "image/png", "My PNG");
+
+  const entries = lib.getSnapshot().entries;
+  expect(entries).toHaveLength(1);
+  expect(entries[0]!.generationStatus).toBe("downloading");
+  expect(entries[0]!.name).toBe("My PNG");
+  expect(entries[0]!.type).toBe("image");
+  expect(entries[0]!.source.kind).toBe("project");
+  expect((entries[0]!.source as { relativePath: string }).relativePath).toMatch(/^media\/imported-.+\.png$/);
+});
+
+test("importBytes: probes + finalizes in the background (status clears, dimensions land, bytes readable)", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const lib = new MediaLibrary();
+
+  const { assetId } = await lib.importBytes(new Uint8Array([1, 2, 3, 4]), "image/png", "My PNG");
+  await flushAsync();
+
+  const entry = lib.entry(assetId)!;
+  expect(entry.generationStatus).toBeUndefined();
+  expect(entry.sourceWidth).toBe(12);
+  expect(entry.sourceHeight).toBe(34);
+  expect(lib.bytesFor(entry)).toEqual(new Uint8Array([1, 2, 3, 4]));
+});
+
+test("importBytes: a probe failure marks the placeholder failed rather than leaving it stuck downloading", async () => {
+  vi.stubGlobal("createImageBitmap", async () => {
+    throw new Error("bad image data");
+  });
+  const lib = new MediaLibrary();
+
+  const { assetId } = await lib.importBytes(new Uint8Array([1, 2, 3]), "image/png");
+  await flushAsync();
+
+  const entry = lib.entry(assetId)!;
+  expect(entry.generationStatus).toMatch(/^failed: /);
+  expect(entry.generationStatus).toMatch(/bad image data/);
 });

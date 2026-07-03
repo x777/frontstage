@@ -25,6 +25,7 @@ import { DesktopExportGateway } from "./desktop-export-gateway.js";
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
 import { DesktopGenGateway } from "./desktop-gen-gateway.js";
 import { makeDesktopAudioExtractor } from "./desktop-audio-extract.js";
+import { createDesktopMediaImport } from "./desktop-media-import.js";
 import type { PlaybackEngine } from "@palmier/engine";
 
 const engineRef: { current: PlaybackEngine | null } = { current: null };
@@ -143,6 +144,11 @@ const libraryFacade = {
   deleteEntries: (ids: string[]) => library.deleteEntries(ids),
 };
 
+const mediaImportFacade = createDesktopMediaImport({
+  library,
+  getProjectDir: () => (session.getState().ref as DesktopProjectRef | null)?.path,
+});
+
 const executor = new ToolExecutor(buildCatalog(), {
   store,
   getManifest: () => library.getManifest(),
@@ -158,6 +164,7 @@ const executor = new ToolExecutor(buildCatalog(), {
   generation: generationFacade,
   transcription: transcriptionFacade,
   library: libraryFacade,
+  mediaImport: mediaImportFacade,
 });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

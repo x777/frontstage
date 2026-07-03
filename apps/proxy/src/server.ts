@@ -64,6 +64,28 @@ function isAllowedFalDownloadHost(url: URL): boolean {
   return host === "fal.media" || host.endsWith(".fal.media") || host.endsWith(".fal.run");
 }
 
+// SSRF guard for /import/download: general-host (any https origin, not just fal's), so instead of
+// an allowlist this denies the shapes an attacker would use to reach internal/cloud-metadata
+// services — credentials, non-https, "localhost", and any literal IP host (v4 or v6, public or
+// private: a bare IP is never a legitimate media CDN hostname, so this subsumes the private-range
+// cases like 127.x/10.x/172.16-31.x/192.168.x/169.254.x/[::1] without needing DNS resolution).
+const IPV4_LITERAL_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+function isAllowedImportHost(url: URL): boolean {
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  if (!host) return false;
+  if (host === "localhost" || host.endsWith(".localhost")) return false;
+  if (IPV4_LITERAL_RE.test(host)) return false;
+  if (host.startsWith("[") && host.endsWith("]")) return false; // literal IPv6
+  return true;
+}
+
+const IMPORT_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+const IMPORT_TIMEOUT_MS = 15 * 60 * 1000;
+const MAX_IMPORT_REQUEST_BODY = 8 * 1024;
+
 // SSRF guard for the fal storage upload PUT: the signed URL fal hands back must stay on a
 // fal-controlled host (queue/rest API domains plus the CDN subdomains they redirect uploads to).
 function isAllowedFalUploadHost(url: URL): boolean {
@@ -227,6 +249,22 @@ export function createProxyServer(opts: ProxyServerOptions): http.Server {
       }
       const fileName = url.searchParams.get("filename") || "upload.bin";
       void handleFalUpload(req, contentType, fileName, falRestUpstream, falKey, origin, res);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/import/download") {
+      if (!isAuthorized(req, proxyToken)) {
+        writeUnauthorized(res, origin);
+        return;
+      }
+      void readBodyCapped(req, MAX_IMPORT_REQUEST_BODY).then((body) => {
+        if ("tooLarge" in body) {
+          res.writeHead(413, { ...jsonHeaders(origin), Connection: "close" });
+          res.end(JSON.stringify({ error: "request body too large" }));
+          return;
+        }
+        return handleImportDownload(body.toString("utf-8"), origin, res);
+      });
       return;
     }
 
@@ -410,6 +448,108 @@ async function handleFalDownload(params: URLSearchParams, origin: string, res: h
       res.writeHead(502, jsonHeaders(origin));
     }
     res.end(JSON.stringify({ error: "fal download error" }));
+  }
+}
+
+// General-host counterpart to handleFalDownload, for import_media's url source (M12A T3): same
+// per-hop SSRF re-validation + media-type neutralization treatment, plus a size cap and a request
+// timeout since the target isn't a trusted CDN and files can be up to 5GB.
+async function handleImportDownload(rawBody: string, origin: string, res: http.ServerResponse): Promise<void> {
+  let parsed: { url?: unknown };
+  try {
+    parsed = JSON.parse(rawBody) as { url?: unknown };
+  } catch {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "invalid JSON body" }));
+    return;
+  }
+
+  const raw = parsed.url;
+  if (typeof raw !== "string" || !raw) {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "missing url" }));
+    return;
+  }
+
+  let target: URL;
+  try {
+    target = new URL(raw);
+  } catch {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "invalid url" }));
+    return;
+  }
+
+  if (!isAllowedImportHost(target)) {
+    res.writeHead(400, jsonHeaders(origin));
+    res.end(JSON.stringify({ error: "url host not allowed" }));
+    return;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMPORT_TIMEOUT_MS);
+  try {
+    // Follow redirects manually so every hop stays off the denylist (SSRF guard).
+    let upstreamRes = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+    for (let hop = 0; hop < 3 && upstreamRes.status >= 300 && upstreamRes.status < 400; hop++) {
+      const loc = upstreamRes.headers.get("location");
+      if (!loc) break;
+      const next = new URL(loc, target);
+      if (!isAllowedImportHost(next)) {
+        res.writeHead(400, jsonHeaders(origin));
+        res.end(JSON.stringify({ error: "redirect host not allowed" }));
+        return;
+      }
+      target = next;
+      upstreamRes = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+    }
+    if (upstreamRes.status >= 300 && upstreamRes.status < 400) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "too many redirects" }));
+      return;
+    }
+
+    const declaredLength = upstreamRes.headers.get("content-length");
+    if (declaredLength && Number(declaredLength) > IMPORT_MAX_BYTES) {
+      res.writeHead(413, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "remote file exceeds the size cap" }));
+      return;
+    }
+
+    const headers: Record<string, string> = { ...corsHeaders(origin) };
+    // Media types only; anything else downloads as opaque bytes. Never render in the proxy's origin.
+    const ct = upstreamRes.headers.get("content-type") ?? "";
+    headers["Content-Type"] = /^(video|audio|image)\//.test(ct) ? ct : "application/octet-stream";
+    headers["Content-Disposition"] = "attachment";
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
+    res.writeHead(upstreamRes.status, headers);
+
+    if (!upstreamRes.body) {
+      res.end();
+      return;
+    }
+    let total = 0;
+    for await (const chunk of upstreamRes.body as AsyncIterable<Uint8Array>) {
+      total += chunk.length;
+      if (total > IMPORT_MAX_BYTES) {
+        // Headers are already committed at this point — cut the connection rather than send a
+        // clean error body (no Content-Length promise to keep, and no way to un-send a 200).
+        res.destroy();
+        return;
+      }
+      res.write(chunk);
+    }
+    res.end();
+  } catch {
+    if (!res.headersSent) {
+      res.writeHead(502, jsonHeaders(origin));
+      res.end(JSON.stringify({ error: "import download error" }));
+      return;
+    }
+    res.end();
+  } finally {
+    clearTimeout(timer);
   }
 }
 

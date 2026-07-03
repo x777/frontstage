@@ -955,3 +955,168 @@ ipcMain.handle("media:extractAudio", async (_e, { path: mediaPath, bytes }) => {
     proc.stdin.end();
   });
 });
+
+// ── Media import IPC (path/url sources for import_media, M12A T3) ──────────
+// Bytes never cross IPC in bulk: main copies/downloads straight into the project media dir; the
+// renderer only ever sees {abs, rel, ext, size} scan results and reads the finished file back via
+// the existing project:readMedia path to probe it. The extension allowlist mirrors packages/ai's
+// IMPORT_EXT_TO_TYPE (main is CJS and can't import that ESM package — keep in sync manually, same
+// convention as the fal URL builders above).
+
+const IMPORT_ALLOWED_EXTENSIONS = new Set([
+  "mp4", "mov",
+  "mp3", "wav", "aac", "m4a", "aiff", "aifc", "flac",
+  "png", "jpg", "jpeg", "tiff", "heic",
+]);
+
+const IMPORT_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+const IMPORT_TIMEOUT_MS = 15 * 60 * 1000;
+
+function importExt(p) {
+  return path.extname(p).slice(1).toLowerCase();
+}
+
+// General-host SSRF guard (any https origin, not an allowlist): denies credentials, non-https,
+// "localhost", and any literal IP host (v4 or v6) — see apps/proxy/src/server.ts's
+// isAllowedImportHost for the identical web-side treatment and the reasoning.
+function isAllowedImportHost(url) {
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  if (!host) return false;
+  if (host === "localhost" || host.endsWith(".localhost")) return false;
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) return false;
+  if (host.startsWith("[") && host.endsWith("]")) return false;
+  return true;
+}
+
+function walkImportDir(root, relDir, files, dirs) {
+  const absDir = relDir ? path.join(root, relDir) : root;
+  let entries;
+  try {
+    entries = fs.readdirSync(absDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const entRel = relDir ? `${relDir}/${ent.name}` : ent.name;
+    const entAbs = path.join(absDir, ent.name);
+    if (ent.isDirectory()) {
+      dirs.push(entRel);
+      walkImportDir(root, entRel, files, dirs);
+    } else if (ent.isFile()) {
+      const ext = importExt(ent.name);
+      if (!IMPORT_ALLOWED_EXTENSIONS.has(ext)) continue;
+      let size = 0;
+      try { size = fs.statSync(entAbs).size; } catch { /* skip unreadable */ }
+      files.push({ abs: entAbs, rel: entRel, ext, size });
+    }
+  }
+}
+
+ipcMain.handle("media:importScan", (_e, dir, absPath) => {
+  assertAuthorized(dir);
+  const resolvedDir = path.resolve(dir);
+  const resolvedTarget = path.resolve(absPath);
+  if (resolvedTarget === resolvedDir || resolvedTarget.startsWith(resolvedDir + path.sep)) {
+    return { error: "cannot import a path inside the project directory" };
+  }
+
+  let stat;
+  try {
+    stat = fs.statSync(resolvedTarget);
+  } catch {
+    return { error: "path not found: " + absPath };
+  }
+
+  if (stat.isFile()) {
+    const ext = importExt(resolvedTarget);
+    const files = IMPORT_ALLOWED_EXTENSIONS.has(ext)
+      ? [{ abs: resolvedTarget, rel: path.basename(resolvedTarget), ext, size: stat.size }]
+      : [];
+    return { files, dirs: [] };
+  }
+  if (!stat.isDirectory()) {
+    return { error: "unsupported path type: " + absPath };
+  }
+
+  const files = [];
+  const dirs = [];
+  walkImportDir(resolvedTarget, "", files, dirs);
+  return { files, dirs };
+});
+
+ipcMain.handle("media:importCopy", (_e, dir, absPath, relPath) => {
+  assertAuthorized(dir);
+  const ext = importExt(absPath);
+  if (!IMPORT_ALLOWED_EXTENSIONS.has(ext)) return { error: "unsupported file extension: ." + ext };
+  const dest = assertInside(dir, relPath);
+  try {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(absPath, dest);
+  } catch (e) {
+    return { error: "copy failed: " + e.message };
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
+  assertAuthorized(dir);
+  const ext = importExt(relPath);
+  if (!IMPORT_ALLOWED_EXTENSIONS.has(ext)) return { error: "unsupported file extension: ." + ext };
+  const dest = assertInside(dir, relPath);
+
+  let target;
+  try {
+    target = new URL(url);
+  } catch {
+    return { error: "invalid url" };
+  }
+  if (!isAllowedImportHost(target)) return { error: "url host not allowed" };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMPORT_TIMEOUT_MS);
+  try {
+    let res = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+    for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400; hop++) {
+      const loc = res.headers.get("location");
+      if (!loc) break;
+      const next = new URL(loc, target);
+      if (!isAllowedImportHost(next)) return { error: "redirect host not allowed" };
+      target = next;
+      res = await fetch(target.toString(), { redirect: "manual", signal: controller.signal });
+    }
+    if (res.status >= 300 && res.status < 400) return { error: "too many redirects" };
+    if (!res.ok) return { error: "server returned HTTP " + res.status };
+
+    const declaredLength = res.headers.get("content-length");
+    if (declaredLength && Number(declaredLength) > IMPORT_MAX_BYTES) {
+      return { error: "remote file exceeds the size cap" };
+    }
+    if (!res.body) return { error: "empty response body" };
+
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const tmp = dest + ".part";
+    const fd = fs.openSync(tmp, "w");
+    let total = 0;
+    try {
+      for await (const chunk of res.body) {
+        total += chunk.length;
+        if (total > IMPORT_MAX_BYTES) {
+          fs.closeSync(fd);
+          fs.unlinkSync(tmp);
+          return { error: "remote file exceeds the size cap" };
+        }
+        fs.writeSync(fd, Buffer.from(chunk));
+      }
+    } finally {
+      try { fs.closeSync(fd); } catch { /* already closed */ }
+    }
+    fs.renameSync(tmp, dest);
+    return { ok: true, size: total };
+  } catch (err) {
+    return { error: String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+});

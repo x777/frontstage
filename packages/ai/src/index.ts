@@ -16,6 +16,15 @@ export {
   renameFolderTool,
   deleteMediaTool,
   deleteFolderTool,
+  importMediaTool,
+  REMOTE_IMPORT_MAX_BYTES,
+  REMOTE_IMPORT_TIMEOUT_MS,
+  IMPORT_BYTES_MAX_BASE64_LENGTH,
+  IMPORT_EXT_TO_TYPE,
+  IMPORT_MIME_TO_EXT,
+  extensionForImportMime,
+  importTypeForExtension,
+  extensionForImportUrl,
 } from "./tools/library-tools.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { generateImageTool } from "./tools/generate-image-tool.js";

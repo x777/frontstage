@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { collectFolderCascade, referencingClipIds, removeClipCommand } from "@palmier/core";
-import type { MediaFolder } from "@palmier/core";
+import type { ClipType, MediaFolder } from "@palmier/core";
 import type { ToolContext, ToolResult, ToolSpec } from "./types.js";
 import { asUndoStep, errorResult, ok } from "./executor.js";
 
@@ -328,6 +328,237 @@ export function deleteFolderTool(): ToolSpec {
         clipCount: removedClipIds.length,
         note: PERMANENCE_NOTE,
       }, null, 2));
+    },
+  };
+}
+
+// ── import_media (M12A T3) ───────────────────────────────────────────────────
+// Caps + allowlist ported verbatim from Swift ToolExecutor+Import.swift, minus json/Lottie
+// (deviation: no Lottie clip type in this build — json is rejected with a dedicated message).
+
+export const REMOTE_IMPORT_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+export const REMOTE_IMPORT_TIMEOUT_MS = 15 * 60 * 1000;
+export const IMPORT_BYTES_MAX_BASE64_LENGTH = 15 * 1024 * 1024;
+
+export const IMPORT_EXT_TO_TYPE: Readonly<Record<string, ClipType>> = {
+  mp4: "video",
+  mov: "video",
+  mp3: "audio",
+  wav: "audio",
+  aac: "audio",
+  m4a: "audio",
+  aiff: "audio",
+  aifc: "audio",
+  flac: "audio",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  tiff: "image",
+  heic: "image",
+};
+
+export const IMPORT_MIME_TO_EXT: Readonly<Record<string, string>> = {
+  "video/mp4": "mp4",
+  "video/mpeg4": "mp4",
+  "video/quicktime": "mov",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/wave": "wav",
+  "audio/aac": "aac",
+  "audio/mp4": "m4a",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/aiff": "aiff",
+  "audio/x-aiff": "aiff",
+  "audio/aifc": "aifc",
+  "audio/x-aifc": "aifc",
+  "audio/flac": "flac",
+  "audio/x-flac": "flac",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/tiff": "tiff",
+  "image/heic": "heic",
+  "image/heif": "heic",
+};
+
+// Ported verbatim from Swift's acceptedMimeTypesMessage.
+const ACCEPTED_MIME_TYPES_MESSAGE =
+  "Accepted: video/mp4, video/quicktime, audio/mpeg, audio/wav, audio/aac, audio/mp4, audio/aiff, audio/flac, image/png, image/jpeg, image/tiff, image/heic.";
+const SUPPORTED_EXTENSIONS_TEXT =
+  "Supported: mov/mp4, mp3/wav/aac/m4a/aiff/aifc/flac, png/jpg/jpeg/tiff/heic.";
+const MEDIA_IMPORT_UNAVAILABLE = "media import is not available in this context";
+
+function isLottieMime(mime: string): boolean {
+  const m = mime.toLowerCase();
+  return m === "application/json" || m === "application/vnd.lottie+json";
+}
+
+function isLottieExt(ext: string): boolean {
+  const e = ext.toLowerCase();
+  return e === "json" || e === "lottie";
+}
+
+function unsupportedMimeMessage(mime: string): string {
+  if (isLottieMime(mime)) {
+    return `Unsupported mimeType '${mime}': Lottie/JSON imports are not supported (no Lottie clip type in this build). ${ACCEPTED_MIME_TYPES_MESSAGE}`;
+  }
+  return `Unsupported mimeType '${mime}'. ${ACCEPTED_MIME_TYPES_MESSAGE}`;
+}
+
+function unsupportedExtensionMessage(ext: string): string {
+  if (isLottieExt(ext)) {
+    return `Unsupported file extension '.${ext}': Lottie imports are not supported (no Lottie clip type in this build). ${SUPPORTED_EXTENSIONS_TEXT}`;
+  }
+  return `Unsupported file extension '.${ext}'. ${SUPPORTED_EXTENSIONS_TEXT}`;
+}
+
+export function extensionForImportMime(mimeType: string): string | undefined {
+  return IMPORT_MIME_TO_EXT[mimeType.toLowerCase()];
+}
+
+export function importTypeForExtension(ext: string): ClipType | undefined {
+  return IMPORT_EXT_TO_TYPE[ext.toLowerCase()];
+}
+
+// Last path segment's extension, "" when there is none (no dot, or a leading dotfile like ".gitignore").
+function extOf(pathname: string): string {
+  const last = pathname.split("/").pop() ?? "";
+  const dot = last.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return last.slice(dot + 1).toLowerCase();
+}
+
+export function extensionForImportUrl(url: string): string | undefined {
+  try {
+    const ext = extOf(new URL(url).pathname);
+    return ext && IMPORT_EXT_TO_TYPE[ext] ? ext : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+const importSourceSchema = z.object({
+  url: z.string().optional(),
+  path: z.string().optional(),
+  bytes: z.string().optional(),
+  mimeType: z.string().optional(),
+});
+
+function toMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+export function importMediaTool(): ToolSpec {
+  return {
+    name: "import_media",
+    description:
+      "Imports external media into the project's library — the bridge for assets coming from other MCP servers (stock libraries, music services, web search) or local files the user already has. The 'source' object must set exactly one of: url (HTTPS only — downloaded in the background; max 5 GB), path (absolute local file path — copied into the project in the background; may also be a directory, imported recursively, mirroring its subfolder structure as media folders; desktop only), or bytes (base64-encoded inline data — max ~15 MB of base64; use url/path for anything larger). For url, type is inferred from the URL path's file extension unless source.mimeType is set as an override. For bytes, source.mimeType is required. Supported types: video (mp4, mov), audio (mp3, wav, aac, m4a, aiff, aifc, flac), image (png, jpg, jpeg, tiff, heic). Lottie/JSON is not supported. Returns a placeholder asset id immediately; the asset becomes usable once the copy/download completes — poll get_media.",
+    inputSchema: z.object({
+      source: importSourceSchema.optional(),
+      name: z.string().optional(),
+      folderId: z.string().optional(),
+    }),
+    async run(args, ctx): Promise<ToolResult> {
+      const a = args as { source?: { url?: string; path?: string; bytes?: string; mimeType?: string }; name?: string; folderId?: string };
+      const facade = ctx.mediaImport;
+      if (!facade) return errorResult(MEDIA_IMPORT_UNAVAILABLE);
+
+      const source = a.source;
+      if (!source) return errorResult("Missing required 'source' object");
+
+      const { url, path, bytes, mimeType } = source;
+      const setCount = [url, path, bytes].filter((v) => v !== undefined).length;
+      if (setCount !== 1) {
+        return errorResult(`source must set exactly one of 'url', 'path', or 'bytes' (got ${setCount})`);
+      }
+
+      if (a.folderId !== undefined && ctx.library) {
+        const known = new Set(ctx.library.listFolders().map((f) => f.id));
+        if (!known.has(a.folderId)) return errorResult(`folderId not found: ${a.folderId}`);
+      }
+
+      if (path !== undefined) {
+        if (!facade.fromPath) return errorResult("import_media: path imports are not available on web");
+        try {
+          const { assetIds } = await facade.fromPath(path, a.folderId);
+          if (assetIds.length === 0) return errorResult(`No supported media found at path: ${path}`);
+          return ok(
+            `Import started. ${assetIds.length} placeholder asset(s) registered: ${assetIds.join(", ")}. Status: downloading. Poll get_media / list_folders; assets appear once the copy completes.`,
+          );
+        } catch (err) {
+          return errorResult(toMessage(err));
+        }
+      }
+
+      if (bytes !== undefined) {
+        if (!mimeType) return errorResult("source.mimeType is required when source.bytes is set");
+        if (bytes.length > IMPORT_BYTES_MAX_BASE64_LENGTH) {
+          return errorResult(
+            `source.bytes is too large (${bytes.length} chars; max ${IMPORT_BYTES_MAX_BASE64_LENGTH}). Use source.url or source.path for larger files.`,
+          );
+        }
+        if (isLottieMime(mimeType) || !extensionForImportMime(mimeType)) return errorResult(unsupportedMimeMessage(mimeType));
+
+        let decoded: Uint8Array;
+        try {
+          decoded = decodeBase64(bytes);
+        } catch {
+          return errorResult("source.bytes is not valid non-empty base64");
+        }
+        if (decoded.length === 0) return errorResult("source.bytes is not valid non-empty base64");
+
+        try {
+          const { assetId } = await facade.fromBytes(decoded, mimeType, a.name, a.folderId);
+          return ok(
+            `Import started. Placeholder asset id: ${assetId}. Status: downloading. Poll get_media; the asset appears once processing completes.`,
+          );
+        } catch (err) {
+          return errorResult(toMessage(err));
+        }
+      }
+
+      // url
+      let parsed: URL;
+      try {
+        parsed = new URL(url!);
+      } catch {
+        return errorResult("source.url is not a valid URL");
+      }
+      if (parsed.protocol !== "https:") return errorResult("source.url must use https");
+      if (parsed.username || parsed.password) return errorResult("source.url must not embed credentials");
+      if (!parsed.hostname) return errorResult("source.url has no host");
+
+      if (mimeType !== undefined) {
+        if (isLottieMime(mimeType) || !extensionForImportMime(mimeType)) return errorResult(unsupportedMimeMessage(mimeType));
+      } else {
+        const urlExt = extOf(parsed.pathname);
+        if (isLottieExt(urlExt)) return errorResult(unsupportedExtensionMessage(urlExt));
+        if (!urlExt || !importTypeForExtension(urlExt)) {
+          const shown = urlExt ? `.${urlExt}` : "(none)";
+          return errorResult(
+            `Cannot infer media type from URL extension ${shown}. Set source.mimeType to disambiguate (e.g. 'video/mp4', 'image/png').`,
+          );
+        }
+      }
+
+      try {
+        const { assetId } = await facade.fromUrl(url!, a.name, a.folderId, mimeType);
+        return ok(
+          `Import started. Placeholder asset id: ${assetId}. Status: downloading. Poll get_media; the asset appears once the download completes.`,
+        );
+      } catch (err) {
+        return errorResult(toMessage(err));
+      }
     },
   };
 }

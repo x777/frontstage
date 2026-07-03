@@ -82,6 +82,27 @@ export function createPlaceholderEntry(args: {
   return entry;
 }
 
+// import_media placeholder (M12A T3): no GenerationInput (not an AI generation), lands directly
+// in "downloading" (there's no synchronous "preparing" phase — the copy/download starts immediately).
+export function createImportPlaceholderEntry(args: {
+  id: string;
+  type: ClipType;
+  name: string;
+  ext: string;
+  folderId?: string;
+}): MediaManifestEntry {
+  const entry: MediaManifestEntry = {
+    id: args.id,
+    name: args.name,
+    type: args.type,
+    duration: 0,
+    source: { kind: "project", relativePath: `media/imported-${args.id.slice(0, 8)}.${args.ext}` },
+    generationStatus: "downloading",
+  };
+  if (args.folderId !== undefined) entry.folderId = args.folderId;
+  return entry;
+}
+
 /** Never-persist-preparing rule: strip transient statuses before writing the manifest. */
 export function normalizeEntryForSave(entry: MediaManifestEntry): MediaManifestEntry {
   const serialized = serializeGenerationStatus(parseGenerationStatus(entry.generationStatus));
