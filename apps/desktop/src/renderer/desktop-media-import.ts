@@ -57,13 +57,15 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
       const bytes = await window.desktopProject.readMedia(dir, relPath);
       const blob = new Blob([bytes as BlobPart]);
       const probed = await probeMediaBlob(blob, type);
-      if (probed.thumb) library.setThumbnail(id, probed.thumb);
       library.finalizeGenerated(id, bytes, {
         duration: probed.duration,
         ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
         ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
         ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
       });
+      // finalizeGenerated no-ops when the entry was deleted mid-import — skip the thumbnail too,
+      // or it leaks a dangling id → dataURL entry that nothing ever revisits.
+      if (probed.thumb && library.entry(id)) library.setThumbnail(id, probed.thumb);
     } catch (err) {
       library.markGenerationFailed([id], err instanceof Error ? err.message : String(err));
     }
@@ -81,7 +83,13 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
 
     const id = crypto.randomUUID();
     const displayName = name ?? stemName(new URL(url).pathname) ?? "Imported asset";
-    const entry = createImportPlaceholderEntry({ id, type, name: displayName || "Imported asset", ext, folderId });
+    const entry = createImportPlaceholderEntry({
+      id,
+      type,
+      name: displayName || "Imported asset",
+      ext,
+      folderId: library.resolveFolderId(folderId),
+    });
     library.addPlaceholder(entry);
 
     const rel = projectRelativePath(entry);
@@ -103,9 +111,13 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
     if ("error" in scan) throw new Error(scan.error);
     if (scan.files.length === 0) return { assetIds: [] };
 
+    // Resolve once up front: an unknown/dangling folderId (e.g. deleted between the tool call and
+    // this running) falls back to root instead of throwing on the very first createFolder below.
+    const rootFolderId = library.resolveFolderId(folderId);
+
     // Mirror scan.dirs (shallow-to-deep, since Object.keys preserves insertion/scan order and the
-    // main-process walker emits a parent before any of its children) as folders under folderId.
-    const folderIdByRelDir = new Map<string, string | undefined>([["", folderId]]);
+    // main-process walker emits a parent before any of its children) as folders under rootFolderId.
+    const folderIdByRelDir = new Map<string, string | undefined>([["", rootFolderId]]);
     for (const relDir of scan.dirs) {
       const slash = relDir.lastIndexOf("/");
       const parentRel = slash === -1 ? "" : relDir.slice(0, slash);
@@ -123,7 +135,7 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
 
       const slash = file.rel.lastIndexOf("/");
       const dirRel = slash === -1 ? "" : file.rel.slice(0, slash);
-      const destFolderId = folderIdByRelDir.get(dirRel) ?? folderId;
+      const destFolderId = folderIdByRelDir.get(dirRel) ?? rootFolderId;
 
       const id = crypto.randomUUID();
       const entry = createImportPlaceholderEntry({ id, type, name: stemName(file.rel), ext: file.ext, folderId: destFolderId });

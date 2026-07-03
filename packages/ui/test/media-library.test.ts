@@ -7,6 +7,28 @@ function flushAsync(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+// jsdom has no real canvas 2D backend (`getContext("2d")` is unimplemented), so drawThumbnail's
+// try/catch always swallows it and probed.thumb comes back undefined — fine for most tests, but it
+// makes the thumbnail genuinely never get set, which would make a thumbnail-leak regression test
+// pass trivially regardless of the fix. Stub both canvas calls so probing actually produces a
+// thumbnail string; callers must call the returned `restore()` (real jsdom canvas methods, not
+// stubGlobal, so they'd otherwise leak into later tests).
+function stubCanvasThumbnail(): { restore: () => void } {
+  const getContextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, "getContext")
+    // getContext is overloaded (2d/webgl/webgpu/...) — `any` sidesteps picking the wrong one.
+    .mockReturnValue({ drawImage: () => {} } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const toDataURLSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, "toDataURL")
+    .mockReturnValue("data:image/png;base64,thumb");
+  return {
+    restore: () => {
+      getContextSpy.mockRestore();
+      toDataURLSpy.mockRestore();
+    },
+  };
+}
+
 function placeholderEntry(id: string): MediaManifestEntry {
   return {
     id,
@@ -506,6 +528,47 @@ test("importBytes: a probe failure marks the placeholder failed rather than leav
   expect(entry.generationStatus).toMatch(/bad image data/);
 });
 
+test("importBytes: unknown folderId stamps root (undefined), not the dangling id", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const lib = new MediaLibrary();
+
+  const { assetId } = await lib.importBytes(new Uint8Array([1, 2, 3, 4]), "image/png", "My PNG", "deleted-folder");
+
+  expect(lib.entry(assetId)!.folderId).toBeUndefined();
+});
+
+test("importBytes: probing does produce a real thumbnail on the happy path (control for the race test below)", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const canvas = stubCanvasThumbnail();
+  const lib = new MediaLibrary();
+  try {
+    const { assetId } = await lib.importBytes(new Uint8Array([1, 2, 3, 4]), "image/png", "My PNG");
+    await flushAsync();
+    expect(lib.thumbnail(assetId)).toBe("data:image/png;base64,thumb");
+  } finally {
+    canvas.restore();
+  }
+});
+
+test("importBytes (delete-during-import race, M12A final review L1): deleting the entry before finalize lands leaves no dangling thumbnail-map entry", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const canvas = stubCanvasThumbnail();
+  const lib = new MediaLibrary();
+  try {
+    const { assetId } = await lib.importBytes(new Uint8Array([1, 2, 3, 4]), "image/png", "My PNG");
+    // Race: delete lands after the placeholder exists but before the background probe/finalize
+    // (still suspended on its own await chain, and — per the control test above — would otherwise
+    // produce a real thumbnail) resumes.
+    lib.deleteEntries([assetId]);
+    await flushAsync();
+
+    expect(lib.entry(assetId)).toBeUndefined();
+    expect(lib.thumbnail(assetId)).toBeUndefined();
+  } finally {
+    canvas.restore();
+  }
+});
+
 // ── importFiles (M12A T4 — #219 async placeholder-first import) ─────────────
 
 // jsdom's File/Blob doesn't implement arrayBuffer() — a minimal fake sidesteps that gap
@@ -548,12 +611,24 @@ test("importFiles: the placeholder exists synchronously with duration 0 and the 
 test("importFiles: assigns folderId to each placeholder when a folderId is passed", async () => {
   vi.stubGlobal("createImageBitmap", async () => ({ width: 1, height: 1, close: () => {} }));
   const lib = new MediaLibrary();
+  const folder = lib.createFolder("Dest");
   const file = fakeFile("a.png", "image/png", new Uint8Array([1]));
 
-  const added = await lib.importFiles([file], "folder-1");
+  const added = await lib.importFiles([file], folder.id);
 
-  expect(added[0]!.folderId).toBe("folder-1");
-  expect(lib.entry(added[0]!.id)!.folderId).toBe("folder-1");
+  expect(added[0]!.folderId).toBe(folder.id);
+  expect(lib.entry(added[0]!.id)!.folderId).toBe(folder.id);
+});
+
+test("importFiles: unknown folderId stamps root (undefined), not the dangling id", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 1, height: 1, close: () => {} }));
+  const lib = new MediaLibrary();
+  const file = fakeFile("a.png", "image/png", new Uint8Array([1]));
+
+  const added = await lib.importFiles([file], "deleted-folder");
+
+  expect(added[0]!.folderId).toBeUndefined();
+  expect(lib.entry(added[0]!.id)!.folderId).toBeUndefined();
 });
 
 test("importFiles: probes + finalizes each file in the background (status clears, dimensions land, bytes readable)", async () => {
@@ -591,4 +666,24 @@ test("importFiles: a failing file is marked failed, the rest still finalize (fai
   expect(okEntry.sourceWidth).toBe(12);
   expect(badEntry.generationStatus).toMatch(/^failed: /);
   expect(badEntry.generationStatus).toMatch(/bad image data/);
+});
+
+test("importFiles (delete-during-import race, M12A final review L1): deleting the entry before finalize lands leaves no dangling thumbnail-map entry", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 12, height: 34, close: () => {} }));
+  const canvas = stubCanvasThumbnail();
+  const lib = new MediaLibrary();
+  const file = fakeFile("photo.png", "image/png", new Uint8Array([1, 2, 3, 4]));
+
+  try {
+    const [added] = await lib.importFiles([file]);
+    // Race: delete lands after the placeholder exists but before the background probe/finalize
+    // resumes — the control test above confirms this path otherwise produces a real thumbnail.
+    lib.deleteEntries([added!.id]);
+    await flushAsync();
+
+    expect(lib.entry(added!.id)).toBeUndefined();
+    expect(lib.thumbnail(added!.id)).toBeUndefined();
+  } finally {
+    canvas.restore();
+  }
 });

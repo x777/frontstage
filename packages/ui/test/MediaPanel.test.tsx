@@ -1,4 +1,4 @@
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import { render, screen, within, fireEvent, act } from "@testing-library/react";
 import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { MediaPanel } from "../src/media/MediaPanel.js";
 import { MEDIA_DRAG_MIME } from "../src/media/FolderTile.js";
@@ -285,4 +285,59 @@ test("OS file drop (no custom mime) still calls importFiles with the current fol
   fireEvent.drop(screen.getByTestId("media-panel"), { dataTransfer: dt });
 
   expect(lib.calls.importFiles).toEqual([{ files: [file], folderId: "f1" }]);
+});
+
+// ── stale currentFolderId after an out-of-band delete (M12A final review M1) ─
+// Simulates an agent's delete_folder call over MCP racing the panel's own drill-in: the browser
+// is parked inside a folder that vanishes from `folders` without the panel itself driving the
+// delete, so currentFolderId is never reset by handleDeleteFolder's own navigateTo call.
+
+test("stale currentFolderId: deleting the drilled-in folder chain externally lands on the nearest surviving ancestor", () => {
+  const grandparent: MediaFolder = { id: "gp", name: "Grandparent" };
+  const parent: MediaFolder = { id: "p", name: "Parent", parentFolderId: "gp" };
+  const child: MediaFolder = { id: "c", name: "Child", parentFolderId: "p" };
+  const lib = fakeLibrary([], [grandparent, parent, child]);
+
+  render(<MediaPanel library={lib} />);
+  fireEvent.doubleClick(screen.getByTestId("folder-tile")); // root -> Grandparent
+  fireEvent.doubleClick(screen.getByTestId("folder-tile")); // -> Parent
+  fireEvent.doubleClick(screen.getByTestId("folder-tile")); // -> Child
+  expect(screen.getByTestId("media-breadcrumb-c")).toHaveTextContent("Child");
+
+  // External deletion (not via the panel's own delete button) removes Child and Parent but
+  // leaves Grandparent — currentFolderId ("c") is now a dangling id.
+  act(() => {
+    lib.deleteFolders(["c", "p"]);
+  });
+
+  // Lands on Grandparent, the nearest surviving ancestor — not stuck on the dead id.
+  expect(screen.getByTestId("media-breadcrumb-gp")).toHaveTextContent("Grandparent");
+  expect(screen.queryByTestId("media-breadcrumb-c")).toBeNull();
+  expect(screen.queryByTestId("media-breadcrumb-p")).toBeNull();
+
+  // "New Folder" now creates at the landing spot, not the dead id (would otherwise throw).
+  fireEvent.click(screen.getByTestId("media-new-folder"));
+  expect(lib.calls.createFolder).toEqual([{ name: "New Folder", parentFolderId: "gp" }]);
+});
+
+test("stale currentFolderId: deleting every ancestor externally lands on root", () => {
+  const parent: MediaFolder = { id: "p", name: "Parent" };
+  const child: MediaFolder = { id: "c", name: "Child", parentFolderId: "p" };
+  const lib = fakeLibrary([], [parent, child]);
+
+  render(<MediaPanel library={lib} />);
+  fireEvent.doubleClick(screen.getByTestId("folder-tile")); // root -> Parent
+  fireEvent.doubleClick(screen.getByTestId("folder-tile")); // -> Child
+  expect(screen.getByTestId("media-breadcrumb-c")).toBeInTheDocument();
+
+  act(() => {
+    lib.deleteFolders(["p", "c"]);
+  });
+
+  expect(screen.getByTestId("media-breadcrumb-root")).toBeInTheDocument();
+  expect(screen.queryByTestId("media-breadcrumb-c")).toBeNull();
+  expect(screen.queryByTestId("folder-tile")).toBeNull();
+
+  fireEvent.click(screen.getByTestId("media-new-folder"));
+  expect(lib.calls.createFolder).toEqual([{ name: "New Folder", parentFolderId: undefined }]);
 });

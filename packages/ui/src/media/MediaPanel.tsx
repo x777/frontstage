@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorStore, MediaFolder, MediaManifestEntry } from "@palmier/core";
-import { collectFolderCascade, parseGenerationStatus } from "@palmier/core";
+import { buildFolderIndex, collectFolderCascade, folderPath, parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionsTab } from "./CaptionsTab.js";
@@ -42,6 +42,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
   const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
   const [renamingFolderId, setRenamingFolderId] = useState<string | undefined>(undefined);
+  const [folderError, setFolderError] = useState<string | null>(null);
 
   // Two independent selectors (not one object-returning selector) so a host whose getSnapshot()
   // builds a fresh wrapper each call still gets stable per-field identity — useSyncExternalStore
@@ -70,13 +71,52 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
   const navigateTo = useCallback((folderId: string | undefined) => {
     setCurrentFolderId(folderId);
     setSelectedFolderId(undefined);
+    setFolderError(null);
   }, []);
 
+  const folderIndex = useMemo(() => buildFolderIndex(folders), [folders]);
+
+  // Remembers the ancestor chain for currentFolderId while it still resolves, so if the drilled-in
+  // folder disappears out from under the panel (e.g. an agent's delete_folder over MCP), the reset
+  // effect below can land on the nearest surviving ancestor instead of a dangling id. Written
+  // during render (not an effect) so it always holds the last-valid path, not a stale one.
+  const lastKnownPathRef = useRef<MediaFolder[]>([]);
+  if (currentFolderId !== undefined && folderIndex.byId.has(currentFolderId)) {
+    lastKnownPathRef.current = folderPath(folderIndex, currentFolderId);
+  }
+
+  // currentFolderId can go stale between renders. Without this, "New Folder" throws (createFolder
+  // rejects an unknown parent) and OS-file-drop imports would stamp entries with a dangling
+  // folderId that vanish from every view.
+  useEffect(() => {
+    if (currentFolderId === undefined || folderIndex.byId.has(currentFolderId)) return;
+    const survivingAncestor = [...lastKnownPathRef.current].reverse().find((f) => folderIndex.byId.has(f.id));
+    navigateTo(survivingAncestor?.id);
+  }, [folderIndex, currentFolderId, navigateTo]);
+
+  const createFolderAt = useCallback(
+    (parentFolderId: string | undefined) => {
+      const folder = library.createFolder("New Folder", parentFolderId);
+      setFolderError(null);
+      setSelectedFolderId(folder.id);
+      setRenamingFolderId(folder.id);
+    },
+    [library],
+  );
+
   const handleNewFolder = useCallback(() => {
-    const folder = library.createFolder("New Folder", currentFolderId);
-    setSelectedFolderId(folder.id);
-    setRenamingFolderId(folder.id);
-  }, [library, currentFolderId]);
+    try {
+      createFolderAt(currentFolderId);
+    } catch {
+      // currentFolderId is a dangling id (e.g. the reactive reset above hasn't landed yet) —
+      // belt-and-braces: fall back to root rather than silently doing nothing.
+      try {
+        createFolderAt(undefined);
+      } catch (err) {
+        setFolderError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }, [createFolderAt, currentFolderId]);
 
   const handleDropOnFolder = useCallback(
     (folderId: string | undefined, payload: MediaDragPayload) => {
@@ -267,6 +307,23 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
               }}
             />
           </div>
+
+          {folderError != null && (
+            <div
+              data-testid="media-folder-error"
+              style={{
+                fontSize: theme.fontSize.xs,
+                color: theme.status.error,
+                background: theme.bg.surface,
+                border: `${theme.borderWidth.hairline} solid ${theme.status.error}`,
+                borderRadius: theme.radius.xs,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                margin: `0 ${theme.spacing.sm}`,
+              }}
+            >
+              {folderError}
+            </div>
+          )}
 
           <MediaBreadcrumbs
             folders={folders}

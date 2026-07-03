@@ -203,6 +203,15 @@ export class MediaLibrary {
     this.emit();
   }
 
+  // Unknown/dangling folderId → root (undefined). Guards every entry-stamping import path (OS
+  // drop/file-input, import_media bytes/url/path) against a folder deleted between the caller
+  // resolving it and the entry actually landing (e.g. an agent's delete_folder over MCP racing an
+  // in-flight import) — an entry stamped with a dead folderId would vanish from every view.
+  resolveFolderId(folderId: string | undefined): string | undefined {
+    if (folderId === undefined) return undefined;
+    return this._folders.some((f) => f.id === folderId) ? folderId : undefined;
+  }
+
   moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void {
     if (folderId !== undefined && !this._folders.some((f) => f.id === folderId)) {
       throw new Error(`unknown folder: ${folderId}`);
@@ -260,6 +269,7 @@ export class MediaLibrary {
   // immediately; probe + finalize happen in the background per file, one failure doesn't stop the rest.
   async importFiles(files: File[] | FileList, folderId?: string): Promise<MediaManifestEntry[]> {
     const added: MediaManifestEntry[] = [];
+    const resolvedFolderId = this.resolveFolderId(folderId);
 
     for (const file of Array.from(files)) {
       const ext = file.name.split(".").pop() ?? "";
@@ -276,7 +286,7 @@ export class MediaLibrary {
         source: { kind: "project", relativePath },
         duration: 0,
         generationStatus: "downloading",
-        ...(folderId !== undefined ? { folderId } : {}),
+        ...(resolvedFolderId !== undefined ? { folderId: resolvedFolderId } : {}),
       };
       this.addPlaceholder(entry);
       added.push(entry);
@@ -290,13 +300,15 @@ export class MediaLibrary {
     try {
       const probed = await probeMediaBlob(file as Blob, type);
       const bytes = new Uint8Array(await file.arrayBuffer());
-      if (probed.thumb) this.thumbnails.set(id, probed.thumb);
       this.finalizeGenerated(id, bytes, {
         duration: probed.duration,
         ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
         ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
         ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
       });
+      // finalizeGenerated no-ops when the entry was deleted mid-import — skip the thumbnail too,
+      // or it leaks a dangling id → dataURL entry in `thumbnails` that nothing ever revisits.
+      if (probed.thumb && this.entry(id)) this.thumbnails.set(id, probed.thumb);
     } catch (err) {
       this.markGenerationFailed([id], err instanceof Error ? err.message : String(err));
     }
@@ -316,7 +328,7 @@ export class MediaLibrary {
     if (!ext || !type) throw new Error(`Unsupported mimeType '${mimeType}'`);
 
     const id = crypto.randomUUID();
-    const entry = createImportPlaceholderEntry({ id, type, name: name ?? "Imported asset", ext, folderId });
+    const entry = createImportPlaceholderEntry({ id, type, name: name ?? "Imported asset", ext, folderId: this.resolveFolderId(folderId) });
     this.addPlaceholder(entry);
     void this.finishBytesImport(id, bytes, mimeType, type);
     return { assetId: id };
@@ -326,13 +338,15 @@ export class MediaLibrary {
     try {
       const blob = new Blob([bytes as BlobPart], { type: mimeType });
       const probed = await probeMediaBlob(blob, type);
-      if (probed.thumb) this.thumbnails.set(id, probed.thumb);
       this.finalizeGenerated(id, bytes, {
         duration: probed.duration,
         ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
         ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
         ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
       });
+      // Same delete-during-import race as finishFileImport — only keep the thumbnail if the entry
+      // is still there after finalize.
+      if (probed.thumb && this.entry(id)) this.thumbnails.set(id, probed.thumb);
     } catch (err) {
       this.markGenerationFailed([id], err instanceof Error ? err.message : String(err));
     }

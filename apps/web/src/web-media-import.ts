@@ -32,7 +32,13 @@ export function createWebMediaImport(deps: WebMediaImportDeps): NonNullable<Tool
 
     const id = crypto.randomUUID();
     const displayName = name ?? stemName(new URL(url).pathname) ?? "Imported asset";
-    const entry = createImportPlaceholderEntry({ id, type, name: displayName || "Imported asset", ext, folderId });
+    const entry = createImportPlaceholderEntry({
+      id,
+      type,
+      name: displayName || "Imported asset",
+      ext,
+      folderId: library.resolveFolderId(folderId),
+    });
     library.addPlaceholder(entry);
 
     void (async () => {
@@ -64,13 +70,15 @@ export function createWebMediaImport(deps: WebMediaImportDeps): NonNullable<Tool
         const bytes = new Uint8Array(await res.arrayBuffer());
         const blob = new Blob([bytes as BlobPart]);
         const probed = await probeMediaBlob(blob, type);
-        if (probed.thumb) library.setThumbnail(id, probed.thumb);
         library.finalizeGenerated(id, bytes, {
           duration: probed.duration,
           ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
           ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
           ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
         });
+        // finalizeGenerated no-ops when the entry was deleted mid-import — skip the thumbnail
+        // too, or it leaks a dangling id → dataURL entry that nothing ever revisits.
+        if (probed.thumb && library.entry(id)) library.setThumbnail(id, probed.thumb);
       } catch (err) {
         library.markGenerationFailed([id], err instanceof Error ? err.message : String(err));
       }
