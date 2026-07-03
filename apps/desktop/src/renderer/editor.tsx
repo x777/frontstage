@@ -155,7 +155,10 @@ const mediaImportFacade = createDesktopMediaImport({
 
 // SAME object threaded into the ToolExecutor context and useExportCommand's XML/FCPXML path —
 // mirrors the generation/transcription/library facade pattern above.
-const interopExportFacade = createDesktopInteropExport({ resolvePath: resolveMediaPath });
+const interopExportFacade = createDesktopInteropExport({
+  resolvePath: resolveMediaPath,
+  getProjectDir: () => (session.getState().ref as DesktopProjectRef | null)?.path,
+});
 
 const executor = new ToolExecutor(buildCatalog(), {
   store,

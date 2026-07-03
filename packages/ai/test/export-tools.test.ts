@@ -249,3 +249,49 @@ describe("export_project — fcpxml happy path", () => {
     expect(contents).not.toBe(zeroTcXml);
   });
 });
+
+describe("export_project — projectRoot (M12B fast-follow)", () => {
+  function makeProjectManifest(): MediaManifest {
+    return {
+      version: 2,
+      entries: [
+        { id: "media-1", name: "one.mp4", type: "video", source: { kind: "project", relativePath: "media/one.mp4" }, duration: 2 },
+        { id: "media-2", name: "two.mp4", type: "video", source: { kind: "project", relativePath: "media/two.mp4" }, duration: 2 },
+      ],
+      folders: [],
+    };
+  }
+
+  test("desktop-like facade: getProjectRoot() feeds the exporter, producing an absolute file:// URL", async () => {
+    const facade = makeInteropFacade({ getProjectRoot: () => "/Users/alice/Movies/Beach Edit" });
+    const ctx = makeCtx({ interopExport: facade, getManifest: makeProjectManifest, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    await tool.run({ mode: "fcpxml" }, ctx);
+
+    const expectedXml = exportFcpxml(ctx.store.getSnapshot().timeline, ctx.getManifest().entries, {
+      projectRoot: "/Users/alice/Movies/Beach Edit",
+      projectName: "MyProj",
+      startTimecodes: new Map(),
+    });
+    const [, contents] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(contents).toBe(expectedXml);
+    expect(contents).toContain('src="file:///Users/alice/Movies/Beach%20Edit/media/one.mp4"');
+  });
+
+  test("web-like facade (no getProjectRoot): keeps the best-effort <projectName> fallback path", async () => {
+    const facade = makeInteropFacade(); // no getProjectRoot member, mirrors createWebInteropExport
+    const ctx = makeCtx({ interopExport: facade, getManifest: makeProjectManifest, projectName: () => "MyProj" });
+    const tool = exportProjectTool();
+
+    await tool.run({ mode: "fcpxml" }, ctx);
+
+    const expectedXml = exportFcpxml(ctx.store.getSnapshot().timeline, ctx.getManifest().entries, {
+      projectName: "MyProj",
+      startTimecodes: new Map(),
+    });
+    const [, contents] = (facade.saveText as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(contents).toBe(expectedXml);
+    expect(contents).toContain('src="file:///MyProj/media/one.mp4"');
+  });
+});

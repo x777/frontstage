@@ -6,6 +6,10 @@ export interface DesktopInteropExportDeps {
   // Resolves a mediaRef to an on-disk absolute path, or null if it isn't resolvable (in-memory-only
   // media, missing project, etc.) — mirrors the audio extractor's resolvePath.
   resolvePath(mediaRef: string): string | null;
+  // The current project's real absolute directory, or undefined (no project open yet) — mirrors
+  // desktop-media-import's getProjectDir. Threaded through to exportXmeml/exportFcpxml so
+  // media-rep/pathurl entries are real file:// paths instead of the web best-effort fallback.
+  getProjectDir(): string | undefined;
 }
 
 const KIND_FILTERS: Record<"fcpxml" | "xmeml", ExportSaveFilter> = {
@@ -17,8 +21,29 @@ function extensionForKind(kind: "fcpxml" | "xmeml"): string {
   return kind === "xmeml" ? "xml" : "fcpxml";
 }
 
+/**
+ * Ensures `outPath` ends in the extension `kind` requires, REPLACING a mismatched one rather than
+ * appending — `"reel.mp4"` (xmeml) -> `"reel.xml"`, `"reel"` -> `"reel.xml"`, `"reel.xml"` unchanged.
+ * Only inspects the final path segment, so dots in directory names (`/Users/x.y/reel`) are inert.
+ */
+export function normalizeExportOutputPath(outPath: string, kind: "fcpxml" | "xmeml"): string {
+  const expectedExt = extensionForKind(kind);
+  const slashIdx = Math.max(outPath.lastIndexOf("/"), outPath.lastIndexOf("\\"));
+  const dir = slashIdx >= 0 ? outPath.slice(0, slashIdx + 1) : "";
+  const base = slashIdx >= 0 ? outPath.slice(slashIdx + 1) : outPath;
+  const dotIdx = base.lastIndexOf(".");
+  const rawExt = dotIdx > 0 ? base.slice(dotIdx + 1).toLowerCase() : undefined;
+  if (rawExt === expectedExt) return outPath;
+  const stem = dotIdx > 0 ? base.slice(0, dotIdx) : base;
+  return `${dir}${stem}.${expectedExt}`;
+}
+
 export function createDesktopInteropExport(deps: DesktopInteropExportDeps): NonNullable<ToolContext["interopExport"]> {
   return {
+    getProjectRoot(): string | undefined {
+      return deps.getProjectDir();
+    },
+
     async readTimecodes(mediaRefs: string[]): Promise<Map<string, SourceTimecode>> {
       const byPath = new Map<string, string>(); // path -> mediaRef
       for (const ref of mediaRefs) {
@@ -45,9 +70,7 @@ export function createDesktopInteropExport(deps: DesktopInteropExportDeps): NonN
         if (!picked) return { cancelled: true };
         outPath = picked;
       } else {
-        const rawExt = outPath.split(".").pop()?.toLowerCase();
-        const expectedExt = extensionForKind(kind);
-        if (rawExt !== expectedExt) outPath = `${outPath}.${expectedExt}`;
+        outPath = normalizeExportOutputPath(outPath, kind);
       }
       const path = await window.desktopProject.writeExportText(outPath, contents, overwrite);
       return { path };

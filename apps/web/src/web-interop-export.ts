@@ -19,7 +19,8 @@ const DESCRIPTION: Record<"fcpxml" | "xmeml", string> = {
 
 // Web's ToolContext.interopExport facade (M12B T3) — no filesystem access, so readTimecodes always
 // resolves empty (the #247 regression-locked 0-based export path); saveText always shows a picker
-// regardless of outputPath (browsers don't grant arbitrary-path writes).
+// regardless of outputPath (browsers don't grant arbitrary-path writes). getProjectRoot is
+// intentionally omitted — exporters fall back to the best-effort <projectName>-based path.
 export function createWebInteropExport(deps: WebInteropExportDeps = {}): NonNullable<ToolContext["interopExport"]> {
   return {
     async readTimecodes(): Promise<Map<string, SourceTimecode>> {

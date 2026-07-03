@@ -219,6 +219,24 @@ describe("exportFcpxml — goldens", () => {
     expect(xml).toContain('<trim-rect top="5" right="10" bottom="0" left="10"/>');
   });
 
+  it("static non-zero position + rotation (non-centered clip, no scale/crop)", () => {
+    const entries = [videoEntry("media-1", {})];
+    const clip = makeClip({
+      id: "c1",
+      mediaRef: "media-1",
+      startFrame: 0,
+      durationFrames: 60,
+      transform: { centerX: 0.545, centerY: 0.3, width: 1, height: 1, rotation: 15, flipHorizontal: false, flipVertical: false },
+    });
+    const timeline = makeTimeline([makeTrack([clip])]);
+    const xml = exportFcpxml(timeline, entries, { projectName: "Proj", startTimecodes: new Map() });
+    expect(xml).toBe(fixture("fcpxml-position"));
+    // positionValue: unit = seqHeight/100 = 10.8. x = (centerX-0.5)*seqWidth/unit = 0.045*1920/10.8 = 8;
+    // y = (0.5-centerY)*seqHeight/unit = 0.2*1080/10.8 = 20 — both exact, hand-verified against the
+    // ported formula (both axes scaled by seqHeight, per FCP's "% of frame height" convention).
+    expect(xml).toContain('<adjust-transform scale="1 1" rotation="-15" anchor="0 0" position="8 20"/>');
+  });
+
   it("static volume (linear -> dB) on a standalone audio source; keyframed volume is DROPPED entirely", () => {
     const entries = [audioEntry("media-a", {})];
     const clip = makeClip({

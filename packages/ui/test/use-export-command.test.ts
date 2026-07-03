@@ -1,7 +1,17 @@
 import { renderHook, act } from "@testing-library/react";
 import { useExportCommand } from "../src/editor/use-export-command.js";
 import type { ExportGateway, ExportTarget } from "../src/editor/export-gateway.js";
-import { defaultTimeline, exportFcpxml, exportXmeml, type MediaManifestEntry, type SourceTimecode, type Timeline } from "@palmier/core";
+import {
+  defaultCrop,
+  defaultTimeline,
+  defaultTransform,
+  exportFcpxml,
+  exportXmeml,
+  type MediaManifestEntry,
+  type SourceTimecode,
+  type Timeline,
+  type Track,
+} from "@palmier/core";
 import type { ToolContext } from "@palmier/ai";
 import type { MediaByteSource } from "@palmier/engine";
 
@@ -10,6 +20,40 @@ const fakeMedia = {} as MediaByteSource;
 
 function realTimeline(): Timeline {
   return { ...defaultTimeline(), tracks: [] };
+}
+
+// mediaRef-referencing clip, for tests that need the exporter to actually resolve a media resource
+// (realTimeline()'s empty tracks never surface any <asset>/media-rep — see projectRoot tests below).
+function timelineWithClip(mediaRef: string): Timeline {
+  const track: Track = {
+    id: "t1",
+    type: "video",
+    muted: false,
+    hidden: false,
+    syncLocked: false,
+    clips: [
+      {
+        id: "c1",
+        mediaRef,
+        mediaType: "video",
+        sourceClipType: "video",
+        startFrame: 0,
+        durationFrames: 60,
+        trimStartFrame: 0,
+        trimEndFrame: 0,
+        speed: 1,
+        volume: 1,
+        fadeInFrames: 0,
+        fadeOutFrames: 0,
+        fadeInInterpolation: "linear",
+        fadeOutInterpolation: "linear",
+        opacity: 1,
+        transform: defaultTransform(),
+        crop: defaultCrop(),
+      },
+    ],
+  };
+  return { ...defaultTimeline(), tracks: [track] };
 }
 
 type InteropFacade = NonNullable<ToolContext["interopExport"]>;
@@ -240,6 +284,66 @@ test("exportProject('fcpxml') saves exportFcpxml's output with kind='fcpxml'", a
 
   const expectedXml = exportFcpxml(timeline, [], { projectName: "MyProj", startTimecodes: new Map() });
   expect(facade.saveText).toHaveBeenCalledWith("MyProj.fcpxml", expectedXml, "fcpxml", undefined, true);
+});
+
+test("exportProject('fcpxml') passes the facade's getProjectRoot into the exporter, producing an absolute file:// URL", async () => {
+  const facade = makeInteropFacade({ getProjectRoot: () => "/Users/alice/Movies/Beach Edit" });
+  const runProjectCommand = makeRunProjectCommand();
+  const entries: MediaManifestEntry[] = [
+    { id: "m1", name: "a.mp4", type: "video", source: { kind: "project", relativePath: "media/a.mp4" }, duration: 2 },
+  ];
+  const timeline = timelineWithClip("m1");
+
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: facade,
+      getTimeline: () => timeline,
+      getMediaEntries: () => entries,
+      media: fakeMedia,
+      suggestedName: () => "MyProj",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("fcpxml");
+  });
+
+  const expectedXml = exportFcpxml(timeline, entries, {
+    projectRoot: "/Users/alice/Movies/Beach Edit",
+    projectName: "MyProj",
+    startTimecodes: new Map(),
+  });
+  expect(facade.saveText).toHaveBeenCalledWith("MyProj.fcpxml", expectedXml, "fcpxml", undefined, true);
+  expect(expectedXml).toContain('src="file:///Users/alice/Movies/Beach%20Edit/media/a.mp4"');
+});
+
+test("exportProject('fcpxml') with no getProjectRoot on the facade (web-like) keeps the best-effort fallback path", async () => {
+  const facade = makeInteropFacade(); // no getProjectRoot member, mirrors createWebInteropExport
+  const runProjectCommand = makeRunProjectCommand();
+  const entries: MediaManifestEntry[] = [
+    { id: "m1", name: "a.mp4", type: "video", source: { kind: "project", relativePath: "media/a.mp4" }, duration: 2 },
+  ];
+  const timeline = timelineWithClip("m1");
+
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: facade,
+      getTimeline: () => timeline,
+      getMediaEntries: () => entries,
+      media: fakeMedia,
+      suggestedName: () => "MyProj",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("fcpxml");
+  });
+
+  const expectedXml = exportFcpxml(timeline, entries, { projectName: "MyProj", startTimecodes: new Map() });
+  expect(facade.saveText).toHaveBeenCalledWith("MyProj.fcpxml", expectedXml, "fcpxml", undefined, true);
+  expect(expectedXml).toContain('src="file:///MyProj/media/a.mp4"');
 });
 
 test("exportProject('xmeml') is a no-op when no interopExport facade", async () => {

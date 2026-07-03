@@ -58,10 +58,11 @@ export function useExportCommand(opts: {
         const entries = getMediaEntries?.() ?? [];
         const projectName = suggestedName();
         const startTimecodes = await interopExport.readTimecodes(timelineMediaRefs(timeline));
+        const projectRoot = interopExport.getProjectRoot?.();
         const xml =
           kind === "xmeml"
-            ? exportXmeml(timeline, entries, { projectName, startTimecodes })
-            : exportFcpxml(timeline, entries, { projectName, startTimecodes });
+            ? exportXmeml(timeline, entries, { projectRoot, projectName, startTimecodes })
+            : exportFcpxml(timeline, entries, { projectRoot, projectName, startTimecodes });
         const ext = kind === "xmeml" ? "xml" : "fcpxml";
         await interopExport.saveText(`${projectName}.${ext}`, xml, kind, undefined, true);
       } finally {

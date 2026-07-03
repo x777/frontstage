@@ -64,10 +64,11 @@ export function exportProjectTool(): ToolSpec {
         return errorResult(`export_project: ${toMessage(err)}`);
       }
 
+      const projectRoot = facade.getProjectRoot?.();
       const xml =
         mode === "xml"
-          ? exportXmeml(timeline, manifest.entries, { projectName, startTimecodes })
-          : exportFcpxml(timeline, manifest.entries, { projectName, startTimecodes });
+          ? exportXmeml(timeline, manifest.entries, { projectRoot, projectName, startTimecodes })
+          : exportFcpxml(timeline, manifest.entries, { projectRoot, projectName, startTimecodes });
 
       const ext = extensionForMode(mode);
       const defaultName = `${projectName}.${ext}`;

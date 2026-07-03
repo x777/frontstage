@@ -66,6 +66,9 @@ export interface ToolContext {
     // Desktop: reads embedded tmcd via ffprobe. Web: no filesystem access — resolves an empty map
     // (0-based export, the #247 regression-locked path).
     readTimecodes(mediaRefs: string[]): Promise<Map<string, SourceTimecode>>;
+    // Desktop: the real absolute project directory, so exported media-rep/pathurl entries are real
+    // file:// paths. Web: omitted — exporters fall back to the best-effort <projectName>-based path.
+    getProjectRoot?(): string | undefined;
     // Desktop: outputPath given → writes directly there (overwrite=false + existing → throws);
     // outputPath omitted → a native save dialog picks the destination. Web: outputPath is ignored —
     // always a showSaveFilePicker-style picker (cancel → { cancelled: true }).
