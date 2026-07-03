@@ -23,6 +23,7 @@ import { Layout, persistLayout } from "../layout/Layout.js";
 import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { TimelinePanel } from "../timeline/TimelinePanel.js";
 import { MediaPanel } from "../media/MediaPanel.js";
+import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "../media/CaptionsTab.js";
 import { MediaDragController } from "../media/media-drag.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { FileMenu } from "./FileMenu.js";
@@ -59,6 +60,8 @@ export interface EditorProps {
     sessionStore?: ChatSessionStore;
     mentionItems?: MentionItem[];
     generation?: GenerationFacade;
+    executor?: CaptionsExecutor;
+    transcription?: CaptionsTranscriptionFacade;
     newId?: () => string;
     settings?: {
       keyConfig: KeyConfig;
@@ -444,6 +447,9 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
         media={
           <MediaPanel
             library={library}
+            store={store}
+            executor={agent?.executor}
+            transcription={agent?.transcription}
             onItemPointerDown={(entry, e) => {
               e.preventDefault();
               dragController.start(entry, e.clientX, e.clientY, e.metaKey || e.ctrlKey);

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline } from "@palmier/core";
 import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore } from "@palmier/ui";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost } from "@palmier/ai";
@@ -126,6 +126,9 @@ const transcriptionFacade = {
   cachedTranscript: (mediaRef: string) => transcriptionServiceRef.current.cachedTranscript(mediaRef),
   hasKey: () => transcriptionServiceRef.current.hasKey(),
   estimateCredits: (durationSeconds: number) => transcriptionServiceRef.current.estimateCredits(durationSeconds),
+  // M11D: a real Canvas2D measure, at the timeline's own render width — upgrades add_captions' heuristic.
+  measureText: (text: string, style: { fontName: string; fontSize: number }) =>
+    measureCaptionWidthFrac(text, style, store.getSnapshot().timeline.width),
 };
 
 const executor = new ToolExecutor(buildCatalog(), {
@@ -277,6 +280,8 @@ function PalmierDesktopApp() {
         sessionStore,
         mentionItems,
         generation: generationFacade,
+        executor,
+        transcription: transcriptionFacade,
         newId: () => crypto.randomUUID(),
         settings: {
           keyConfig,

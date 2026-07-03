@@ -10,6 +10,7 @@ import {
   defaultTextStyle,
   rgbaFromHex,
   sourceFramesConsumed,
+  heuristicCaptionWidthFrac,
   type CaptionClipSpec,
   type CaptionPhrase,
   type TextStyle,
@@ -25,11 +26,12 @@ type TextCase = (typeof TEXT_CASES)[number];
 /**
  * Fallback text-measure used when the host hasn't wired `ctx.transcription.measureText` (M11D wires
  * a real Canvas2D-backed impl from @palmier/ui). Returns the rendered width of `text` at
- * `style.fontSize`, as a FRACTION of a 1920px-wide canvas — the same unit buildCaptionPhrases'
- * `measure` expects. Deliberately crude (no per-glyph metrics); documented deviation, not a bug.
+ * `style.fontSize`, as a FRACTION of `canvasWidth` — the same unit buildCaptionPhrases' `measure`
+ * expects. Deliberately crude (no per-glyph metrics); documented deviation, not a bug. The formula
+ * itself lives in @palmier/core (heuristicCaptionWidthFrac) so the ui-side fallback matches exactly.
  */
-function heuristicMeasure(text: string, style: TextStyle): number {
-  return (text.length * style.fontSize * 0.55) / 1920;
+function heuristicMeasure(text: string, style: TextStyle, canvasWidth: number): number {
+  return heuristicCaptionWidthFrac(text, style.fontSize, canvasWidth);
 }
 
 function applyTextCase(phrases: CaptionPhrase[], mode: TextCase): CaptionPhrase[] {
@@ -141,7 +143,7 @@ export function addCaptionsTool(): ToolSpec {
         ...(color !== undefined ? { color } : {}),
       };
       const measure = (text: string): number =>
-        facade.measureText ? facade.measureText(text, style) : heuristicMeasure(text, style);
+        facade.measureText ? facade.measureText(text, style) : heuristicMeasure(text, style, tl.width);
       const textCase: TextCase = a.textCase ?? "auto";
 
       const allSpecs: CaptionClipSpec[] = [];

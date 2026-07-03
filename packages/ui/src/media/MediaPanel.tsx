@@ -1,24 +1,33 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { EditorStore, MediaManifestEntry } from "@palmier/core";
 import { parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
+import { CaptionsTab } from "./CaptionsTab.js";
+import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
 
 interface MediaLibraryLike {
   getSnapshot(): { entries: MediaManifestEntry[] };
   subscribe(cb: () => void): () => void;
   thumbnail(id: string): string | undefined;
   importFiles(files: File[] | FileList): Promise<MediaManifestEntry[]>;
+  entry(id: string): MediaManifestEntry | undefined;
 }
 
 export interface MediaPanelProps {
   library: MediaLibraryLike;
   onItemPointerDown?: (entry: MediaManifestEntry, e: React.PointerEvent) => void;
+  store?: EditorStore;
+  executor?: CaptionsExecutor;
+  transcription?: CaptionsTranscriptionFacade;
 }
 
-export function MediaPanel({ library, onItemPointerDown }: MediaPanelProps) {
+type PanelTab = "media" | "captions";
+
+export function MediaPanel({ library, onItemPointerDown, store, executor, transcription }: MediaPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [tab, setTab] = useState<PanelTab>("media");
 
   const entries = useSyncExternalStore(
     library.subscribe.bind(library),
@@ -79,80 +88,124 @@ export function MediaPanel({ library, onItemPointerDown }: MediaPanelProps) {
         boxSizing: "border-box",
       }}
     >
-      {/* Header */}
+      {/* Tab bar */}
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          gap: theme.spacing.xs,
+          gap: theme.spacing.xxs,
           padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
           borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
           flexShrink: 0,
         }}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="video/*,image/*,audio/*"
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-        />
-        <button
-          data-testid="media-import"
-          onClick={handleImportClick}
-          style={{
-            background: theme.bg.raised,
-            color: theme.text.primary,
-            border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-            borderRadius: theme.radius.xs,
-            padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-            fontSize: theme.fontSize.xs,
-            fontWeight: theme.fontWeight.medium,
-            cursor: "pointer",
-          }}
-        >
-          Import
-        </button>
-        <input
-          data-testid="media-search"
-          type="text"
-          disabled
-          placeholder="Search"
-          style={{
-            flex: 1,
-            background: theme.bg.base,
-            color: theme.text.muted,
-            border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-            borderRadius: theme.radius.xs,
-            padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-            fontSize: theme.fontSize.xs,
-            outline: "none",
-          }}
-        />
-      </div>
-
-      {/* Grid */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: theme.spacing.xs,
-          display: "grid",
-          gridTemplateColumns: `repeat(auto-fill, minmax(${theme.size.mediaItemMin}, 1fr))`,
-          gap: theme.spacing.xs,
-          alignContent: "start",
-        }}
-      >
-        {entries.map((entry) => (
-          <MediaItem
-            key={entry.id}
-            entry={entry}
-            thumbnail={library.thumbnail(entry.id)}
-            onPointerDown={onItemPointerDown}
-          />
+        {(["media", "captions"] as const).map((t) => (
+          <button
+            key={t}
+            data-testid={`media-tab-${t}`}
+            aria-pressed={tab === t}
+            onClick={() => setTab(t)}
+            style={{
+              flex: 1,
+              background: tab === t ? theme.accent.primary : theme.bg.raised,
+              color: tab === t ? theme.text.onAccent : theme.text.secondary,
+              border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+              borderRadius: theme.radius.xs,
+              padding: `${theme.spacing.xxs} 0`,
+              fontSize: theme.fontSize.xs,
+              fontWeight: theme.fontWeight.semibold,
+              cursor: "pointer",
+              textTransform: "capitalize",
+            }}
+          >
+            {t}
+          </button>
         ))}
       </div>
+
+      {tab === "media" ? (
+        <>
+          {/* Header */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: theme.spacing.xs,
+              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+              borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+              flexShrink: 0,
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="video/*,image/*,audio/*"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+            <button
+              data-testid="media-import"
+              onClick={handleImportClick}
+              style={{
+                background: theme.bg.raised,
+                color: theme.text.primary,
+                border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+                borderRadius: theme.radius.xs,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                fontSize: theme.fontSize.xs,
+                fontWeight: theme.fontWeight.medium,
+                cursor: "pointer",
+              }}
+            >
+              Import
+            </button>
+            <input
+              data-testid="media-search"
+              type="text"
+              disabled
+              placeholder="Search"
+              style={{
+                flex: 1,
+                background: theme.bg.base,
+                color: theme.text.muted,
+                border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+                borderRadius: theme.radius.xs,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                fontSize: theme.fontSize.xs,
+                outline: "none",
+              }}
+            />
+          </div>
+
+          {/* Grid */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: theme.spacing.xs,
+              display: "grid",
+              gridTemplateColumns: `repeat(auto-fill, minmax(${theme.size.mediaItemMin}, 1fr))`,
+              gap: theme.spacing.xs,
+              alignContent: "start",
+            }}
+          >
+            {entries.map((entry) => (
+              <MediaItem
+                key={entry.id}
+                entry={entry}
+                thumbnail={library.thumbnail(entry.id)}
+                onPointerDown={onItemPointerDown}
+              />
+            ))}
+          </div>
+        </>
+      ) : store && executor && transcription ? (
+        <CaptionsTab store={store} executor={executor} transcription={transcription} library={library} />
+      ) : (
+        <div data-testid="captions-tab-unavailable" style={{ padding: theme.spacing.sm, fontSize: theme.fontSize.xs, color: theme.text.muted }}>
+          Captions needs the AI facade — not wired for this host.
+        </div>
+      )}
     </div>
   );
 }

@@ -19,6 +19,16 @@ export interface CaptionWordSpan {
   endSec: number;
 }
 
+/**
+ * Character-count text-width fallback (fraction of `canvasWidth`), used when no real text
+ * measurement is available. The ONE shared home for this heuristic: @palmier/ai's add_captions
+ * tool and @palmier/ui's measureCaptionWidthFrac both call it, so the fallback is byte-identical
+ * on either side of the M11D facade wiring (core is the only package both already depend on).
+ */
+export function heuristicCaptionWidthFrac(text: string, fontSize: number, canvasWidth: number): number {
+  return (text.length * fontSize * 0.55) / canvasWidth;
+}
+
 export interface BuildCaptionPhrasesOptions {
   /**
    * Returns the rendered width of `text` (at the caption's font/size) as a FRACTION of the canvas

@@ -4,10 +4,10 @@ import { EditorStore, ProjectSession } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
-import { restoreLayout, createEditorHost, localProjectStore } from "@palmier/ui";
+import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService } from "@palmier/ai";
-import type { GenerationHost, TranscriptionHost } from "@palmier/ai";
+import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
@@ -31,9 +31,11 @@ interface PalmierAppProps {
   getGenerationLog: () => GenerationLogEntry[];
   genGateway: WebGenGateway;
   generationFacade: GenerationFacade;
+  executor: { execute(name: string, args: unknown): Promise<ToolResult> };
+  transcriptionFacade: NonNullable<ToolContext["transcription"]>;
 }
 
-function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
@@ -85,6 +87,8 @@ function PalmierApp({ store, session, library, exportGateway, agentSession, imag
         sessionStore,
         mentionItems,
         generation: generationFacade,
+        executor,
+        transcription: transcriptionFacade,
         newId: () => crypto.randomUUID(),
         settings: {
           keyConfig,
@@ -209,6 +213,9 @@ async function bootstrap() {
     cachedTranscript: (mediaRef: string) => transcriptionServiceRef.current.cachedTranscript(mediaRef),
     hasKey: () => transcriptionServiceRef.current.hasKey(),
     estimateCredits: (durationSeconds: number) => transcriptionServiceRef.current.estimateCredits(durationSeconds),
+    // M11D: a real Canvas2D measure, at the timeline's own render width — upgrades add_captions' heuristic.
+    measureText: (text: string, style: { fontName: string; fontSize: number }) =>
+      measureCaptionWidthFrac(text, style, store.getSnapshot().timeline.width),
   };
 
   const engineRef: { current: PlaybackEngine | null } = { current: null };
@@ -271,6 +278,8 @@ async function bootstrap() {
         getGenerationLog={getGenerationLog}
         genGateway={genGateway}
         generationFacade={generationFacade}
+        executor={executor}
+        transcriptionFacade={transcriptionFacade}
       />
     </StrictMode>,
   );

@@ -8,6 +8,7 @@ function fakeLibrary(entries: MediaManifestEntry[]) {
     subscribe: () => () => {},
     thumbnail: (id: string) => `${id}-thumb.png`,
     importFiles: async () => [],
+    entry: (id: string) => entries.find((e) => e.id === id),
   };
 }
 
