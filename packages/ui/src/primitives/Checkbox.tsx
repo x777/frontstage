@@ -11,8 +11,12 @@ export function Checkbox(props: {
   const dim = theme.iconSize.xs;
 
   return (
-    <div
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
       data-testid={testid}
+      disabled={disabled}
       onClick={() => {
         if (disabled) return;
         onChange(!checked);
@@ -21,6 +25,9 @@ export function Checkbox(props: {
         display: "inline-flex",
         alignItems: "center",
         gap: theme.spacing.xs,
+        background: "transparent",
+        border: "none",
+        padding: 0,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? theme.opacity.disabled : theme.opacity.opaque,
       }}
@@ -43,6 +50,6 @@ export function Checkbox(props: {
         {checked ? "✓" : ""}
       </span>
       {label && <span style={{ fontSize: theme.fontSize.sm, color: theme.text.secondary }}>{label}</span>}
-    </div>
+    </button>
   );
 }

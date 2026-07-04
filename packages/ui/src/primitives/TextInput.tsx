@@ -28,6 +28,7 @@ export function TextInput(props: {
       style={{
         background: theme.bg.raised,
         color: theme.text.primary,
+        outline: "none",
         borderWidth: theme.borderWidth.thin,
         borderStyle: "solid",
         borderColor: focused ? theme.accent.primary : theme.border.primary,

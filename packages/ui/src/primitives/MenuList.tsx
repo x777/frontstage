@@ -13,8 +13,11 @@ function MenuRow(props: {
   const { hovered, hoverProps } = useHover();
 
   return (
-    <div
+    <button
+      type="button"
+      role="menuitem"
       data-testid={testid}
+      disabled={disabled}
       onClick={() => {
         if (disabled) return;
         onSelect(id);
@@ -24,6 +27,9 @@ function MenuRow(props: {
         height: theme.iconSize.mdLg,
         display: "flex",
         alignItems: "center",
+        width: "100%",
+        border: "none",
+        textAlign: "left",
         background: !disabled && hovered ? `rgba(255, 255, 255, ${theme.opacity.soft})` : "transparent",
         color: disabled ? theme.text.muted : destructive ? theme.status.error : theme.text.primary,
         borderRadius: theme.radius.xs,
@@ -33,7 +39,7 @@ function MenuRow(props: {
       }}
     >
       {label}
-    </div>
+    </button>
   );
 }
 

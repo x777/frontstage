@@ -54,7 +54,7 @@
   --radius-md-lg: 12px;
   --radius-lg: 14px;
   --radius-xl: 20px;
-  --radius-pill: 999px;
+  --radius-pill: 999px; /* CSS pill idiom — Swift's Capsule() is a shape, not a numeric radius */
 
   /* Spacing (px) */
   --spacing-xxs: 2px;

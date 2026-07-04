@@ -149,7 +149,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                   title={labels[id]}
                   trailing={
                     <IconButton
-                      size="sm"
+                      frame="sm"
                       testid={`maximize-${id}`}
                       title={layout.maximized === id ? "Restore" : "Maximize"}
                       onClick={() => toggleMaximize(id)}
@@ -179,7 +179,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                   title="Media"
                   trailing={
                     <IconButton
-                      size="sm"
+                      frame="sm"
                       testid="maximize-media"
                       title="Maximize"
                       onClick={() => toggleMaximize("media")}
@@ -208,7 +208,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                       title="Preview"
                       trailing={
                         <IconButton
-                          size="sm"
+                          frame="sm"
                           testid="maximize-preview"
                           title="Maximize"
                           onClick={() => toggleMaximize("preview")}
@@ -233,7 +233,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                       title="Timeline"
                       trailing={
                         <IconButton
-                          size="sm"
+                          frame="sm"
                           testid="maximize-timeline"
                           title="Maximize"
                           onClick={() => toggleMaximize("timeline")}
@@ -262,7 +262,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                   title="Inspector"
                   trailing={
                     <IconButton
-                      size="sm"
+                      frame="sm"
                       testid="maximize-inspector"
                       title="Maximize"
                       onClick={() => toggleMaximize("inspector")}
