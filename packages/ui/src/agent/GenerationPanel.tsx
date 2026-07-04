@@ -569,6 +569,10 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
                   <div data-testid="gen-references-note" style={mutedStyle}>{referencesNote}</div>
                 )}
               </div>
+            ) : entry && (kind === "image" || kind === "video") ? (
+              <div data-testid="gen-references-unsupported" style={mutedStyle}>
+                References: not supported by {entry.displayName}.
+              </div>
             ) : (
               kind === "audio" && (
                 <div data-testid="gen-references-hint" style={mutedStyle}>

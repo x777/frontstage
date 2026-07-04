@@ -205,6 +205,64 @@ describe("generate_video tool", () => {
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("vid-42");
   });
+
+  // M14C follow-up: veo3.1-fast's real fal endpoint has no image field (WebFetch-verified,
+  // gen-catalog.ts) -> maxReferenceImages: 0 -> reference args must reject cleanly, fast (no
+  // entryUrl calls, no placeholder/job), instead of silently building input without them.
+  describe("reference images (M14C follow-up)", () => {
+    function makeEntryUrlTracker() {
+      const calls: string[] = [];
+      const entryUrl = async (ref: string) => { calls.push(ref); return `https://example.com/${ref}.png`; };
+      return { calls, entryUrl };
+    }
+
+    test("referenceImageMediaRefs on a zero-cap model: clean error, no entryUrl calls, no job started", async () => {
+      const tool = generateVideoTool();
+      const { calls, entryUrl } = makeEntryUrlTracker();
+      const { facade, addPlaceholderCalls, startJobCalls } = makeFacade({ entryUrl });
+      const ctx = makeCtx({ generation: facade });
+
+      const result = await tool.run(
+        { prompt: "a cat", model: "veo3.1-fast", duration: 4, referenceImageMediaRefs: ["ref-1"], confirm: true },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe("Veo 3.1 Fast does not support reference images.");
+      expect(calls).toHaveLength(0);
+      expect(addPlaceholderCalls).toHaveLength(0);
+      expect(startJobCalls).toHaveLength(0);
+    });
+
+    test("startImageMediaRef alone on a zero-cap model: same clean rejection", async () => {
+      const tool = generateVideoTool();
+      const { calls, entryUrl } = makeEntryUrlTracker();
+      const { facade } = makeFacade({ entryUrl });
+      const ctx = makeCtx({ generation: facade });
+
+      const result = await tool.run(
+        { prompt: "a cat", model: "veo3.1-fast", duration: 4, startImageMediaRef: "start-1", confirm: true },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe("Veo 3.1 Fast does not support reference images.");
+      expect(calls).toHaveLength(0);
+    });
+
+    test("without any reference args, behaves exactly as before (no imageUrls, no entryUrl calls)", async () => {
+      const tool = generateVideoTool();
+      const { calls, entryUrl } = makeEntryUrlTracker();
+      const { facade, startJobCalls } = makeFacade({ entryUrl });
+      const ctx = makeCtx({ generation: facade });
+
+      const result = await tool.run({ prompt: "a cat", model: "veo3.1-fast", duration: 4, confirm: true }, ctx);
+
+      expect(result.isError).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(startJobCalls[0]!.input).not.toHaveProperty("image_url");
+    });
+  });
 });
 
 // ── upscale_media ────────────────────────────────────────────────────────────

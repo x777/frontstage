@@ -183,6 +183,41 @@ describe("generate_image tool — pipeline path", () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("fal is down");
   });
+
+  // M14C follow-up: nano-banana's real fal endpoint has no image field (WebFetch-verified,
+  // gen-catalog.ts) -> maxReferenceImages: 0 -> referenceMediaIds must reject cleanly, fast (no
+  // entryUrl calls, no placeholder/job), instead of being silently ignored (the prior "DEFERRED" gap).
+  describe("reference images (M14C follow-up)", () => {
+    test("referenceMediaIds on the default (zero-cap) model: clean error, no entryUrl calls, no job started", async () => {
+      const tool = generateImageTool();
+      const calls: string[] = [];
+      const entryUrl = async (ref: string) => { calls.push(ref); return `https://example.com/${ref}.png`; };
+      const { facade, addPlaceholderCalls, startJobCalls } = makeFacade({ entryUrl });
+      const ctx = makeCtx({ generation: facade });
+
+      const result = await tool.run({ prompt: "a cat", referenceMediaIds: ["img-1"] }, ctx);
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe("Nano Banana does not support reference images.");
+      expect(calls).toHaveLength(0);
+      expect(addPlaceholderCalls).toHaveLength(0);
+      expect(startJobCalls).toHaveLength(0);
+    });
+
+    test("without referenceMediaIds, behaves exactly as before (no entryUrl calls)", async () => {
+      const tool = generateImageTool();
+      const calls: string[] = [];
+      const entryUrl = async (ref: string) => { calls.push(ref); return `https://example.com/${ref}.png`; };
+      const { facade, startJobCalls } = makeFacade({ entryUrl });
+      const ctx = makeCtx({ generation: facade });
+
+      const result = await tool.run({ prompt: "a cat" }, ctx);
+
+      expect(result.isError).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(startJobCalls[0]!.input).not.toHaveProperty("image_url");
+    });
+  });
 });
 
 // ── generate_image dual-path ordering ───────────────────────────────────────

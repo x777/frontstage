@@ -1,6 +1,5 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { GenerationPanel } from "../src/agent/GenerationPanel.js";
-import { MEDIA_DRAG_MIME } from "../src/media/FolderTile.js";
 import type { MediaManifestEntry } from "@palmier/core";
 
 function makeFacade(opts: { hasKey?: boolean; startJobResult?: { jobId: string } | { error: string }; entryUrl?: (id: string) => Promise<string | undefined> } = {}) {
@@ -18,24 +17,8 @@ function makeNewId() {
   return () => `id-${n++}`;
 }
 
-function makeDataTransfer(initial?: { kind: "asset" | "folder"; id: string }) {
-  const store = new Map<string, string>();
-  if (initial) store.set(MEDIA_DRAG_MIME, JSON.stringify(initial));
-  return {
-    setData: (type: string, val: string) => { store.set(type, val); },
-    getData: (type: string) => store.get(type) ?? "",
-    get types() { return Array.from(store.keys()); },
-    effectAllowed: "move",
-    files: [] as unknown as FileList,
-  };
-}
-
 function imageEntry(id: string, name = `${id}.png`): MediaManifestEntry {
   return { id, name, type: "image", source: { kind: "project", relativePath: `media/${id}.png` }, duration: 1 };
-}
-
-function videoAssetEntry(id: string, name = `${id}.mp4`): MediaManifestEntry {
-  return { id, name, type: "video", source: { kind: "project", relativePath: `media/${id}.mp4` }, duration: 5 };
 }
 
 test("tab switch swaps the model options by kind", async () => {
@@ -166,108 +149,52 @@ test("upscale tab: honest-disabled note, Generate stays disabled", async () => {
 });
 
 // ── references drop zone (M14C T3, the M10D deferral) ───────────────────────
+//
+// M14C follow-up ("wire imageUrls into reference-capable model inputs"): every catalogued
+// image/video model now declares maxReferenceImages: 0 (WebFetch-verified — none of the 5 real
+// fal endpoints accept an image/reference field on their catalogued endpoint id; see
+// gen-catalog.ts). showReferences is therefore false for every real model today, so the drop
+// zone itself is unreachable through this panel until a future model declares a positive cap.
+// The mechanism (drag/drop, dedup, cap-trim+note, entryUrl resolution) is untouched and still
+// exercised generically by GenerationPanel's own code paths — only the "which model shows it"
+// wiring changed. What's tested here is the clean "not supported" reporting that replaces it.
 
-describe("references drop zone", () => {
-  test("video tab: shows the zone; accepts an internal image asset, rejects a video asset", async () => {
-    const img = imageEntry("img-1");
-    const vid = videoAssetEntry("vid-1");
-    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => [img, vid]} />);
+describe("references: not supported by any current model (M14C follow-up)", () => {
+  test("video tab: no zone; shows the unsupported hint naming the model", async () => {
+    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => []} />);
 
-    const zone = await screen.findByTestId("gen-references-zone");
-
-    const imgDt = makeDataTransfer({ kind: "asset", id: "img-1" });
-    fireEvent.dragOver(zone, { dataTransfer: imgDt });
-    fireEvent.drop(zone, { dataTransfer: imgDt });
-    expect(await screen.findByTestId("gen-reference-img-1")).toBeInTheDocument();
-
-    const vidDt = makeDataTransfer({ kind: "asset", id: "vid-1" });
-    fireEvent.dragOver(zone, { dataTransfer: vidDt });
-    fireEvent.drop(zone, { dataTransfer: vidDt });
-    expect(screen.queryByTestId("gen-reference-vid-1")).toBeNull();
+    expect(screen.queryByTestId("gen-references-zone")).toBeNull();
+    const hint = await screen.findByTestId("gen-references-unsupported");
+    expect(hint.textContent).toContain("Veo 3.1 Fast");
   });
 
-  test("image tab: shows the zone too", async () => {
+  test("image tab: no zone; shows the unsupported hint naming the model", async () => {
     render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => []} />);
     fireEvent.click(screen.getByTestId("gen-kind-tab-image"));
-    expect(await screen.findByTestId("gen-references-zone")).toBeInTheDocument();
+
+    expect(screen.queryByTestId("gen-references-zone")).toBeNull();
+    const hint = await screen.findByTestId("gen-references-unsupported");
+    expect(hint.textContent).toContain("Nano Banana");
   });
 
-  test("upscale tab: no references zone (untouched single-source flow)", async () => {
+  test("upscale tab: no zone and no unsupported hint (untouched single-source flow)", async () => {
     render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => []} />);
     fireEvent.click(screen.getByTestId("gen-kind-tab-upscale"));
     await waitFor(() => expect(screen.getByTestId("gen-upscale-note")).toBeInTheDocument());
     expect(screen.queryByTestId("gen-references-zone")).toBeNull();
+    expect(screen.queryByTestId("gen-references-unsupported")).toBeNull();
   });
 
-  test("remove clears a dropped reference", async () => {
-    const img = imageEntry("img-1");
-    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => [img]} />);
-
-    const zone = await screen.findByTestId("gen-references-zone");
-    const dt = makeDataTransfer({ kind: "asset", id: "img-1" });
-    fireEvent.dragOver(zone, { dataTransfer: dt });
-    fireEvent.drop(zone, { dataTransfer: dt });
-    await screen.findByTestId("gen-reference-img-1");
-
-    fireEvent.click(screen.getByTestId("gen-reference-remove-img-1"));
-    expect(screen.queryByTestId("gen-reference-img-1")).toBeNull();
-    expect(screen.getByTestId("gen-references-empty")).toBeInTheDocument();
-  });
-
-  test("submit resolves each reference to a URL via entryUrl", async () => {
-    const img = imageEntry("img-1");
+  test("submitting without references still works normally (no dangling reference state)", async () => {
     const facade = makeFacade();
-    render(<GenerationPanel generation={facade} newId={makeNewId()} entries={() => [img]} />);
-
-    const zone = await screen.findByTestId("gen-references-zone");
-    const dt = makeDataTransfer({ kind: "asset", id: "img-1" });
-    fireEvent.dragOver(zone, { dataTransfer: dt });
-    fireEvent.drop(zone, { dataTransfer: dt });
-    await screen.findByTestId("gen-reference-img-1");
+    render(<GenerationPanel generation={facade} newId={makeNewId()} entries={() => [imageEntry("img-1")]} />);
 
     fireEvent.change(screen.getByTestId("gen-prompt"), { target: { value: "a neon city at night" } });
     await waitFor(() => expect(screen.getByTestId("gen-submit")).not.toBeDisabled());
     await act(async () => { fireEvent.click(screen.getByTestId("gen-submit")); });
 
-    expect(facade.entryUrl).toHaveBeenCalledWith("img-1");
-    // References clear after a successful submit.
-    await waitFor(() => expect(screen.getByTestId("gen-references-empty")).toBeInTheDocument());
-  });
-
-  test("over the reference cap: trims to the cap and shows a note", async () => {
-    const imgs = Array.from({ length: 6 }, (_, i) => imageEntry(`img-${i}`));
-    const facade = makeFacade();
-    render(<GenerationPanel generation={facade} newId={makeNewId()} entries={() => imgs} />);
-
-    const zone = await screen.findByTestId("gen-references-zone");
-    for (const img of imgs) {
-      const dt = makeDataTransfer({ kind: "asset", id: img.id });
-      fireEvent.dragOver(zone, { dataTransfer: dt });
-      fireEvent.drop(zone, { dataTransfer: dt });
-    }
-    for (const img of imgs) await screen.findByTestId(`gen-reference-${img.id}`);
-
-    fireEvent.change(screen.getByTestId("gen-prompt"), { target: { value: "a neon city at night" } });
-    await waitFor(() => expect(screen.getByTestId("gen-submit")).not.toBeDisabled());
-    await act(async () => { fireEvent.click(screen.getByTestId("gen-submit")); });
-
-    expect(facade.entryUrl).toHaveBeenCalledTimes(4); // DEFAULT_MAX_REFERENCES
-    const note = await screen.findByTestId("gen-references-note");
-    expect(note.textContent).toContain("first 4");
-  });
-
-  test("dropping a duplicate asset is a no-op", async () => {
-    const img = imageEntry("img-1");
-    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => [img]} />);
-
-    const zone = await screen.findByTestId("gen-references-zone");
-    const dt = makeDataTransfer({ kind: "asset", id: "img-1" });
-    fireEvent.dragOver(zone, { dataTransfer: dt });
-    fireEvent.drop(zone, { dataTransfer: dt });
-    fireEvent.dragOver(zone, { dataTransfer: dt });
-    fireEvent.drop(zone, { dataTransfer: dt });
-
-    await screen.findByTestId("gen-reference-img-1");
-    expect(screen.getAllByTestId("gen-reference-img-1")).toHaveLength(1);
+    expect(facade.entryUrl).not.toHaveBeenCalled();
+    expect(facade.startJob).toHaveBeenCalledTimes(1);
+    expect(facade.startJob.mock.calls[0]![0].input).not.toHaveProperty("image_url");
   });
 });

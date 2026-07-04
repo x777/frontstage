@@ -65,6 +65,26 @@ function unsupportedValue(displayName: string, field: string, value: string, all
   return `${displayName} does not support ${field} '${value}'. Valid: ${allowed.join(", ")}.`;
 }
 
+// M14C follow-up ("wire imageUrls into reference-capable model inputs"): WebFetch-verified 2026-07
+// (doc pages + fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>, both independently) that
+// NONE of the 5 catalogued image/video endpoints below accept an image/reference conditioning field —
+// veo3.1/fast, kling-video/v2.5-turbo/pro/text-to-video, bytedance/seedance/v1/pro/text-to-video,
+// nano-banana, and flux/dev are all pure text-to-X with no image_url/image_urls field in their real
+// request schema. Reference-conditioned variants DO exist, but as SEPARATE fal endpoint ids
+// (fal-ai/nano-banana/edit: image_urls[]; fal-ai/veo3.1/fast/image-to-video,
+// fal-ai/kling-video/v2.5-turbo/pro/image-to-video, fal-ai/bytedance/seedance/v1/pro/image-to-video:
+// image_url + optional end/tail frame; fal-ai/flux/dev/image-to-image: image_url) — switching
+// GenModelEntry.endpoint per-request is real, separate scope (touches ~10 call sites across 3 files;
+// see task-3-report.md's identical declination), so buildInput is left untouched here. Each entry
+// below declares maxReferenceImages: 0 so the cap logic (this file + the tool layer + the panel)
+// reports "does not support reference images" cleanly instead of silently dropping them.
+export function referenceCapError(entry: GenModelEntry, count: number): string | null {
+  const cap = entry.caps.maxReferenceImages;
+  if (cap === undefined || count <= cap) return null;
+  if (cap === 0) return `${entry.displayName} does not support reference images.`;
+  return `${entry.displayName} accepts at most ${cap} reference image(s) (got ${count}).`;
+}
+
 // fal-ai/flux/dev takes an `image_size` enum, not a bare aspect ratio — map our normalized
 // aspectRatio onto the closest fal token (verified via openapi.json 2026-07).
 const FLUX_DEV_ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
@@ -86,7 +106,11 @@ const CATALOG: GenModelEntry[] = [
       durations: [4, 6, 8],
       aspectRatios: ["16:9", "9:16"],
       resolutions: ["720p", "1080p", "4k"],
+      // supportsStartEndFrames names the SEPARATE fal-ai/veo3.1/fast/image-to-video endpoint's
+      // capability, not this endpoint's (see the verification note above buildInput's caller) —
+      // maxReferenceImages: 0 reflects THIS entry's real (text-only) wire schema honestly.
       supportsStartEndFrames: true,
+      maxReferenceImages: 0,
     },
     pricing: {
       kind: "perSecond",
@@ -111,6 +135,7 @@ const CATALOG: GenModelEntry[] = [
     caps: {
       durations: [5, 10],
       aspectRatios: ["16:9", "9:16", "1:1"],
+      maxReferenceImages: 0,
     },
     pricing: {
       // $0.35 for 5s / $0.70 for 10s == flat $0.07/s — fal.ai 2026-07.
@@ -134,6 +159,7 @@ const CATALOG: GenModelEntry[] = [
       durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
       aspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
       resolutions: ["480p", "720p", "1080p"],
+      maxReferenceImages: 0,
     },
     pricing: {
       // 1080p confirmed ($0.62/5s == $0.124/s); 720p/480p pixel-scaled off that point and
@@ -160,6 +186,7 @@ const CATALOG: GenModelEntry[] = [
     caps: {
       aspectRatios: ["21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"],
       numImagesMax: 4,
+      maxReferenceImages: 0,
     },
     pricing: {
       // $0.0398/image — fal.ai pricing page 2026-07.
@@ -182,6 +209,7 @@ const CATALOG: GenModelEntry[] = [
     caps: {
       aspectRatios: ["1:1", "4:3", "3:4", "16:9", "9:16"],
       numImagesMax: 4,
+      maxReferenceImages: 0,
     },
     pricing: {
       // $0.025/megapixel, billed rounded up — approximated flat per-image at ~1MP. fal.ai 2026-07.
@@ -357,12 +385,9 @@ export function validateGenParams(entry: GenModelEntry, params: GenToolParams): 
   ) {
     return unsupportedValue(displayName, "resolution", params.resolution, caps.resolutions);
   }
-  if (
-    caps.maxReferenceImages !== undefined &&
-    params.imageUrls !== undefined &&
-    params.imageUrls.length > caps.maxReferenceImages
-  ) {
-    return `${displayName} accepts at most ${caps.maxReferenceImages} reference image(s) (got ${params.imageUrls.length}).`;
+  if (caps.maxReferenceImages !== undefined && params.imageUrls !== undefined) {
+    const capError = referenceCapError(entry, params.imageUrls.length);
+    if (capError) return capError;
   }
   if (caps.numImagesMax !== undefined && params.numImages !== undefined) {
     if (params.numImages < 1 || params.numImages > caps.numImagesMax) {

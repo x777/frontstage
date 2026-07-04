@@ -3,7 +3,7 @@ import type { GenerationInput, MediaManifestEntry } from "@palmier/core";
 import { createPlaceholderEntry } from "@palmier/core";
 import type { ToolResult, ToolSpec, ToolContext } from "./types.js";
 import { ok, errorResult } from "./executor.js";
-import { genModel, listGenModels, validateGenParams } from "../generation/gen-catalog.js";
+import { genModel, listGenModels, validateGenParams, referenceCapError } from "../generation/gen-catalog.js";
 import type { GenToolParams } from "../generation/gen-catalog.js";
 import { estimateCredits, formatCredits } from "../generation/cost-estimator.js";
 import { unknownModelError, confirmationResult } from "./generate-tools.js";
@@ -13,7 +13,7 @@ const IMAGE_DURATION_SECONDS = 5; // mirrors Swift's Defaults.imageDurationSecon
 type Generation = NonNullable<ToolContext["generation"]>;
 
 async function runImagePipeline(
-  a: { prompt: string; model?: string; numImages?: number; confirm?: boolean },
+  a: { prompt: string; model?: string; numImages?: number; confirm?: boolean; referenceMediaIds?: string[] },
   generation: Generation,
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -27,8 +27,25 @@ async function runImagePipeline(
   const validationError = validateGenParams(entry, params);
   if (validationError) return errorResult(validationError);
 
+  // Reject fast (no network calls) when the model's real fal endpoint has no image field at all
+  // (maxReferenceImages: 0 — see gen-catalog.ts's verification note), same as generate_video.
+  const refIds = a.referenceMediaIds ?? [];
+  if (refIds.length > 0) {
+    const capError = referenceCapError(entry, refIds.length);
+    if (capError) return errorResult(capError);
+  }
+
   const estimate = estimateCredits(entry, params);
   if (estimate > generation.confirmThreshold && !a.confirm) return confirmationResult(estimate);
+
+  if (refIds.length > 0 && generation.entryUrl) {
+    const refs: string[] = [];
+    for (const id of refIds) {
+      const url = await generation.entryUrl(id);
+      if (url) refs.push(url);
+    }
+    if (refs.length > 0) params.imageUrls = refs;
+  }
 
   const input = entry.buildInput(params);
   const baseName = a.prompt.slice(0, 24);
@@ -80,7 +97,8 @@ export function generateImageTool(): ToolSpec {
       "Generates image(s) from a text prompt using AI and adds them to the media library. When a fal.ai key is configured, runs as an async background generation (call list_models kind='image' first to pick a model): returns a placeholder asset ID immediately, numImages (1-4) generates a batch from one prompt, and it costs real money and is not undoable. Without a configured fal.ai key, falls back to a synchronous single-image generation.",
     inputSchema: z.object({
       prompt: z.string().min(1),
-      // referenceMediaIds resolution to base64 is DEFERRED — ignored in plan 6.5
+      // Resolved through the pipeline path only (fal key configured) — rejected cleanly per-model
+      // via maxReferenceImages (currently 0 for every catalogued image model; see gen-catalog.ts).
       referenceMediaIds: z.array(z.string()).optional(),
       model: z.string().optional(),
       numImages: z.number().int().optional(),

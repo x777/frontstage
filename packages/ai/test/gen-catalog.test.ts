@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { genModel, listGenModels, validateGenParams } from "../src/generation/gen-catalog.js";
+import { genModel, listGenModels, validateGenParams, referenceCapError } from "../src/generation/gen-catalog.js";
 import type { GenModelEntry } from "../src/generation/gen-catalog.js";
 import { estimateCredits, formatCredits } from "../src/generation/cost-estimator.js";
 
@@ -77,6 +77,12 @@ describe("validateGenParams: naming allowed values", () => {
     };
     const err = validateGenParams(entry, { prompt: "x", imageUrls: ["a", "b", "c"] });
     expect(err).toBe("Fixture Model accepts at most 2 reference image(s) (got 3).");
+  });
+
+  test("rejects reference images cleanly for a model with zero reference support", () => {
+    const entry = genModel("veo3.1-fast")!;
+    const err = validateGenParams(entry, { prompt: "x", duration: 8, imageUrls: ["a"] });
+    expect(err).toBe("Veo 3.1 Fast does not support reference images.");
   });
 
   test("rejects numImages over the model's cap, naming the range", () => {
@@ -338,6 +344,46 @@ describe("buildInput: every entry maps normalized params to its fal body", () =>
   test("mmaudio-v2 defaults duration to 8s and videoUrl to empty when omitted", () => {
     const entry = genModel("mmaudio-v2")!;
     expect(entry.buildInput({ prompt: "x" })).toEqual({ video_url: "", prompt: "x", duration: 8 });
+  });
+
+  // M14C follow-up: WebFetch-verified against fal.ai/models/<id>/api + openapi.json (2026-07) that
+  // none of these 5 endpoints have an image field — buildInput must ignore imageUrls, not leak it.
+  test("veo3.1-fast ignores imageUrls (verified: no image field on this endpoint)", () => {
+    const entry = genModel("veo3.1-fast")!;
+    const input = entry.buildInput({ prompt: "a cat", duration: 8, imageUrls: ["https://example.com/a.png"] });
+    expect(input).not.toHaveProperty("image_url");
+    expect(input).not.toHaveProperty("image_urls");
+  });
+
+  test("nano-banana ignores imageUrls (verified: no image field on this endpoint)", () => {
+    const entry = genModel("nano-banana")!;
+    const input = entry.buildInput({ prompt: "a fox", imageUrls: ["https://example.com/a.png"] });
+    expect(input).not.toHaveProperty("image_url");
+    expect(input).not.toHaveProperty("image_urls");
+  });
+});
+
+describe("gen-catalog: reference-image support (M14C follow-up)", () => {
+  test("every catalogued image/video model declares maxReferenceImages: 0 (WebFetch-verified 2026-07)", () => {
+    for (const id of ["veo3.1-fast", "kling-2.5", "seedance-1.0", "nano-banana", "flux-dev"]) {
+      expect(genModel(id)!.caps.maxReferenceImages).toBe(0);
+    }
+  });
+
+  test("referenceCapError: null when no cap is declared or count is within it", () => {
+    const noCap: GenModelEntry = { id: "x", endpoint: "x", kind: "image", displayName: "X", caps: {}, pricing: { kind: "flat", credits: 1 }, buildInput: () => ({}) };
+    expect(referenceCapError(noCap, 5)).toBeNull();
+
+    const cap2: GenModelEntry = { ...noCap, caps: { maxReferenceImages: 2 } };
+    expect(referenceCapError(cap2, 2)).toBeNull();
+  });
+
+  test("referenceCapError: names the model cleanly at zero, and reports the count over a positive cap", () => {
+    const cap0: GenModelEntry = { id: "x", endpoint: "x", kind: "image", displayName: "Cap Zero Model", caps: { maxReferenceImages: 0 }, pricing: { kind: "flat", credits: 1 }, buildInput: () => ({}) };
+    expect(referenceCapError(cap0, 1)).toBe("Cap Zero Model does not support reference images.");
+
+    const cap2: GenModelEntry = { ...cap0, displayName: "Cap Two Model", caps: { maxReferenceImages: 2 } };
+    expect(referenceCapError(cap2, 3)).toBe("Cap Two Model accepts at most 2 reference image(s) (got 3).");
   });
 });
 

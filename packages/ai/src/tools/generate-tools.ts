@@ -3,7 +3,7 @@ import type { EditorStore, GenerationInput, MediaManifestEntry, Timeline } from 
 import { addClipCommand, createPlaceholderEntry, resolveOrCreateAudioTrack, timelineTotalFrames } from "@palmier/core";
 import type { ToolResult, ToolSpec, ToolContext } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
-import { genModel, listGenModels, validateGenParams } from "../generation/gen-catalog.js";
+import { genModel, listGenModels, validateGenParams, referenceCapError } from "../generation/gen-catalog.js";
 import type { GenModelEntry, GenModelKind, GenToolParams } from "../generation/gen-catalog.js";
 import { estimateCredits, formatCredits } from "../generation/cost-estimator.js";
 
@@ -130,15 +130,20 @@ export function generateVideoTool(): ToolSpec {
       const estimate = estimateCredits(entry, params);
       if (estimate > ctx.generation.confirmThreshold && !a.confirm) return confirmationResult(estimate);
 
-      // Optional reference images: resolve silently-best-effort if the facade supports it, else skip.
-      if (ctx.generation.entryUrl) {
+      // Optional reference images: reject fast (no network calls) when the model's real fal
+      // endpoint has no image field at all (maxReferenceImages: 0 — see gen-catalog.ts's
+      // verification note) instead of silently resolving refs that buildInput will never forward.
+      const refMediaIds = [a.startImageMediaRef, ...(a.referenceImageMediaRefs ?? [])].filter(
+        (id): id is string => id !== undefined,
+      );
+      if (refMediaIds.length > 0) {
+        const capError = referenceCapError(entry, refMediaIds.length);
+        if (capError) return errorResult(capError);
+      }
+      if (ctx.generation.entryUrl && refMediaIds.length > 0) {
         const refs: string[] = [];
-        if (a.startImageMediaRef) {
-          const url = await ctx.generation.entryUrl(a.startImageMediaRef);
-          if (url) refs.push(url);
-        }
-        for (const ref of a.referenceImageMediaRefs ?? []) {
-          const url = await ctx.generation.entryUrl(ref);
+        for (const id of refMediaIds) {
+          const url = await ctx.generation.entryUrl(id);
           if (url) refs.push(url);
         }
         if (refs.length > 0) params.imageUrls = refs;
