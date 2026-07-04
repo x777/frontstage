@@ -3,6 +3,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { type EditorStore, type FocusedPanel, PANEL_IDS, isValidPanel } from "@palmier/core";
 import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
+import { PanelHeader, IconButton } from "../primitives/index.js";
 
 const PERSIST_KEY = "palmier.editor.ui";
 
@@ -90,55 +91,6 @@ const panelSectionStyle: React.CSSProperties = {
   background: theme.bg.surface,
 };
 
-const maximizeButtonStyle: React.CSSProperties = {
-  background: "none",
-  border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-  borderRadius: theme.radius.xs,
-  color: theme.text.secondary,
-  cursor: "pointer",
-  fontSize: theme.fontSize.xs,
-  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-  lineHeight: 1,
-};
-
-function PanelHeader({
-  label,
-  panelId,
-  onMaximize,
-  isMaximized,
-}: {
-  label: string;
-  panelId: FocusedPanel;
-  onMaximize: () => void;
-  isMaximized: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-        borderBottom: `${theme.borderWidth.thin} solid ${theme.border.divider}`,
-        background: theme.bg.raised,
-        flexShrink: 0,
-      }}
-    >
-      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
-        {label}
-      </span>
-      <button
-        data-testid={`maximize-${panelId}`}
-        onClick={onMaximize}
-        style={maximizeButtonStyle}
-        title={isMaximized ? "Restore" : "Maximize"}
-      >
-        {isMaximized ? "⊙" : "⊕"}
-      </button>
-    </div>
-  );
-}
-
 export function Layout({ store, media, preview, timeline, inspector, topBarSlot, title, agent, agentVisible }: LayoutProps) {
   const layout = useStore(store, (s) => s.layout);
 
@@ -194,10 +146,18 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                 onClick={() => handleFocus(id)}
               >
                 <PanelHeader
-                  label={labels[id]}
-                  panelId={id}
-                  onMaximize={() => toggleMaximize(id)}
-                  isMaximized={layout.maximized === id}
+                  title={labels[id]}
+                  trailing={
+                    <IconButton
+                      size="sm"
+                      testid={`maximize-${id}`}
+                      title={layout.maximized === id ? "Restore" : "Maximize"}
+                      onClick={() => toggleMaximize(id)}
+                      fontSize={theme.fontSize.sm}
+                    >
+                      {layout.maximized === id ? "⊙" : "⊕"}
+                    </IconButton>
+                  }
                 />
                 <div style={{ flex: 1, overflow: "hidden" }}>{contents[id]}</div>
               </section>
@@ -216,10 +176,18 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
             >
               <section data-testid="panel-media" style={panelStyle("media")}>
                 <PanelHeader
-                  label="Media"
-                  panelId="media"
-                  onMaximize={() => toggleMaximize("media")}
-                  isMaximized={false}
+                  title="Media"
+                  trailing={
+                    <IconButton
+                      size="sm"
+                      testid="maximize-media"
+                      title="Maximize"
+                      onClick={() => toggleMaximize("media")}
+                      fontSize={theme.fontSize.sm}
+                    >
+                      ⊕
+                    </IconButton>
+                  }
                 />
                 <div style={{ flex: 1, overflow: "hidden" }}>{media}</div>
               </section>
@@ -237,10 +205,18 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                 >
                   <section data-testid="panel-preview" style={panelStyle("preview")}>
                     <PanelHeader
-                      label="Preview"
-                      panelId="preview"
-                      onMaximize={() => toggleMaximize("preview")}
-                      isMaximized={false}
+                      title="Preview"
+                      trailing={
+                        <IconButton
+                          size="sm"
+                          testid="maximize-preview"
+                          title="Maximize"
+                          onClick={() => toggleMaximize("preview")}
+                          fontSize={theme.fontSize.sm}
+                        >
+                          ⊕
+                        </IconButton>
+                      }
                     />
                     <div style={{ flex: 1, overflow: "hidden" }}>{preview}</div>
                   </section>
@@ -254,10 +230,18 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                 >
                   <section data-testid="panel-timeline" style={panelStyle("timeline")}>
                     <PanelHeader
-                      label="Timeline"
-                      panelId="timeline"
-                      onMaximize={() => toggleMaximize("timeline")}
-                      isMaximized={false}
+                      title="Timeline"
+                      trailing={
+                        <IconButton
+                          size="sm"
+                          testid="maximize-timeline"
+                          title="Maximize"
+                          onClick={() => toggleMaximize("timeline")}
+                          fontSize={theme.fontSize.sm}
+                        >
+                          ⊕
+                        </IconButton>
+                      }
                     />
                     <div style={{ flex: 1, overflow: "hidden" }}>{timeline}</div>
                   </section>
@@ -275,10 +259,18 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
             >
               <section data-testid="panel-inspector" style={panelStyle("inspector")}>
                 <PanelHeader
-                  label="Inspector"
-                  panelId="inspector"
-                  onMaximize={() => toggleMaximize("inspector")}
-                  isMaximized={false}
+                  title="Inspector"
+                  trailing={
+                    <IconButton
+                      size="sm"
+                      testid="maximize-inspector"
+                      title="Maximize"
+                      onClick={() => toggleMaximize("inspector")}
+                      fontSize={theme.fontSize.sm}
+                    >
+                      ⊕
+                    </IconButton>
+                  }
                 />
                 <div style={{ flex: 1, overflow: "hidden" }}>{inspector}</div>
               </section>
@@ -320,8 +312,8 @@ function TopBar({ slot, title }: { slot?: ReactNode; title?: string }) {
     <div
       style={{
         height: theme.size.topBar,
-        background: theme.bg.prominent,
-        borderBottom: `${theme.borderWidth.thin} solid ${theme.border.divider}`,
+        background: theme.bg.surface,
+        borderBottom: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
         display: "flex",
         alignItems: "center",
         padding: `0 ${theme.spacing.md}`,
@@ -332,7 +324,7 @@ function TopBar({ slot, title }: { slot?: ReactNode; title?: string }) {
       {slot}
       <span
         data-testid="top-bar-title"
-        style={{ fontSize: theme.fontSize.sm, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}
+        style={{ fontSize: theme.fontSize.md, color: theme.text.primary, fontWeight: theme.fontWeight.semibold }}
       >
         {title ?? "Palmier Pro"}
       </span>

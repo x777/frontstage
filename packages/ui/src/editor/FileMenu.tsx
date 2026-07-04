@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { ProjectSession, ConfirmDiscard, ProjectRef, FcpxmlTarget, FcpxmlVersion } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { Button } from "../primitives/index.js";
 import type { RunProjectCommand } from "./Editor.js";
 import type { ExportKind, FcpxmlExportOptions } from "./use-export-command.js";
 
@@ -84,17 +85,6 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
     runProjectCommand(() => session.saveAs());
   }
 
-  const topBtnStyle: React.CSSProperties = {
-    background: "none",
-    border: "none",
-    color: theme.text.secondary,
-    cursor: "pointer",
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
-    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-    borderRadius: theme.radius.xs,
-  };
-
   const menuStyle: React.CSSProperties = {
     position: "absolute",
     top: `calc(100% + ${theme.spacing.xxs})`,
@@ -129,13 +119,12 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
 
   return (
     <div style={{ position: "relative" }} ref={menuRef}>
-      <button
-        data-testid="file-menu"
-        style={topBtnStyle}
+      <Button
+        testid="file-menu"
         onClick={() => setMenuOpen((v) => !v)}
       >
         File
-      </button>
+      </Button>
       {menuOpen && (
         <div style={menuStyle}>
           <button data-testid="file-new" style={itemStyle} onClick={handleNew}>

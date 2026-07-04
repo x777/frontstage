@@ -20,6 +20,7 @@ import { TRACK_HEADER_WIDTH } from "../timeline/TrackHeaders.js";
 import type { RippleInsertSpec } from "@palmier/core";
 import type { MediaByteSource, PlaybackEngine } from "@palmier/engine";
 import { theme } from "../theme/theme.js";
+import { Button, IconButton } from "../primitives/index.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
 import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { TimelinePanel } from "../timeline/TimelinePanel.js";
@@ -441,58 +442,31 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
                 />
               )}
               {agent && (
-                <button
-                  data-testid="agent-toggle"
+                <Button
+                  testid="agent-toggle"
                   onClick={toggleAgent}
-                  style={{
-                    background: agentVisible ? theme.accent.primary : "none",
-                    border: `${theme.borderWidth.thin} solid ${agentVisible ? theme.accent.primary : theme.border.subtle}`,
-                    borderRadius: theme.radius.xs,
-                    color: agentVisible ? theme.text.onAccent : theme.text.secondary,
-                    cursor: "pointer",
-                    fontSize: theme.fontSize.xs,
-                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                    lineHeight: 1,
-                  }}
+                  variant={agentVisible ? "accent" : "default"}
                 >
                   Agent
-                </button>
+                </Button>
               )}
               {agent?.generation && (
-                <button
-                  data-testid="generate-toggle"
+                <Button
+                  testid="generate-toggle"
                   onClick={() => setGenerateVisible((v) => !v)}
-                  style={{
-                    background: generateVisible ? theme.accent.primary : "none",
-                    border: `${theme.borderWidth.thin} solid ${generateVisible ? theme.accent.primary : theme.border.subtle}`,
-                    borderRadius: theme.radius.xs,
-                    color: generateVisible ? theme.text.onAccent : theme.text.secondary,
-                    cursor: "pointer",
-                    fontSize: theme.fontSize.xs,
-                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                    lineHeight: 1,
-                  }}
+                  variant={generateVisible ? "accent" : "default"}
                 >
                   Generate
-                </button>
+                </Button>
               )}
               {agent?.settings && (
-                <button
-                  data-testid="settings-toggle"
+                <IconButton
+                  testid="settings-toggle"
                   onClick={() => setSettingsVisible((v) => !v)}
-                  style={{
-                    background: settingsVisible ? theme.accent.primary : "none",
-                    border: `${theme.borderWidth.thin} solid ${settingsVisible ? theme.accent.primary : theme.border.subtle}`,
-                    borderRadius: theme.radius.xs,
-                    color: settingsVisible ? theme.text.onAccent : theme.text.secondary,
-                    cursor: "pointer",
-                    fontSize: theme.fontSize.xs,
-                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                    lineHeight: 1,
-                  }}
+                  active={settingsVisible}
                 >
                   ⚙
-                </button>
+                </IconButton>
               )}
               {getGenerationLog && <ProjectActivityButton getGenerationLog={getGenerationLog} />}
             </>
