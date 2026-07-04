@@ -179,12 +179,14 @@ export function PreviewPanel({ store, media, engineRef: engineRefProp }: Preview
   const durationFrames = timelineTotalFrames(timeline);
 
   return (
+    // PreviewContainerView's outer VStack — the panel chrome around the video (and the
+    // transport row below it) is Background.surfaceColor, not the canvas letterbox black.
     <div
       style={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        background: theme.bg.previewLetterbox,
+        background: theme.bg.surface,
       }}
     >
       <div
@@ -231,8 +233,6 @@ export function PreviewPanel({ store, media, engineRef: engineRefProp }: Preview
         <div
           style={{
             padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-            background: theme.bg.prominent,
-            borderTop: `${theme.borderWidth.thin} solid ${theme.border.divider}`,
             fontSize: theme.fontSize.xs,
             color: theme.text.muted,
             flexShrink: 0,

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { PlaybackEngine } from "@palmier/engine";
 import type { EditorStore } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { Icon, IconButton } from "../primitives/index.js";
 
 interface TransportBarProps {
   engine: PlaybackEngine;
@@ -17,6 +18,11 @@ function formatTimecode(frame: number, fps: number): string {
   const ff = (frame % fps).toString().padStart(2, "0");
   return `${mm}:${ss}:${ff}`;
 }
+
+// transportButton() renders SF Symbols at FontSize.sm (11pt) inside a 32x28 hit box (all 5
+// Swift buttons share that size, no oversized play button). IconButton is square, so frame="lgXl"
+// (28px) is the closest kit match — a small glyph with generous hover padding, not a filled icon.
+const TRANSPORT_ICON_SIZE = 14;
 
 export function TransportBar({ engine, store, fps, durationFrames }: TransportBarProps) {
   const [engineState, setEngineState] = useState(() => ({
@@ -44,65 +50,50 @@ export function TransportBar({ engine, store, fps, durationFrames }: TransportBa
     void engine.seek(Math.min(durationFrames - 1, engine.currentFrame + 1), "exact");
   }
 
-  const btnStyle: React.CSSProperties = {
-    background: theme.bg.raised,
-    border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-    borderRadius: theme.radius.xs,
-    color: theme.text.primary,
-    cursor: "pointer",
-    fontSize: theme.fontSize.sm,
-    padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-    lineHeight: 1,
-    minWidth: theme.iconSize.lgXl,
-  };
-
   return (
+    // 3-column grid == Swift's HStack { timecode; Spacer(); buttons; Spacer(); <right side> } —
+    // the flanking tracks keep the button group centered regardless of the (currently empty)
+    // trailing column, matching PreviewContainerView.transportBar exactly.
     <div
       style={{
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
-        gap: theme.spacing.xs,
-        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-        background: theme.bg.prominent,
-        borderTop: `${theme.borderWidth.thin} solid ${theme.border.divider}`,
+        gap: theme.spacing.sm,
+        padding: `0 ${theme.spacing.lg}`,
+        height: 36,
         flexShrink: 0,
       }}
     >
-      <button
-        data-testid="transport-step-back"
-        onClick={handleStepBack}
-        style={btnStyle}
-        title="Step back 1 frame"
-      >
-        ◀
-      </button>
-      <button
-        data-testid="transport-playpause"
-        onClick={handlePlayPause}
-        style={{ ...btnStyle, minWidth: theme.size.transportPlay }}
-        title={engineState.isPlaying ? "Pause" : "Play"}
-      >
-        {engineState.isPlaying ? "⏸" : "▶"}
-      </button>
-      <button
-        data-testid="transport-step-fwd"
-        onClick={handleStepFwd}
-        style={btnStyle}
-        title="Step forward 1 frame"
-      >
-        ▶
-      </button>
       <span
         data-testid="transport-time"
         style={{
-          fontFamily: "monospace",
-          fontSize: theme.fontSize.xs,
-          color: theme.accent.timecode,
-          marginLeft: theme.spacing.xs,
+          fontFamily: "ui-monospace, monospace",
+          fontVariantNumeric: "tabular-nums",
+          fontSize: theme.fontSize.sm,
         }}
       >
-        {formatTimecode(engineState.currentFrame, fps)} / {formatTimecode(durationFrames, fps)}
+        <span style={{ color: theme.accent.timecode }}>{formatTimecode(engineState.currentFrame, fps)}</span>
+        <span style={{ color: theme.text.tertiary }}> / </span>
+        <span style={{ color: theme.text.secondary }}>{formatTimecode(durationFrames, fps)}</span>
       </span>
+
+      <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.md }}>
+        <IconButton frame="lgXl" testid="transport-step-back" title="Step back 1 frame" onClick={handleStepBack}>
+          <Icon name="step-back" size={TRANSPORT_ICON_SIZE} />
+        </IconButton>
+        <IconButton
+          frame="lgXl"
+          testid="transport-playpause"
+          title={engineState.isPlaying ? "Pause" : "Play"}
+          onClick={handlePlayPause}
+        >
+          <Icon name={engineState.isPlaying ? "pause" : "play"} size={TRANSPORT_ICON_SIZE} />
+        </IconButton>
+        <IconButton frame="lgXl" testid="transport-step-fwd" title="Step forward 1 frame" onClick={handleStepFwd}>
+          <Icon name="step-forward" size={TRANSPORT_ICON_SIZE} />
+        </IconButton>
+      </div>
     </div>
   );
 }

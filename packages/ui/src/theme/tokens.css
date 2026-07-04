@@ -118,7 +118,12 @@
   /* UI chrome sizes */
   --size-topbar: 36px;
   --size-resize-handle: 4px;
-  --size-transport-play: 36px;
+  /* PreviewContainerView.transportButton() is 32x28 (hardcoded, not tokenized in Swift) and
+     uniform across all 5 transport buttons — no distinct larger play button. Kit IconButton is
+     square, so the transport row uses frame="lgXl" (--icon-size-lg-xl, 28px) directly; this token
+     is retained/retokened to 28px for parity documentation (was 36px, implying an oversized play
+     button that doesn't exist in Swift). */
+  --size-transport-play: 28px;
   --size-media-item-min: 80px;
   --size-media-tab-rail: 38px; /* icon-size-lg 26 + spacing-sm 6 x 2 — MediaPanelView.swift panelTabRail */
   --size-inspector-label: 60px;

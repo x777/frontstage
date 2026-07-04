@@ -12,6 +12,8 @@ export type IconName =
   | "chevron-down"
   | "play"
   | "pause"
+  | "step-back"
+  | "step-forward"
   | "eye"
   | "eye-off"
   | "lock"
@@ -80,10 +82,25 @@ const PATHS: Record<IconName, React.ReactNode> = {
   "chevron-right": <path d="M9 6l6 6-6 6" />,
   "chevron-down": <path d="M6 9l6 6 6-6" />,
   play: <path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor" stroke="none" />,
+  // "pause.fill" — filled bars, matching play's fill treatment (PreviewContainerView.transportButton).
   pause: (
     <>
-      <line x1="9" y1="5" x2="9" y2="19" />
-      <line x1="15" y1="5" x2="15" y2="19" />
+      <rect x="6" y="5.5" width="4" height="13" rx="1" fill="currentColor" stroke="none" />
+      <rect x="14" y="5.5" width="4" height="13" rx="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // "backward.frame.fill" — single frame-step, distinct from a double-triangle skip-to-start.
+  "step-back": (
+    <>
+      <rect x="4" y="5.5" width="2.4" height="13" rx="1" fill="currentColor" stroke="none" />
+      <path d="M19 5.5v13l-11-6.5z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // "forward.frame.fill" — mirror of step-back.
+  "step-forward": (
+    <>
+      <path d="M5 5.5v13l11-6.5z" fill="currentColor" stroke="none" />
+      <rect x="17.6" y="5.5" width="2.4" height="13" rx="1" fill="currentColor" stroke="none" />
     </>
   ),
   eye: (
