@@ -74,6 +74,8 @@ function resolvePalette(el: Element): TimelinePalette {
     bgRaised: get("--bg-raised") || "#1e1e1e",
     textPrimary: get("--text-primary") || "rgba(255,255,255,1)",
     textMuted: get("--text-muted") || "rgba(255,255,255,0.34)",
+    textTertiary: get("--text-tertiary") || "rgba(255,255,255,0.62)",
+    borderPrimary: get("--border-primary") || "rgba(255,255,255,0.16)",
     borderDivider: get("--border-divider") || "rgba(255,255,255,0.44)",
     accentTimecode: get("--accent-timecode") || "rgb(242,153,51)",
     accentPrimary: get("--accent-primary") || "rgb(245,239,228)",
@@ -86,6 +88,7 @@ function resolvePalette(el: Element): TimelinePalette {
     clipLabel: get("--color-timeline-clip-label") || "rgba(255,255,255,0.85)",
     generatingScrim: get("--color-timeline-generating-scrim") || "rgba(10,10,10,0.72)", // matches --color-timeline-generating-scrim
     failedScrim: get("--color-timeline-failed-scrim") || "rgba(229,79,79,0.55)", // matches --color-timeline-failed-scrim
+    rulerLabelFontPx: get("--font-xs") || "10px",
   };
 }
 

@@ -10,6 +10,7 @@ import {
 } from "@palmier/core";
 import type { TimelineGeometry, FrameRange } from "@palmier/core";
 import { generatingLabel } from "../media/GeneratingOverlay.js";
+import { rulerTicks } from "./ruler-ticks.js";
 
 export interface TimelinePalette {
   bgBase: string;
@@ -17,6 +18,8 @@ export interface TimelinePalette {
   bgRaised: string;
   textPrimary: string;
   textMuted: string;
+  textTertiary: string;
+  borderPrimary: string;
   borderDivider: string;
   accentTimecode: string;
   accentPrimary: string;
@@ -29,6 +32,8 @@ export interface TimelinePalette {
   clipLabel: string;
   generatingScrim: string;
   failedScrim: string;
+  /** Resolved `--font-xs` (e.g. "10px") — the ruler label size, Swift's AppTheme.FontSize.xs. */
+  rulerLabelFontPx: string;
 }
 
 function trackColor(palette: TimelinePalette, mediaType: string): string {
@@ -58,6 +63,20 @@ function brightenColor(color: string): string {
     const b = Math.min(255, parseInt(rgb[3]!) + 40);
     const a = rgb[4] !== undefined ? rgb[4] : "1";
     return `rgba(${r},${g},${b},${a})`;
+  }
+  return color;
+}
+
+/** Replace (not multiply) a resolved color's alpha — mirrors NSColor.withAlphaComponent. */
+function withAlpha(color: string, alpha: number): string {
+  const rgb = color.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)$/i);
+  if (rgb) return `rgba(${rgb[1]},${rgb[2]},${rgb[3]},${alpha})`;
+  const hex = color.match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    const r = parseInt(hex[1]!.slice(0, 2), 16);
+    const g = parseInt(hex[1]!.slice(2, 4), 16);
+    const b = parseInt(hex[1]!.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
   }
   return color;
 }
@@ -135,57 +154,54 @@ export function drawTimeline(
   ctx.clearRect(0, 0, width, height);
 
   // ── Ruler band ──────────────────────────────────────────────────────────────
-  ctx.fillStyle = palette.bgRaised;
+  // Port of TimelineRuler.swift.draw: background, bottom separator, adaptive ticks + labels.
+  ctx.fillStyle = palette.bgSurface;
   ctx.fillRect(0, 0, width, RULER_HEIGHT);
 
-  // Ruler bottom border
-  ctx.fillStyle = palette.borderDivider;
+  ctx.fillStyle = palette.borderPrimary;
   ctx.fillRect(0, RULER_HEIGHT - 1, width, 1);
 
   const fps = state.timeline.fps;
-  // Determine tick interval: aim for ~60px between major ticks
-  const pxPerFrame = geom.pixelsPerFrame;
-  const pxPerSec = pxPerFrame * fps;
+  // xForFrame(g,f) = g.headerWidth + f*pixelsPerFrame - g.scrollX; feeding scrollX-headerWidth as
+  // rulerTicks' scrollOffsetX makes its returned x already equal xForFrame's screen-space x.
+  const ticks = rulerTicks({
+    pixelsPerFrame: geom.pixelsPerFrame,
+    fps,
+    scrollOffsetX: geom.scrollX - geom.headerWidth,
+    width,
+    formatTimecode,
+  });
 
-  // Major tick: every 1s if pxPerSec >= 30, else every 5s, else every 30s
-  let majorInterval = fps; // 1 second in frames
-  if (pxPerSec < 30) majorInterval = fps * 5;
-  if (pxPerSec < 6) majorInterval = fps * 30;
-
-  // Minor tick: every frame if pxPerFrame >= 8, else every 5 frames
-  let minorInterval = 1;
-  if (pxPerFrame < 8) minorInterval = 5;
-  if (pxPerFrame < 2) minorInterval = fps; // 1s minor when very zoomed out
-
-  // Total frames visible
-  const firstFrame = Math.floor(geom.scrollX / pxPerFrame);
-  const visibleFrames = Math.ceil(width / pxPerFrame) + 2;
-  const lastFrame = firstFrame + visibleFrames;
-
-  ctx.save();
-  ctx.fillStyle = palette.textMuted;
-  ctx.font = `9px -apple-system,BlinkMacSystemFont,sans-serif`;
-  ctx.textBaseline = "middle";
-
-  for (let f = Math.floor(firstFrame / minorInterval) * minorInterval; f <= lastFrame; f += minorInterval) {
-    const x = xForFrame(geom, f);
-    if (x < 0 || x > width) continue;
-
-    const isMajor = f % majorInterval === 0;
-    if (isMajor) {
-      // Major tick
-      ctx.fillStyle = palette.textMuted;
-      ctx.fillRect(x, RULER_HEIGHT - 10, 1, 10);
-      // Timecode label
-      ctx.fillStyle = palette.textMuted;
-      ctx.fillText(formatTimecode(f, fps), x + 3, RULER_HEIGHT / 2);
-    } else {
-      // Minor tick
-      ctx.fillStyle = palette.borderDivider;
-      ctx.fillRect(x, RULER_HEIGHT - 5, 1, 5);
+  // Minor ticks first so major ticks draw on top
+  if (ticks.minors.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = withAlpha(palette.textMuted, 0.4);
+    ctx.lineWidth = 0.5;
+    for (const minor of ticks.minors) {
+      ctx.beginPath();
+      ctx.moveTo(minor.x, RULER_HEIGHT - minor.height);
+      ctx.lineTo(minor.x, RULER_HEIGHT);
+      ctx.stroke();
     }
+    ctx.restore();
   }
-  ctx.restore();
+
+  if (ticks.majors.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = palette.textMuted;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = palette.textTertiary;
+    ctx.font = `${palette.rulerLabelFontPx} ui-monospace, monospace`;
+    ctx.textBaseline = "top";
+    for (const major of ticks.majors) {
+      ctx.beginPath();
+      ctx.moveTo(major.x, RULER_HEIGHT - 8);
+      ctx.lineTo(major.x, RULER_HEIGHT);
+      ctx.stroke();
+      ctx.fillText(major.label, major.x + 3, 2);
+    }
+    ctx.restore();
+  }
 
   // ── Track backgrounds ────────────────────────────────────────────────────────
   const tracks = state.timeline.tracks;
