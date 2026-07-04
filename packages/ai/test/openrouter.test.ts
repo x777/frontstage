@@ -38,9 +38,9 @@ function hasNoRefOrSchema(obj: unknown, path = ""): void {
 }
 
 describe("toolsToOpenAI", () => {
-  test("returns 39 function entries for buildCatalog()", () => {
+  test("returns 40 function entries for buildCatalog()", () => {
     const result = toolsToOpenAI(buildCatalog());
-    expect(result).toHaveLength(39);
+    expect(result).toHaveLength(40);
     for (const entry of result) {
       expect(entry.type).toBe("function");
       expect(typeof entry.function.name).toBe("string");

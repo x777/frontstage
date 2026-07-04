@@ -228,9 +228,9 @@ describe("inspect_timeline — validation matrix, through the ToolExecutor", () 
 });
 
 describe("inspect_timeline — catalog registration", () => {
-  test("buildCatalog() includes inspect_timeline (catalog 39)", () => {
+  test("buildCatalog() includes inspect_timeline (catalog 40)", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(39);
+    expect(catalog).toHaveLength(40);
     expect(catalog.map((s) => s.name)).toContain("inspect_timeline");
   });
 });

@@ -62,6 +62,11 @@ function makeManifest(): MediaManifest {
         type: "video",
         source: { kind: "external", absolutePath: "/tmp/sunrise.mp4" },
         duration: 2, // 2 seconds × 30fps = 60 frames
+        // Deliberately differs from the default timeline (30fps, 1920x1080) — see the
+        // "never adopts fps" regression test below (#233 standing rule).
+        sourceFPS: 24,
+        sourceWidth: 3840,
+        sourceHeight: 2160,
       },
       {
         id: "media-2",
@@ -102,6 +107,22 @@ describe("add_clips", () => {
     expect(track.clips.length).toBeGreaterThanOrEqual(1);
     const added = track.clips.find((c) => c.startFrame === 100);
     expect(added).toBeDefined();
+  });
+
+  test("never adopts fps from the added clip's source (#233 standing rule) — added clip is 24fps, timeline stays 30fps", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeCtx(store);
+    const spec = addClipsTool();
+    const result = await spec.run({ clips: [{ mediaId: "media-1", startFrame: 0 }] }, ctx);
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    // Swift (post-#177/#233) auto-matches RESOLUTION on the agent add path but never fps.
+    // TS's add_clips has no settings-adoption step at all yet (see layout-tools.ts's comment) —
+    // so today neither fps nor resolution is adopted; this test pins the fps half of that as a
+    // permanent invariant regardless of when/if resolution-adoption gets ported.
+    expect(tl.fps).toBe(30);
+    expect(tl.width).toBe(1920);
+    expect(tl.height).toBe(1080);
   });
 
   test("adds to a new track when trackIndex omitted", async () => {

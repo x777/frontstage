@@ -50,6 +50,7 @@ const EXPECTED_NAMES = [
   "import_media",
   "create_matte",
   "export_project",
+  "set_project_settings",
 ] as const;
 
 const MCP_ONLY_NAMES = ["get_projects", "open_project", "new_project"] as const;
@@ -110,15 +111,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 39 specs", () => {
+  test("returns exactly 40 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(39);
+    expect(catalog).toHaveLength(40);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(39);
+    expect(new Set(names).size).toBe(40);
   });
 
   test("names match the expected list exactly", () => {
@@ -148,18 +149,18 @@ describe("buildCatalog", () => {
     for (const n of MCP_ONLY_NAMES) expect(names).not.toContain(n);
   });
 
-  test('"mcp" returns exactly 42 specs: the 39 inApp tools + the 3 project-nav tools, in order', () => {
+  test('"mcp" returns exactly 43 specs: the 40 inApp tools + the 3 project-nav tools, in order', () => {
     const mcp = buildCatalog("mcp");
-    expect(mcp).toHaveLength(42);
+    expect(mcp).toHaveLength(43);
     const inAppNames = buildCatalog("inApp").map((s) => s.name);
     const mcpNames = mcp.map((s) => s.name);
-    expect(mcpNames.slice(0, 39)).toEqual(inAppNames);
-    expect(mcpNames.slice(39)).toEqual(MCP_ONLY_NAMES);
+    expect(mcpNames.slice(0, 40)).toEqual(inAppNames);
+    expect(mcpNames.slice(40)).toEqual(MCP_ONLY_NAMES);
   });
 
   test('"mcp" names are unique', () => {
     const names = buildCatalog("mcp").map((s) => s.name);
-    expect(new Set(names).size).toBe(42);
+    expect(new Set(names).size).toBe(43);
   });
 });
 
