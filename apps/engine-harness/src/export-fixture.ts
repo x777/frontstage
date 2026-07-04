@@ -107,14 +107,25 @@ async function main(): Promise<void> {
       crop: defaultCrop(),
     };
 
+    // The linked audio clip addClipCommand creates for a video-with-audio add — the fixture
+    // predated linked audio, so exports were audio-less by construction (the old known failure).
+    const audioClip: Clip = {
+      ...bottomClip,
+      id: "clip-audio",
+      mediaType: "audio",
+      linkGroupId: "lg-1",
+    };
+    const linkedBottom: Clip = { ...bottomClip, linkGroupId: "lg-1" };
+
     const timeline: Timeline = {
       fps: FPS,
       width: W,
       height: H,
       settingsConfigured: true,
       tracks: [
-        { id: "track-bottom", type: "video", muted: false, hidden: false, syncLocked: false, clips: [bottomClip] },
+        { id: "track-bottom", type: "video", muted: false, hidden: false, syncLocked: false, clips: [linkedBottom] },
         { id: "track-top", type: "video", muted: false, hidden: false, syncLocked: false, clips: [topClip] },
+        { id: "track-audio", type: "audio", muted: false, hidden: false, syncLocked: false, clips: [audioClip] },
       ],
     };
 

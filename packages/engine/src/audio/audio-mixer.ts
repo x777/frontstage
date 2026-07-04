@@ -45,19 +45,26 @@ export class AudioMixer {
     const failedRefs = new Set<string>();
     for (const clip of allClips) {
       if (demuxCache.has(clip.mediaRef) || failedRefs.has(clip.mediaRef)) continue;
+      let bytes: ArrayBuffer;
       try {
         const blob = await media.open(clip.mediaRef);
-        const bytes = await blob.arrayBuffer();
-        const demux = await demuxMp4(new Blob([bytes]));
-        demuxCache.set(clip.mediaRef, { bytes, audio: demux.audio });
+        bytes = await blob.arrayBuffer();
       } catch (e) {
         console.warn(`audio media open failed for ${clip.mediaRef}, skipping:`, e);
         failedRefs.add(clip.mediaRef);
+        continue;
+      }
+      try {
+        const demux = await demuxMp4(new Blob([bytes]));
+        demuxCache.set(clip.mediaRef, { bytes, audio: demux.audio });
+      } catch {
+        // mp3/wav/… aren't ISO-BMFF — the WebAudio fallback below decodes those containers.
+        demuxCache.set(clip.mediaRef, { bytes });
       }
     }
 
     // Decode PCM once per mediaRef and share across clips referencing the same media
-    const pcmCache = new Map<string, Float32Array>();
+    const decoded = new Map<string, { pcm: Float32Array; channels: number; sampleRate: number }>();
     let outChannels: number | undefined;
     let outSampleRate: number | undefined;
 
@@ -81,23 +88,35 @@ export class AudioMixer {
       let off = 0;
       for (const part of pcmParts) { pcm.set(part, off); off += part.length; }
 
-      pcmCache.set(ref, pcm);
+      decoded.set(ref, { pcm, channels: audio.channels, sampleRate: audio.sampleRate });
       if (outChannels === undefined) { outChannels = audio.channels; outSampleRate = audio.sampleRate; }
+    }
+
+    // WebAudio fallback for refs mp4box couldn't demux. Runs after the mp4 pass so it decodes
+    // straight at the established mix format (rate via OfflineAudioContext resampling, channels
+    // conformed manually) — heterogeneous sources would otherwise throw below.
+    for (const [ref, entry] of demuxCache) {
+      if (entry.audio || decoded.has(ref)) continue;
+      const fb = await decodeAudioBytesFallback(entry.bytes, outSampleRate ?? 48000, outChannels);
+      if (!fb) {
+        console.warn(`audio decode failed for ${ref} (unsupported container/codec), skipping`);
+        continue;
+      }
+      decoded.set(ref, fb);
+      if (outChannels === undefined) { outChannels = fb.channels; outSampleRate = fb.sampleRate; }
     }
 
     const sources: MixSource[] = [];
     const clipIds: string[] = [];
 
     for (const clip of allClips) {
-      const pcm = pcmCache.get(clip.mediaRef);
-      if (!pcm) continue;
-      const entry = demuxCache.get(clip.mediaRef)!;
-      const audio = entry.audio!;
+      const dec = decoded.get(clip.mediaRef);
+      if (!dec) continue;
 
       sources.push({
-        pcm,
-        channels: audio.channels,
-        sampleRate: audio.sampleRate,
+        pcm: dec.pcm,
+        channels: dec.channels,
+        sampleRate: dec.sampleRate,
         startFrame: clip.startFrame,
         endFrame: clip.startFrame + clip.durationFrames,
         trimStartFrame: clip.trimStartFrame,
@@ -170,5 +189,31 @@ export class AudioMixer {
   dispose(): void {
     this.sources = [];
     this.planCache.clear();
+  }
+}
+
+// mp3/wav/aac files aren't ISO-BMFF — mp4box can't demux them, but WebAudio's decoder sniffs
+// those containers natively. Decodes at targetRate (OfflineAudioContext resamples) and conforms
+// the channel count (mono duplicates up; extra channels drop) so the source can join an
+// established mp4-decoded mix without tripping the heterogeneous-audio guard.
+async function decodeAudioBytesFallback(
+  bytes: ArrayBuffer,
+  targetRate: number,
+  targetChannels?: number,
+): Promise<{ pcm: Float32Array; channels: number; sampleRate: number } | undefined> {
+  if (typeof OfflineAudioContext === "undefined") return undefined;
+  try {
+    const ctx = new OfflineAudioContext(targetChannels ?? 2, 1, targetRate);
+    const buf = await ctx.decodeAudioData(bytes.slice(0));
+    const channels = targetChannels ?? buf.numberOfChannels;
+    const frames = buf.length;
+    const pcm = new Float32Array(frames * channels);
+    for (let ch = 0; ch < channels; ch++) {
+      const plane = buf.getChannelData(Math.min(ch, buf.numberOfChannels - 1));
+      for (let i = 0; i < frames; i++) pcm[i * channels + ch] = plane[i]!;
+    }
+    return { pcm, channels, sampleRate: targetRate };
+  } catch {
+    return undefined;
   }
 }

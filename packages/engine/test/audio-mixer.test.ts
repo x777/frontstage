@@ -127,3 +127,101 @@ describe("AudioMixer.create missing-media tolerance", () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });
+
+// mp3/wav aren't ISO-BMFF — mp4box rejects them; the mixer must fall back to WebAudio's
+// decodeAudioData instead of silently contributing silence (generated TTS/music are mp3).
+describe("AudioMixer.create non-mp4 audio fallback", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.unstubAllGlobals();
+  });
+
+  it("decodes an mp3 via the WebAudio fallback when mp4 demux rejects", async () => {
+    const { demuxMp4 } = await import("../src/demux/mp4-demuxer.js");
+    (demuxMp4 as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("not ISO-BMFF"));
+
+    const fakeBuf = {
+      numberOfChannels: 1,
+      length: 4,
+      sampleRate: 48000,
+      getChannelData: () => new Float32Array([0.5, -0.5, 0.25, -0.25]),
+    };
+    vi.stubGlobal("OfflineAudioContext", class {
+      constructor(_ch: number, _len: number, _rate: number) {}
+      decodeAudioData = async () => fakeBuf;
+    });
+
+    const tl = timeline([track("a", "audio", [clip("c-mp3", "audio", { mediaRef: "mp3ref" })])]);
+    const media = makeMedia(new Set(["mp3ref"]));
+
+    const mixer = await AudioMixer.create(tl, media);
+
+    expect(mixer).toBeDefined();
+    expect(warnSpy).not.toHaveBeenCalled();
+    const win = mixer!.mixNext(tl, tl.fps);
+    expect(Array.from(win!).some((v) => v !== 0)).toBe(true);
+  });
+
+  it("warns and skips when both mp4 demux and the fallback fail", async () => {
+    const { demuxMp4 } = await import("../src/demux/mp4-demuxer.js");
+    (demuxMp4 as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("not ISO-BMFF"));
+    vi.stubGlobal("OfflineAudioContext", class {
+      constructor(_ch: number, _len: number, _rate: number) {}
+      decodeAudioData = async () => { throw new Error("undecodable"); };
+    });
+
+    const tl = timeline([track("a", "audio", [clip("c-bad", "audio", { mediaRef: "badref" })])]);
+    const media = makeMedia(new Set(["badref"]));
+
+    const mixer = await AudioMixer.create(tl, media);
+
+    expect(mixer).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("conforms a mono fallback to the established stereo mix format", async () => {
+    const { demuxMp4 } = await import("../src/demux/mp4-demuxer.js");
+    // first ref (mp4) demuxes as stereo 44100; second ref (mp3) rejects -> fallback
+    (demuxMp4 as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        audio: {
+          codec: "mock", sampleRate: 44100, channels: 2,
+          samples: [{ cts: 0, byteOffset: 0, size: 4, isSync: true }],
+          description: undefined,
+        },
+      })
+      .mockRejectedValueOnce(new Error("not ISO-BMFF"));
+
+    let requestedRate: number | undefined;
+    let requestedCh: number | undefined;
+    const fakeBuf = {
+      numberOfChannels: 1,
+      length: 2,
+      sampleRate: 44100,
+      getChannelData: () => new Float32Array([0.5, -0.5]),
+    };
+    vi.stubGlobal("OfflineAudioContext", class {
+      constructor(ch: number, _len: number, rate: number) { requestedCh = ch; requestedRate = rate; }
+      decodeAudioData = async () => fakeBuf;
+    });
+
+    const tl = timeline([
+      track("a", "audio", [
+        clip("c-mp4", "audio", { mediaRef: "mp4ref" }),
+        clip("c-mp3", "audio", { mediaRef: "mp3ref" }),
+      ]),
+    ]);
+    const media = makeMedia(new Set(["mp4ref", "mp3ref"]));
+
+    const mixer = await AudioMixer.create(tl, media);
+
+    // decoded straight at the mix's established format — no heterogeneous-audio throw
+    expect(mixer).toBeDefined();
+    expect(requestedRate).toBe(44100);
+    expect(requestedCh).toBe(2);
+    expect(mixer!.channels).toBe(2);
+    expect(mixer!.sampleRate).toBe(44100);
+  });
+});
