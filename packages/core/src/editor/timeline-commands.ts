@@ -240,6 +240,62 @@ export function splitClipCommand(
   };
 }
 
+// --- splitLinkedClipCommand ---
+
+// Splits `clipId` at `atFrame`, and — when the clip belongs to a link group — splits every linked
+// partner spanning `atFrame` too, then regroups the right halves as their own linked pair (Swift
+// EditorViewModel.splitClips: "Also splits linked partners"). Left halves keep the original
+// linkGroupId. The FIRST newId() call yields the target clip's right-half id (the reported id).
+export function splitLinkedClipCommand(
+  clipId: string,
+  atFrame: number,
+  coalesceKey?: string,
+  newId: () => string = () => crypto.randomUUID(),
+): Command {
+  return {
+    label: "Split Clip",
+    coalesceKey,
+    apply(timeline: Timeline): Timeline {
+      const loc = findClip(timeline, clipId);
+      if (!loc) return timeline;
+      const group = timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!.linkGroupId;
+      // The target first, then any linked partners across all tracks.
+      const memberIds =
+        group == null
+          ? [clipId]
+          : [
+              clipId,
+              ...timeline.tracks
+                .flatMap((t) => t.clips)
+                .filter((c) => c.linkGroupId === group && c.id !== clipId)
+                .map((c) => c.id),
+            ];
+
+      let tl = timeline;
+      const rightIds: string[] = [];
+      for (const mid of memberIds) {
+        const rightId = newId();
+        const before = tl;
+        tl = splitClipCommand(mid, atFrame, undefined, () => rightId).apply(tl);
+        if (tl !== before) rightIds.push(rightId); // a partner not spanning atFrame is a no-op
+      }
+      // Each side becomes its own linked pair: the right halves share a fresh link group.
+      if (memberIds.length > 1 && rightIds.length > 0) {
+        const newGroup = newId();
+        const rightSet = new Set(rightIds);
+        tl = {
+          ...tl,
+          tracks: tl.tracks.map((t) => ({
+            ...t,
+            clips: t.clips.map((c) => (rightSet.has(c.id) ? { ...c, linkGroupId: newGroup } : c)),
+          })),
+        };
+      }
+      return tl;
+    },
+  };
+}
+
 // --- clipFromAsset ---
 
 export function clipFromAsset(

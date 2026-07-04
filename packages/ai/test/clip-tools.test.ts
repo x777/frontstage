@@ -438,6 +438,65 @@ describe("split_clip", () => {
     // should not list c1 as a new id (c1 was the original, not newly created)
     expect(text).not.toMatch(/New clip id:.*c1/);
   });
+
+  test("splits the linked audio partner too and regroups the right halves (Swift parity)", async () => {
+    // Swift EditorViewModel.splitClips: "Also splits linked partners" — the whole link group is
+    // split at atFrame and the right halves become their own linked pair.
+    const store = new EditorStore({ ...makeTimeline(), tracks: [], settingsConfigured: true });
+    const ctx = makeCtx(store);
+    await addClipsTool().run({ clips: [{ mediaId: "media-av", startFrame: 0 }] }, ctx);
+    let tl = store.getSnapshot().timeline;
+    const vClip = tl.tracks.find((t) => t.type === "video")!.clips[0]!;
+    const origGroup = vClip.linkGroupId!;
+    expect(origGroup).toBeDefined();
+    const mid = Math.floor(vClip.durationFrames / 2);
+
+    const result = await splitClipTool().run({ clipId: vClip.id, atFrame: mid }, ctx);
+    expect(result.isError).toBe(false);
+    tl = store.getSnapshot().timeline;
+    const vClips = tl.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips);
+    const aClips = tl.tracks.filter((t) => t.type === "audio").flatMap((t) => t.clips);
+    expect(vClips.length).toBe(2);
+    expect(aClips.length).toBe(2); // the fix: the linked audio splits with the video
+
+    const vLeft = vClips.find((c) => c.startFrame === 0)!;
+    const vRight = vClips.find((c) => c.startFrame === mid)!;
+    const aLeft = aClips.find((c) => c.startFrame === 0)!;
+    const aRight = aClips.find((c) => c.startFrame === mid)!;
+    // Left halves keep the original group; right halves share a NEW group (each side stays a pair).
+    expect(vLeft.linkGroupId).toBe(origGroup);
+    expect(aLeft.linkGroupId).toBe(origGroup);
+    expect(vRight.linkGroupId).toBeDefined();
+    expect(vRight.linkGroupId).not.toBe(origGroup);
+    expect(aRight.linkGroupId).toBe(vRight.linkGroupId);
+    // The reported id is the target (video) clip's right half — not the audio's, not the new group.
+    const text = result.blocks.map((b: ToolBlock) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain(vRight.id);
+  });
+
+  test("splitting a linked clip is still ONE undo step", async () => {
+    const store = new EditorStore({ ...makeTimeline(), tracks: [], settingsConfigured: true });
+    const ctx = makeCtx(store);
+    await addClipsTool().run({ clips: [{ mediaId: "media-av", startFrame: 0 }] }, ctx);
+    const vClip = store.getSnapshot().timeline.tracks.find((t) => t.type === "video")!.clips[0]!;
+    await splitClipTool().run({ clipId: vClip.id, atFrame: 30 }, ctx);
+    let tl = store.getSnapshot().timeline;
+    expect(tl.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips).length).toBe(2);
+    store.undo(); // one undo reverts BOTH the video and audio splits
+    tl = store.getSnapshot().timeline;
+    expect(tl.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips).length).toBe(1);
+    expect(tl.tracks.filter((t) => t.type === "audio").flatMap((t) => t.clips).length).toBe(1);
+  });
+
+  test("a non-linked clip splits only itself (no phantom partners)", async () => {
+    const store = new EditorStore(makeTimeline()); // c1 = media-1, video, no audio, no link group
+    const ctx = makeCtx(store);
+    const result = await splitClipTool().run({ clipId: "c1", atFrame: 30 }, ctx);
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    expect(tl.tracks.flatMap((t) => t.clips).length).toBe(2);
+    expect(tl.tracks.filter((t) => t.type === "audio").length).toBe(0);
+  });
 });
 
 // ── trim_clips ────────────────────────────────────────────────────────────────

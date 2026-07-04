@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption } from "@palmier/core";
+import { findClip, addClipCommand, moveClipCommand, splitLinkedClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -149,8 +149,16 @@ export function splitClipTool(): ToolSpec {
       if (atFrame <= clip.startFrame || atFrame >= clipEnd)
         return errorResult(`atFrame ${atFrame} must be strictly inside the clip (frames ${clip.startFrame}..${clipEnd})`);
 
+      // splitLinkedClipCommand splits the target AND its linked partners; its first newId() call
+      // is the target clip's right-half id — the one to report.
       let newClipId = "";
-      const cmd = splitClipCommand(clipId, atFrame, undefined, () => { newClipId = ctx.newId(); return newClipId; });
+      let firstCall = true;
+      const genId = () => {
+        const id = ctx.newId();
+        if (firstCall) { firstCall = false; newClipId = id; }
+        return id;
+      };
+      const cmd = splitLinkedClipCommand(clipId, atFrame, undefined, genId);
       asUndoStep(ctx.store, "Split Clip", [cmd.apply.bind(cmd)]);
 
       return ok(`Split clip ${clipId} at frame ${atFrame}. New clip id: ${newClipId}`);
@@ -208,12 +216,23 @@ export function splitClipsTool(): ToolSpec {
         if (s.atFrame <= clip.startFrame || s.atFrame >= end)
           return errorResult(`atFrame ${s.atFrame} must be strictly inside clip ${s.clipId} (frames ${clip.startFrame}..${end})`);
       }
-      const newIds = splits.map(() => ctx.newId());
-      const reducers = splits.map((s, i) => {
-        const cmd = splitClipCommand(s.clipId, s.atFrame, undefined, () => newIds[i]!);
+      // Each split carries its linked partners; capture each split's target right-half id (its
+      // first newId() call) for the report.
+      const primaries: { value: string }[] = [];
+      const reducers = splits.map((s) => {
+        const holder = { value: "" };
+        primaries.push(holder);
+        let firstCall = true;
+        const genId = () => {
+          const id = ctx.newId();
+          if (firstCall) { firstCall = false; holder.value = id; }
+          return id;
+        };
+        const cmd = splitLinkedClipCommand(s.clipId, s.atFrame, undefined, genId);
         return cmd.apply.bind(cmd);
       });
-      asUndoStep(ctx.store, "Split Clips", reducers);
+      asUndoStep(ctx.store, splits.length > 1 ? "Split Clips" : "Split Clip", reducers);
+      const newIds = primaries.map((p) => p.value);
       return ok(`Split ${splits.length} clip(s). New ids: ${newIds.join(", ")}`);
     },
   };
