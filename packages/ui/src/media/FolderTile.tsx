@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { MediaFolder } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { Icon } from "../primitives/index.js";
+
+// Mirrors --icon-size-xl (30px) — Icon's size prop sets raw SVG width/height, not a CSS var.
+const FOLDER_ICON_SIZE = 30;
 
 export const MEDIA_DRAG_MIME = "application/x-palmier-media";
 
@@ -128,7 +132,7 @@ export function FolderTile({
         position: "relative",
         display: "flex",
         flexDirection: "column",
-        gap: theme.spacing.xxs,
+        gap: theme.spacing.xs,
         cursor: "default",
         borderRadius: theme.radius.xs,
         background: theme.bg.raised,
@@ -152,7 +156,9 @@ export function FolderTile({
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: theme.fontSize.display, color: theme.folder.icon }}>{"📁"}</span>
+        <span style={{ color: theme.folder.icon, display: "flex" }}>
+          <Icon name="folder" size={FOLDER_ICON_SIZE} />
+        </span>
         {childCount > 0 && (
           <span
             data-testid="folder-child-count"
@@ -164,7 +170,8 @@ export function FolderTile({
               color: theme.folder.badgeText,
               fontSize: theme.fontSize.xxs,
               fontWeight: theme.fontWeight.semibold,
-              borderRadius: theme.radius.xl,
+              fontVariantNumeric: "tabular-nums",
+              borderRadius: theme.radius.pill,
               padding: `0 ${theme.spacing.xs}`,
             }}
           >
@@ -189,7 +196,7 @@ export function FolderTile({
             style={{
               width: "100%",
               boxSizing: "border-box",
-              fontSize: theme.fontSize.micro,
+              fontSize: theme.fontSize.xs,
               fontWeight: theme.fontWeight.medium,
               color: theme.text.primary,
               background: theme.bg.base,
@@ -201,7 +208,8 @@ export function FolderTile({
         ) : (
           <span
             style={{
-              fontSize: theme.fontSize.micro,
+              fontSize: theme.fontSize.xs,
+              fontWeight: theme.fontWeight.medium,
               color: theme.text.primary,
               overflow: "hidden",
               textOverflow: "ellipsis",

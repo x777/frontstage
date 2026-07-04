@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { EditorStore, MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { buildFolderIndex, collectFolderCascade, folderPath, parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
-import { Button, Icon, IconButton, MenuList, SearchField } from "../primitives/index.js";
+import { Button, Icon, IconButton, MenuList, SearchField, useHover } from "../primitives/index.js";
 import type { IconName, MenuListItem } from "../primitives/index.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionsTab } from "./CaptionsTab.js";
@@ -546,15 +546,17 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             itemCount={childFolders.length + visibleEntries.length}
           />
 
-          {/* Grid */}
+          {/* Grid — gap/outer padding per MediaTab+Grids.swift's gridDimensions (spacing = Spacing.xl,
+              outer padding = Spacing.md, plus an extra Spacing.sm on top only from gridScroll's
+              topPadding). --size-media-item-min (80px) already matches thumbnailSize's default. */}
           <div
             style={{
               flex: 1,
               overflowY: "auto",
-              padding: theme.spacing.xs,
+              padding: `calc(${theme.spacing.md} + ${theme.spacing.sm}) ${theme.spacing.md} ${theme.spacing.md}`,
               display: "grid",
               gridTemplateColumns: `repeat(auto-fill, minmax(${theme.size.mediaItemMin}, 1fr))`,
-              gap: theme.spacing.xs,
+              gap: theme.spacing.xl,
               alignContent: "start",
             }}
           >
@@ -616,36 +618,49 @@ interface MediaItemProps {
   onPointerDown?: (entry: MediaManifestEntry, e: React.PointerEvent) => void;
 }
 
+// mm:ss — mirrors AssetThumbnailView.formatDuration.
+function formatDuration(seconds: number): string {
+  const total = Math.floor(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
   const trackColor = theme.track[entry.type as keyof typeof theme.track] ?? theme.bg.prominent;
   const status = parseGenerationStatus(entry.generationStatus);
   const isGenerating = status.kind !== "none" && status.kind !== "failed";
   const isFailed = status.kind === "failed";
+  const showsDurationBadge = (entry.type === "video" || entry.type === "audio") && entry.duration > 0;
+  const { hovered, hoverProps } = useHover();
 
   return (
     <div
       data-testid="media-item"
       data-media-id={entry.id}
       onPointerDown={(e) => onPointerDown?.(entry, e)}
+      {...hoverProps}
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: theme.spacing.xxs,
+        gap: theme.spacing.xs,
         cursor: "default",
-        borderRadius: theme.radius.xs,
-        overflow: "hidden",
-        background: theme.bg.raised,
-        border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
       }}
     >
-      {/* Thumbnail, generating overlay, failed state, or color tile */}
+      {/* Thumbnail, generating overlay, failed state, or color tile — clipped radius-sm per
+          AssetThumbnailView, border/shadow lift on hover (kit hover language, --anim-hover). */}
       <div
         style={{
           position: "relative",
           width: "100%",
           aspectRatio: "16/9",
+          boxSizing: "border-box",
           background: thumbnail && !isGenerating && !isFailed ? "transparent" : trackColor,
+          borderRadius: theme.radius.sm,
           overflow: "hidden",
+          border: `${theme.borderWidth.thin} solid ${hovered ? theme.border.primary : theme.border.subtle}`,
+          boxShadow: hovered ? theme.shadow.sm : "none",
+          transition: `border-color ${theme.anim.hover} ease-out, box-shadow ${theme.anim.hover} ease-out`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -663,44 +678,67 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         ) : null}
-      </div>
 
-      {/* Name + badge */}
-      <div
-        style={{
-          padding: `0 ${theme.spacing.xxs} ${theme.spacing.xxs}`,
-          display: "flex",
-          flexDirection: "column",
-          gap: theme.spacing.xxs,
-        }}
-      >
+        {/* Type badge, top-left — AssetThumbnailView.thumbnailBadges' position, restyled as a
+            track-colored chip; keeps our type data (Swift's own badge here is the "AI" source flag,
+            which we don't track at this layer — recorded deviation). */}
         <span
           style={{
-            fontSize: theme.fontSize.micro,
+            position: "absolute",
+            top: theme.spacing.xs,
+            left: theme.spacing.xs,
+            fontSize: theme.fontSize.xxs,
+            fontWeight: theme.fontWeight.semibold,
             color: theme.text.primary,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            display: "block",
-          }}
-        >
-          {entry.name}
-        </span>
-        <span
-          style={{
-            fontSize: theme.fontSize.micro,
-            color: theme.text.muted,
             background: trackColor,
-            borderRadius: theme.radius.xs,
-            padding: `0 ${theme.spacing.xxs}`,
-            alignSelf: "flex-start",
+            borderRadius: theme.radius.pill,
+            padding: `0 ${theme.spacing.sm}`,
             textTransform: "uppercase",
             letterSpacing: theme.letterSpacing.wide,
           }}
         >
           {entry.type}
         </span>
+
+        {/* Duration pill, bottom-right — AssetThumbnailView.durationBadge (mono xxs on a dark scrim). */}
+        {showsDurationBadge && (
+          <span
+            style={{
+              position: "absolute",
+              bottom: theme.spacing.xs,
+              right: theme.spacing.xs,
+              fontSize: theme.fontSize.xxs,
+              fontWeight: theme.fontWeight.medium,
+              color: theme.text.primary,
+              fontVariantNumeric: "tabular-nums",
+              background: theme.folder.badgeBg,
+              borderRadius: theme.radius.pill,
+              padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
+            }}
+          >
+            {formatDuration(entry.duration)}
+          </span>
+        )}
+
+        {/* AssetThumbnailView.hoverActions (top-right "Add to chat" bubble) has no attach-mention
+            hook threaded to MediaItem in this port — deliberately not wired (recorded deviation,
+            like the header's Generate button above). */}
       </div>
+
+      {/* Name row */}
+      <span
+        style={{
+          padding: `0 ${theme.spacing.xs}`,
+          fontSize: theme.fontSize.xs,
+          color: theme.text.secondary,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          display: "block",
+        }}
+      >
+        {entry.name}
+      </span>
     </div>
   );
 }
