@@ -7,7 +7,7 @@ import { renderSpanToMp4 } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@palmier/ai";
 import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
@@ -18,6 +18,7 @@ import { WebAiGateway } from "./web-ai-gateway.js";
 import { WebGenGateway } from "./web-gen-gateway.js";
 import { makeWebAudioExtractor } from "./web-audio-extract.js";
 import { createWebMediaImport } from "./web-media-import.js";
+import { createWebSkillStorage, createWebSkillCatalogDeps } from "./web-skills.js";
 import "./web-fs-test-entry.js";
 
 interface PalmierAppProps {
@@ -166,6 +167,15 @@ async function bootstrap() {
     model: initialImageModel,
   });
   (window as unknown as Record<string, unknown>).__imageGenerator = imageGenerator;
+
+  // Skills (M15 T2) — OPFS-backed; the community catalog cache lives in localStorage. Reload once
+  // at bootstrap (mirrors Swift's SkillStore.init()); the agent's per-run reload happens via
+  // getSkillsSuffix below.
+  const skillStore = new SkillStore(createWebSkillStorage());
+  const skillCatalog = new SkillCatalog(createWebSkillCatalogDeps());
+  await skillStore.reload();
+  (window as unknown as Record<string, unknown>).__skillStore = skillStore;
+  (window as unknown as Record<string, unknown>).__skillCatalog = skillCatalog;
 
   // Generation orchestrator (image/video jobs) — routed through the self-hosted proxy (fal key never in browser).
   const genGateway = new WebGenGateway(aiProxyUrl, aiProxyToken);
@@ -363,6 +373,8 @@ async function bootstrap() {
     // .cube LUT persistence (M14C T2): store() is cross-platform; readLocalFile is desktop-only
     // (no arbitrary local-path fs access in a browser) — apply_color's lut.path errors cleanly here.
     lut: { store: (filename, bytes) => library.storeLut(filename, bytes) },
+    // Skills (M15 T2) — web has no MCP path, so ctx.skills goes straight into the one shared context.
+    skills: { body: (id) => skillStore.body(id) },
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -370,6 +382,10 @@ async function bootstrap() {
     executor,
     tools: buildCatalog(),
     model: initialAgentModel,
+    getSkillsSuffix: async () => {
+      await skillStore.reload();
+      return skillsSection(skillStore.skillIndex);
+    },
   });
 
   const sessionStore = new ChatSessionStore(localProjectStore("palmier.chats"));

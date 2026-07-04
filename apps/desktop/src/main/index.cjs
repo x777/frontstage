@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, session } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, session, shell } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -1540,4 +1540,83 @@ ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
       try { fs.unlinkSync(tmp); } catch { /* best-effort */ }
     }
   }
+});
+
+// ── Skills IPC (M15 T2, desktop SkillStorage backend) ───────────────────────
+// ~/.palmier/skills/<id>/SKILL.md — SHARED with the Swift app's SkillStore.swift layout. All
+// fs logic (id sanitization, ledger, export path-building) lives in skills-fs.mjs, which takes no
+// `electron` import so it's directly unit-testable (mirrors project-registry.mjs's convention).
+
+let _skillsFsMod = null;
+async function loadSkillsFs() {
+  if (!_skillsFsMod) _skillsFsMod = await import("./skills-fs.mjs");
+  return _skillsFsMod;
+}
+
+function skillsRoot() {
+  return path.join(os.homedir(), ".palmier", "skills");
+}
+
+function skillsCatalogCachePath() {
+  return path.join(app.getPath("userData"), "skills-catalog.json");
+}
+
+ipcMain.handle("skills:list", async () => {
+  const m = await loadSkillsFs();
+  return m.listSkills(skillsRoot());
+});
+
+ipcMain.handle("skills:read", async (_e, id) => {
+  const m = await loadSkillsFs();
+  return m.readSkill(skillsRoot(), id);
+});
+
+ipcMain.handle("skills:write", async (_e, id, text) => {
+  const m = await loadSkillsFs();
+  m.writeSkill(skillsRoot(), id, text);
+});
+
+ipcMain.handle("skills:remove", async (_e, id) => {
+  const m = await loadSkillsFs();
+  m.removeSkill(skillsRoot(), id);
+});
+
+ipcMain.handle("skills:readLedger", async () => {
+  const m = await loadSkillsFs();
+  return m.readLedgerFile(skillsRoot());
+});
+
+ipcMain.handle("skills:writeLedger", async (_e, ledger) => {
+  const m = await loadSkillsFs();
+  m.writeLedgerFile(skillsRoot(), ledger);
+});
+
+ipcMain.handle("skills:reveal", async (_e, id) => {
+  const m = await loadSkillsFs();
+  shell.showItemInFolder(m.skillMdPath(skillsRoot(), id));
+});
+
+ipcMain.handle("skills:openRoot", async () => {
+  const root = skillsRoot();
+  fs.mkdirSync(root, { recursive: true });
+  await shell.openPath(root);
+});
+
+ipcMain.handle("skills:exportToAgent", async (_e, id, agent) => {
+  const m = await loadSkillsFs();
+  const dest = m.exportSkillToAgent(skillsRoot(), os.homedir(), id, agent);
+  return { path: dest };
+});
+
+ipcMain.handle("skills:cacheRead", () => {
+  try {
+    return fs.readFileSync(skillsCatalogCachePath(), "utf8");
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle("skills:cacheWrite", (_e, text) => {
+  fs.mkdirSync(path.dirname(skillsCatalogCachePath()), { recursive: true });
+  fs.writeFileSync(skillsCatalogCachePath(), text, "utf8");
 });

@@ -5,7 +5,7 @@ import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
 import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@palmier/ai";
 
 declare global {
@@ -34,6 +34,7 @@ import { makeDesktopAudioExtractor } from "./desktop-audio-extract.js";
 import { createDesktopMediaImport } from "./desktop-media-import.js";
 import { createDesktopLut } from "./desktop-lut.js";
 import { createDesktopInteropExport } from "./desktop-interop-export.js";
+import { createDesktopSkillStorage, createDesktopSkillCatalogDeps } from "./desktop-skills.js";
 import type { PlaybackEngine } from "@palmier/engine";
 import { renderSpanToMp4 } from "@palmier/engine";
 
@@ -264,6 +265,15 @@ const projectNavSession: ProjectNavSession = {
 const projectNav = window.desktopProjectNav ? createDesktopProjectNav(projectNavSession, window.desktopProjectNav) : undefined;
 const projectsFacade: ToolContext["projects"] = projectNav?.facade;
 
+// Skills (M15 T2) — ~/.palmier/skills over the main-process fs IPC; the community catalog cache
+// lives in userData. Reload once at bootstrap (mirrors Swift's SkillStore.init()); the agent's
+// per-run reload happens via getSkillsSuffix below.
+const skillStore = new SkillStore(createDesktopSkillStorage());
+const skillCatalog = new SkillCatalog(createDesktopSkillCatalogDeps());
+void skillStore.reload();
+(window as unknown as Record<string, unknown>).__skillStore = skillStore;
+(window as unknown as Record<string, unknown>).__skillCatalog = skillCatalog;
+
 const toolContext: ToolContext = {
   store,
   getManifest: () => library.getManifest(),
@@ -288,9 +298,10 @@ const toolContext: ToolContext = {
   projectName: () => session.getState().name,
   lut: createDesktopLut(library),
 };
-// In-app agent: 39 tools, never the project-nav ones (see buildCatalog's "inApp" default).
-const executor = new ToolExecutor(buildCatalog(), toolContext);
-// MCP server only: 39 + get_projects/open_project/new_project (42) — projects facade added here only.
+// In-app agent: never the project-nav ones (see buildCatalog's "inApp" default); ctx.skills only
+// goes into THIS context — the MCP one below never gets a `skills` key (M15 T2 guard).
+const executor = new ToolExecutor(buildCatalog(), { ...toolContext, skills: { body: (id) => skillStore.body(id) } });
+// MCP server only: + get_projects/open_project/new_project — projects facade added here only.
 const mcpExecutor = new ToolExecutor(buildCatalog("mcp"), { ...toolContext, projects: projectsFacade });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -298,6 +309,10 @@ const agentSession = new AgentSession({
   executor,
   tools: buildCatalog(),
   model: initialAgentModel,
+  getSkillsSuffix: async () => {
+    await skillStore.reload();
+    return skillsSection(skillStore.skillIndex);
+  },
 });
 
 const sessionStore = new ChatSessionStore(localProjectStore("palmier.chats"));

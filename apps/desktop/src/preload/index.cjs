@@ -71,6 +71,20 @@ contextBridge.exposeInMainWorld("desktopProjectNav", {
   cleanupFailedCreate: (p) => ipcRenderer.invoke("projects:cleanupFailedCreate", p),
 });
 
+contextBridge.exposeInMainWorld("desktopSkills", {
+  list: () => ipcRenderer.invoke("skills:list"),
+  read: (id) => ipcRenderer.invoke("skills:read", id),
+  write: (id, text) => ipcRenderer.invoke("skills:write", id, text),
+  remove: (id) => ipcRenderer.invoke("skills:remove", id),
+  readLedger: () => ipcRenderer.invoke("skills:readLedger"),
+  writeLedger: (l) => ipcRenderer.invoke("skills:writeLedger", l),
+  reveal: (id) => ipcRenderer.invoke("skills:reveal", id),
+  openRoot: () => ipcRenderer.invoke("skills:openRoot"),
+  exportToAgent: (id, agent) => ipcRenderer.invoke("skills:exportToAgent", id, agent),
+  cacheRead: () => ipcRenderer.invoke("skills:cacheRead"),
+  cacheWrite: (s) => ipcRenderer.invoke("skills:cacheWrite", s),
+});
+
 contextBridge.exposeInMainWorld("desktopProject", {
   pickOpen: () => ipcRenderer.invoke("project:pickOpen"),
   pickSaveAs: (n) => ipcRenderer.invoke("project:pickSaveAs", n),
