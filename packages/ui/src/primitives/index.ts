@@ -11,5 +11,6 @@ export { Checkbox } from "./Checkbox.js";
 export { Select } from "./Select.js";
 export type { SelectProps } from "./Select.js";
 export { MenuList } from "./MenuList.js";
+export type { MenuListItem } from "./MenuList.js";
 export { Dialog } from "./Dialog.js";
 export { Toast } from "./Toast.js";

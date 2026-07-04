@@ -1,6 +1,16 @@
 import { theme } from "../theme/theme.js";
 import { useHover } from "./use-hover.js";
 
+export interface MenuListItem {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  destructive?: boolean;
+  // Overrides the auto-derived `${testid}-${id}` row testid — needed when a row must carry a
+  // pre-existing testid verbatim (e.g. moving a standalone button's testid onto a menu row).
+  testid?: string;
+}
+
 function MenuRow(props: {
   id: string;
   label: string;
@@ -44,7 +54,7 @@ function MenuRow(props: {
 }
 
 export function MenuList(props: {
-  items: readonly { id: string; label: string; disabled?: boolean; destructive?: boolean }[];
+  items: readonly MenuListItem[];
   onSelect: (id: string) => void;
   testid?: string;
 }) {
@@ -69,7 +79,7 @@ export function MenuList(props: {
           disabled={item.disabled}
           destructive={item.destructive}
           onSelect={onSelect}
-          testid={testid ? `${testid}-${item.id}` : undefined}
+          testid={item.testid ?? (testid ? `${testid}-${item.id}` : undefined)}
         />
       ))}
     </div>

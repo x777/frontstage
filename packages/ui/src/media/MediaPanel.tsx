@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { EditorStore, MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { buildFolderIndex, collectFolderCascade, folderPath, parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
-import { Icon, IconButton } from "../primitives/index.js";
-import type { IconName } from "../primitives/index.js";
+import { Button, Icon, IconButton, MenuList, SearchField } from "../primitives/index.js";
+import type { IconName, MenuListItem } from "../primitives/index.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionsTab } from "./CaptionsTab.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
@@ -75,6 +75,10 @@ const MEDIA_PANEL_TABS: { id: PanelTab; label: string; icon: IconName }[] = [
 ];
 // Mirrors --icon-size-sm (18px) — Icon's size prop sets raw SVG width/height, not a CSS var.
 const TAB_ICON_SIZE = 18;
+// Mirrors --font-xs (10px) — MediaTab.swift's toolbarButton/toolbarMenuIcon glyphs are sized via
+// the ambient .font(), not IconSize; the overflow trigger's own frame is --icon-size-sm (18px).
+const HEADER_ICON_SIZE = 10;
+const OVERFLOW_ICON_FRAME = "sm" as const;
 
 export function MediaPanel({ library, onItemPointerDown, store, executor, transcription, indexing, dragOverFolderId }: MediaPanelProps) {
   const indexStatus = useSyncExternalStore(
@@ -130,6 +134,11 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
   const [renamingFolderId, setRenamingFolderId] = useState<string | undefined>(undefined);
   const [folderError, setFolderError] = useState<string | null>(null);
+  // The Search input is a disabled placeholder (no search feature wired yet, same as before this
+  // task) — kept controlled only because the kit SearchField requires value/onChange.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   // Two independent selectors (not one object-returning selector) so a host whose getSnapshot()
   // builds a fresh wrapper each call still gets stable per-field identity — useSyncExternalStore
@@ -204,6 +213,35 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
       }
     }
   }, [createFolderAt, currentFolderId]);
+
+  // Overflow "⋯" menu (MediaTab.swift overflowMenu): New Folder / New Matte… moved off the
+  // toolbar and into here, same testids/handlers as the standalone buttons they replaced.
+  const overflowItems = useMemo<MenuListItem[]>(() => {
+    const items: MenuListItem[] = [{ id: "new-folder", label: "New Folder", testid: "media-new-folder" }];
+    if (canCreateMatte) items.push({ id: "new-matte", label: "New Matte…", testid: "media-new-matte" });
+    return items;
+  }, [canCreateMatte]);
+
+  const handleOverflowSelect = useCallback(
+    (id: string) => {
+      setOverflowOpen(false);
+      if (id === "new-folder") handleNewFolder();
+      else if (id === "new-matte") setShowMatteSheet(true);
+    },
+    [handleNewFolder],
+  );
+
+  // Close on outside click — same idiom as FileMenu.tsx.
+  useEffect(() => {
+    if (!overflowOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
+        setOverflowOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [overflowOpen]);
 
   const handleDropOnFolder = useCallback(
     (folderId: string | undefined, payload: MediaDragPayload) => {
@@ -376,14 +414,16 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
       {tab === "media" ? (
         <>
-          {/* Header */}
+          {/* actionsRow (MediaTab.swift actionsRow, 28px): Import, the overflow "⋯" menu
+              (New Folder / New Matte…), trailing search-index status. */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: theme.spacing.xs,
-              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-              borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+              height: theme.size.panelHeader,
+              boxSizing: "border-box",
+              padding: `0 ${theme.spacing.sm}`,
               flexShrink: 0,
             }}
           >
@@ -395,110 +435,90 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
               style={{ display: "none" }}
               onChange={handleFileChange}
             />
-            <button
-              data-testid="media-import"
-              onClick={handleImportClick}
-              style={{
-                background: theme.bg.raised,
-                color: theme.text.primary,
-                border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-                borderRadius: theme.radius.xs,
-                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                fontSize: theme.fontSize.xs,
-                fontWeight: theme.fontWeight.medium,
-                cursor: "pointer",
-              }}
-            >
-              Import
-            </button>
-            <button
-              data-testid="media-new-folder"
-              onClick={handleNewFolder}
-              style={{
-                background: theme.bg.raised,
-                color: theme.text.primary,
-                border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-                borderRadius: theme.radius.xs,
-                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                fontSize: theme.fontSize.xs,
-                fontWeight: theme.fontWeight.medium,
-                cursor: "pointer",
-              }}
-            >
-              New Folder
-            </button>
-            {canCreateMatte && (
-              <button
-                data-testid="media-new-matte"
-                onClick={() => setShowMatteSheet(true)}
+            <Button testid="media-import" onClick={handleImportClick}>
+              <span style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
+                <Icon name="plus" size={HEADER_ICON_SIZE} />
+                Import
+              </span>
+            </Button>
+
+            {/* Generate lives in the agent side of this port — Swift's toolbarButton("Generate", ...)
+                has no equivalent here; deliberately not ported (recorded deviation). */}
+
+            <div style={{ position: "relative" }} ref={overflowMenuRef}>
+              <IconButton
+                frame={OVERFLOW_ICON_FRAME}
+                testid="media-overflow-toggle"
+                title="More"
+                onClick={() => setOverflowOpen((v) => !v)}
+              >
+                <Icon name="ellipsis" size={HEADER_ICON_SIZE} />
+              </IconButton>
+              <div
                 style={{
-                  background: theme.bg.raised,
-                  color: theme.text.primary,
-                  border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-                  borderRadius: theme.radius.xs,
-                  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                  fontSize: theme.fontSize.xs,
-                  fontWeight: theme.fontWeight.medium,
-                  cursor: "pointer",
+                  position: "absolute",
+                  top: `calc(100% + ${theme.spacing.xxs})`,
+                  left: 0,
+                  zIndex: theme.z.menu,
+                  display: overflowOpen ? "block" : "none",
                 }}
               >
-                New Matte…
-              </button>
+                <MenuList items={overflowItems} onSelect={handleOverflowSelect} />
+              </div>
+            </div>
+
+            <div style={{ flex: 1 }} />
+
+            {indexLabel != null && (
+              <div
+                data-testid="media-index-status"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: theme.spacing.xs,
+                  fontSize: theme.fontSize.xs,
+                  color: theme.text.tertiary,
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ whiteSpace: "nowrap" }}>{indexLabel}</span>
+                {downloadableMissing.length > 0 && (
+                  <Button
+                    testid="media-index-download-model"
+                    size="small"
+                    onClick={handleDownloadModels}
+                    disabled={downloadingModel != null}
+                  >
+                    {downloadingModel != null ? `Downloading ${MODEL_LABEL[downloadingModel]}…` : "Download model"}
+                  </Button>
+                )}
+              </div>
             )}
-            <input
-              data-testid="media-search"
-              type="text"
-              disabled
-              placeholder="Search"
-              style={{
-                flex: 1,
-                background: theme.bg.base,
-                color: theme.text.muted,
-                border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                borderRadius: theme.radius.xs,
-                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                fontSize: theme.fontSize.xs,
-                outline: "none",
-              }}
-            />
           </div>
 
-          {indexLabel != null && (
-            <div
-              data-testid="media-index-status"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: theme.spacing.xxs,
-                fontSize: theme.fontSize.xxs,
-                color: indexStatus.kind === "waiting-model" ? theme.text.muted : theme.text.tertiary,
-                padding: `0 ${theme.spacing.sm}`,
-                flexShrink: 0,
-              }}
-            >
-              <span>{indexLabel}</span>
-              {downloadableMissing.length > 0 && (
-                <button
-                  data-testid="media-index-download-model"
-                  onClick={handleDownloadModels}
-                  disabled={downloadingModel != null}
-                  style={{
-                    background: theme.bg.raised,
-                    color: theme.text.primary,
-                    border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-                    borderRadius: theme.radius.xs,
-                    padding: `0 ${theme.spacing.xxs}`,
-                    fontSize: theme.fontSize.xxs,
-                    fontWeight: theme.fontWeight.medium,
-                    cursor: downloadingModel != null ? "default" : "pointer",
-                    opacity: downloadingModel != null ? theme.opacity.disabled : 1,
-                  }}
-                >
-                  {downloadingModel != null ? `Downloading ${MODEL_LABEL[downloadingModel]}…` : "Download model"}
-                </button>
-              )}
-            </div>
-          )}
+          {/* searchControlsRow (MediaTab.swift searchControlsRow, 28px). No grid/list display-mode
+              controls exist in this port yet (Swift's view/sort/filter menus aren't ported) —
+              nothing to convert there, recorded deviation. */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: theme.spacing.xs,
+              height: theme.size.panelHeader,
+              boxSizing: "border-box",
+              padding: `0 ${theme.spacing.sm}`,
+              flexShrink: 0,
+            }}
+          >
+            <SearchField
+              testid="media-search"
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search"
+              disabled
+              style={{ flex: 1, minWidth: 0 }}
+            />
+          </div>
 
           {folderError != null && (
             <div
@@ -523,6 +543,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
             onNavigate={navigateTo}
             onDropOn={handleDropOnFolder}
             dragOverFolderId={dragOverFolderId}
+            itemCount={childFolders.length + visibleEntries.length}
           />
 
           {/* Grid */}
