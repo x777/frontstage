@@ -490,7 +490,7 @@ export function importMediaTool(): ToolSpec {
       if (path !== undefined) {
         if (!facade.fromPath) return errorResult("import_media: path imports are not available on web");
         try {
-          const { assetIds } = await facade.fromPath(path, a.folderId);
+          const { assetIds } = await facade.fromPath(path, a.folderId, a.name);
           if (assetIds.length === 0) return errorResult(`No supported media found at path: ${path}`);
           return ok(
             `Import started. ${assetIds.length} placeholder asset(s) registered: ${assetIds.join(", ")}. Status: downloading. Poll get_media / list_folders; assets appear once the copy completes.`,

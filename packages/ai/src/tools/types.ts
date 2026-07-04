@@ -74,8 +74,9 @@ export interface ToolContext {
   mediaImport?: {
     fromBytes(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }>;
     fromUrl(url: string, name?: string, folderId?: string, mimeType?: string): Promise<{ assetId: string }>;
-    // Desktop only — a directory recurses, mirroring its structure as folders.
-    fromPath?(absPath: string, folderId?: string): Promise<{ assetIds: string[] }>;
+    // Desktop only — a directory recurses, mirroring its structure as folders. name applies to
+    // single-file paths only (Swift: displayName = name ?? filename); directories ignore it.
+    fromPath?(absPath: string, folderId?: string, name?: string): Promise<{ assetIds: string[] }>;
     // Solid-color matte rendering (M13A T1, create_matte): the ai package can't touch canvas, so
     // hosts wire this from @palmier/ui's renderMattePng. Absent -> create_matte errors cleanly.
     renderMatte?(hex: string, width: number, height: number): Promise<Uint8Array>;

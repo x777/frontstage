@@ -1414,7 +1414,9 @@ ipcMain.handle("media:importScan", async (_e, dir, absPath) => {
     const files = IMPORT_ALLOWED_EXTENSIONS.has(ext)
       ? [{ abs: resolvedTarget, rel: path.basename(resolvedTarget), ext, size: stat.size }]
       : [];
-    return { files, dirs: [] };
+    // isFile lets the renderer apply import_media's `name` only to single-file paths (Swift:
+    // directory imports ignore it) — a flat one-file directory is otherwise indistinguishable.
+    return { files, dirs: [], isFile: true };
   }
   if (!stat.isDirectory()) {
     return { error: "unsupported path type: " + absPath };

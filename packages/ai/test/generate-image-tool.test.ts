@@ -88,6 +88,20 @@ describe("generate_image tool", () => {
     expect(text).toContain("image generation failed");
   });
 
+  test("legacy no-API-key failure returns the clean keyless message, not raw IPC noise", async () => {
+    const tool = generateImageTool();
+    const ctx = makeCtx({
+      // Desktop's ai:generateImage throw as it arrives through Electron IPC.
+      generateImage: async () => { throw new Error("Error invoking remote method 'ai:generateImage': Error: no API key"); },
+    });
+
+    const result = await tool.run({ prompt: "a cat" }, ctx);
+
+    expect(result.isError).toBe(true);
+    const block = result.blocks[0]; const text = block?.kind === "text" ? block.text : "";
+    expect(text).toBe("No fal.ai API key configured. Add one in Settings to generate images.");
+  });
+
   test("has correct name", () => {
     const tool = generateImageTool();
     expect(tool.name).toBe("generate_image");

@@ -584,10 +584,10 @@ class FakeMediaImport {
     return this.fromUrlResult;
   }
 
-  get fromPath(): ((absPath: string, folderId?: string) => Promise<{ assetIds: string[] }>) | undefined {
+  get fromPath(): ((absPath: string, folderId?: string, name?: string) => Promise<{ assetIds: string[] }>) | undefined {
     if (!this.hasFromPath) return undefined;
-    return async (absPath: string, folderId?: string) => {
-      this.calls.push({ kind: "fromPath", args: [absPath, folderId] });
+    return async (absPath: string, folderId?: string, name?: string) => {
+      this.calls.push({ kind: "fromPath", args: [absPath, folderId, name] });
       if (this.fromPathResult instanceof Error) throw this.fromPathResult;
       return this.fromPathResult;
     };
@@ -821,9 +821,21 @@ describe("import_media — path", () => {
     const ctx = makeImportCtx(mediaImport);
     const result = await importMediaTool().run({ source: { path: "/Users/x/Movies" }, folderId: undefined }, ctx);
     expect(result.isError).toBe(false);
-    expect(mediaImport.calls).toEqual([{ kind: "fromPath", args: ["/Users/x/Movies", undefined] }]);
+    expect(mediaImport.calls).toEqual([{ kind: "fromPath", args: ["/Users/x/Movies", undefined, undefined] }]);
     expect(textOf(result)).toMatch(/3 placeholder asset/);
     expect(textOf(result)).toMatch(/a1, a2, a3/);
+  });
+
+  test("path import passes name through to the facade (Swift: displayName = name ?? filename)", async () => {
+    const mediaImport = new FakeMediaImport();
+    mediaImport.fromPathResult = { assetIds: ["a1"] };
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run(
+      { source: { path: "/Users/x/clip.mp4" }, name: "Hero Shot" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls).toEqual([{ kind: "fromPath", args: ["/Users/x/clip.mp4", undefined, "Hero Shot"] }]);
   });
 
   test("no supported media found: rejected", async () => {

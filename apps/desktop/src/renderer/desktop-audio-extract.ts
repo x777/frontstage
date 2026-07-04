@@ -8,6 +8,8 @@ export interface ImportScanFile {
 export interface ImportScanResult {
   files: ImportScanFile[];
   dirs: string[];
+  // True when the scanned path was itself a file — import_media's `name` applies only then.
+  isFile?: boolean;
 }
 
 // One raw ffprobe reading per path — { tag, fps } — that the renderer turns into a SourceTimecode

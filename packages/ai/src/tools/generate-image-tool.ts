@@ -6,7 +6,7 @@ import { ok, errorResult } from "./executor.js";
 import { genModel, listGenModels, validateGenParams, referenceCapError } from "../generation/gen-catalog.js";
 import type { GenToolParams } from "../generation/gen-catalog.js";
 import { estimateCredits, formatCredits } from "../generation/cost-estimator.js";
-import { unknownModelError, confirmationResult } from "./generate-tools.js";
+import { unknownModelError, confirmationResult, keyMissingError } from "./generate-tools.js";
 
 const IMAGE_DURATION_SECONDS = 5; // mirrors Swift's Defaults.imageDurationSeconds
 
@@ -124,6 +124,9 @@ export function generateImageTool(): ToolSpec {
         const entry = await ctx.generateImage({ prompt: a.prompt });
         return ok(`Generated image "${entry.name}" (id ${entry.id}) and added it to the media library.`);
       } catch (err) {
+        // The legacy path's no-key throw arrives wrapped in Electron IPC noise — normalize it to
+        // the keyless-message family the other generate tools use.
+        if (/no API key/i.test(String(err))) return keyMissingError("generate images");
         return errorResult("image generation failed: " + String(err));
       }
     },

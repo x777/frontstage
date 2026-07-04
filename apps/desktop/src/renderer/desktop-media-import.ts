@@ -105,11 +105,14 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
     return { assetId: id };
   }
 
-  async function fromPath(absPath: string, folderId?: string): Promise<{ assetIds: string[] }> {
+  async function fromPath(absPath: string, folderId?: string, name?: string): Promise<{ assetIds: string[] }> {
     const dir = requireProjectDir();
     const scan = await window.desktopMedia.importScan(dir, absPath);
     if ("error" in scan) throw new Error(scan.error);
     if (scan.files.length === 0) return { assetIds: [] };
+    // Swift parity: `name` overrides the display name for a single-file path only; directory
+    // imports ignore it (their names mirror the folder structure).
+    const singleFileName = scan.isFile ? name : undefined;
 
     // Resolve once up front: an unknown/dangling folderId (e.g. deleted between the tool call and
     // this running) falls back to root instead of throwing on the very first createFolder below.
@@ -138,7 +141,7 @@ export function createDesktopMediaImport(deps: DesktopMediaImportDeps): NonNulla
       const destFolderId = folderIdByRelDir.get(dirRel) ?? rootFolderId;
 
       const id = crypto.randomUUID();
-      const entry = createImportPlaceholderEntry({ id, type, name: stemName(file.rel), ext: file.ext, folderId: destFolderId });
+      const entry = createImportPlaceholderEntry({ id, type, name: singleFileName ?? stemName(file.rel), ext: file.ext, folderId: destFolderId });
       library.addPlaceholder(entry);
       assetIds.push(id);
 
