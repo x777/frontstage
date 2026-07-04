@@ -23,8 +23,9 @@ export function qualityResolution(
   currentWidth: number,
   currentHeight: number,
 ): { width: number; height: number } {
+  // Swift Int(Double) truncates — not rounds (ProjectSettingsPresets.swift:53-59).
   if (currentWidth <= currentHeight) {
-    return { width: shortEdge, height: Math.round((shortEdge * currentHeight) / currentWidth) };
+    return { width: shortEdge, height: Math.trunc((shortEdge * currentHeight) / currentWidth) };
   }
-  return { width: Math.round((shortEdge * currentWidth) / currentHeight), height: shortEdge };
+  return { width: Math.trunc((shortEdge * currentWidth) / currentHeight), height: shortEdge };
 }
