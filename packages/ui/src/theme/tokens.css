@@ -111,8 +111,9 @@
   /* Scrim / dialog overlay */
   --color-scrim: rgba(0, 0, 0, 0.5);
 
-  /* Text on accent backgrounds */
-  --color-text-on-accent: #ffffff;
+  /* Text on accent backgrounds — the accent is a warm off-white, so text on it is the dark
+     base (Swift pairs Background.baseColor over Accent.primary, e.g. MatteSheet.swift). */
+  --color-text-on-accent: rgb(10, 10, 10);
 
   /* Component min-widths */
   --size-menu-min: 160px;
