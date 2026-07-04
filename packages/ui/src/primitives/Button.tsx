@@ -1,6 +1,11 @@
+import { useState } from "react";
 import { theme } from "../theme/theme.js";
 import { useHover } from "./use-hover.js";
 
+// The Swift CapsuleButtonStyle (UI/CapsuleButton.swift) — the app's labeled-button family.
+// default = Swift .secondary (prominent bg, secondary text); accent = .prominent (accent-primary
+// or the ai gradient, dark on-accent text); destructive is our extension on the same chrome.
+// Hover = white@faint overlay (an inset shadow fills the pill); pressed = opacity strong.
 export function Button(props: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -10,10 +15,12 @@ export function Button(props: {
   title?: string;
   testid?: string;
   type?: "button" | "submit";
+  size?: "small" | "regular";
   style?: React.CSSProperties;
 }) {
-  const { children, onClick, variant = "default", gradient, disabled, title, testid, type = "button", style } = props;
+  const { children, onClick, variant = "default", gradient, disabled, title, testid, type = "button", size = "small", style } = props;
   const { hovered, hoverProps } = useHover();
+  const [pressed, setPressed] = useState(false);
 
   const background =
     variant === "accent"
@@ -22,11 +29,10 @@ export function Button(props: {
         : theme.accent.primary
       : variant === "destructive"
         ? theme.status.error
-        : hovered
-          ? theme.bg.prominent
-          : theme.bg.raised;
+        : theme.bg.prominent;
 
-  const color = variant === "accent" ? theme.text.onAccent : theme.text.primary;
+  const color =
+    variant === "accent" ? theme.text.onAccent : variant === "destructive" ? theme.text.primary : theme.text.secondary;
 
   return (
     <button
@@ -39,16 +45,23 @@ export function Button(props: {
         onClick?.();
       }}
       {...hoverProps}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onMouseLeave={() => {
+        setPressed(false);
+        hoverProps.onMouseLeave();
+      }}
       style={{
         background,
         color,
-        border: variant === "default" ? `${theme.borderWidth.thin} solid ${theme.border.primary}` : "none",
-        borderRadius: theme.radius.sm,
-        fontSize: theme.fontSize.sm,
+        border: "none",
+        borderRadius: theme.radius.pill,
+        fontSize: size === "small" ? theme.fontSize.xs : theme.fontSize.smMd,
         fontWeight: theme.fontWeight.medium,
-        padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-        transition: `background ${theme.anim.hover} ease-out`,
-        opacity: disabled ? theme.opacity.disabled : theme.opacity.opaque,
+        padding: size === "small" ? `${theme.spacing.xs} ${theme.spacing.smMd}` : `${theme.spacing.smMd} ${theme.spacing.lgXl}`,
+        boxShadow: hovered && !disabled ? "inset 0 0 0 999px rgba(255, 255, 255, var(--opacity-faint))" : "none",
+        transition: `box-shadow ${theme.anim.hover} ease-out, opacity ${theme.anim.hover} ease-out`,
+        opacity: disabled ? theme.opacity.disabled : pressed ? theme.opacity.strong : theme.opacity.opaque,
         cursor: disabled ? "not-allowed" : "pointer",
         ...style,
       }}

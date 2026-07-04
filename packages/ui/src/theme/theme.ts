@@ -65,6 +65,7 @@ export const theme = {
     mdLg: "var(--radius-md-lg)",
     lg: "var(--radius-lg)",
     xl: "var(--radius-xl)",
+    pill: "var(--radius-pill)",
   },
   spacing: {
     xxs: "var(--spacing-xxs)",
