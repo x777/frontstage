@@ -136,6 +136,23 @@ ipcMain.handle("mcp:regenerateToken", async () => {
   return _mcpToken;
 });
 
+// ── Packaged-path resolution ─────────────────────────────────────────────────
+// electron-builder unpacks ffmpeg-static/ffprobe-static out of app.asar (spawn() can't exec a
+// binary living inside the asar archive) — their own required path still points at the asar
+// copy, so redirect it to the sibling app.asar.unpacked tree. No-op outside a packaged app.
+function unpackedAsarPath(p) {
+  if (!p || !app.isPackaged) return p;
+  return p.split(`${path.sep}app.asar${path.sep}`).join(`${path.sep}app.asar.unpacked${path.sep}`);
+}
+
+function resolveFfmpegPath() {
+  try {
+    return unpackedAsarPath(require("ffmpeg-static"));
+  } catch {
+    return null;
+  }
+}
+
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 // Forcing Vulkan/Skia destabilises the WebGPU device on Windows GPUs (device-lost → blank preview); Dawn uses D3D12/Metal there. Only Linux needs the Vulkan hint.
@@ -472,8 +489,12 @@ function createWindow() {
     saveWindowState(win.getBounds());
   });
 
-  const rendererPort = process.env.RENDERER_PORT || "5190";
-  win.loadURL(`http://localhost:${rendererPort}/editor.html`);
+  if (app.isPackaged) {
+    win.loadFile(path.join(__dirname, "../../dist/renderer/editor.html"));
+  } else {
+    const rendererPort = process.env.RENDERER_PORT || "5190";
+    win.loadURL(`http://localhost:${rendererPort}/editor.html`);
+  }
 }
 
 // ── Menu with Open Recent submenu ────────────────────────────────────────────
@@ -633,12 +654,8 @@ ipcMain.handle("spike:encode-frame", async (_event, rgba, w, h) => {
     throw new Error("invalid frame dimensions");
   }
 
-  let ffmpegPath;
-  try {
-    ffmpegPath = require("ffmpeg-static");
-  } catch (e) {
-    throw new Error("ffmpeg-static not found: " + e.message);
-  }
+  const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPath) throw new Error("ffmpeg-static not found");
 
   const outPath = path.join(os.tmpdir(), `spike-${Date.now()}.mp4`);
 
@@ -712,12 +729,8 @@ ipcMain.handle("export:start", async (_event, { width, height, fps, audio, codec
   const inTmp = outDir === tmpRoot || outDir.startsWith(tmpRoot + path.sep);
   if (!inTmp) assertAuthorized(outDir);
 
-  let ffmpegPath;
-  try {
-    ffmpegPath = require("ffmpeg-static");
-  } catch (e) {
-    throw new Error("ffmpeg-static not found: " + e.message);
-  }
+  const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPath) throw new Error("ffmpeg-static not found");
 
   const id = String(++sessionCounter);
   const videoOnlyPath = audio ? path.join(os.tmpdir(), `export-vid-${id}${spec.ext}`) : resolved;
@@ -1066,12 +1079,8 @@ ipcMain.handle("media:extractAudio", async (_e, { path: mediaPath, bytes }) => {
     return { error: "media:extractAudio requires exactly one of path or bytes" };
   }
 
-  let ffmpegPath;
-  try {
-    ffmpegPath = require("ffmpeg-static");
-  } catch (e) {
-    return { error: "ffmpeg-static not found: " + e.message };
-  }
+  const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPath) return { error: "ffmpeg-static not found" };
 
   const args = [
     "-i", mediaPath != null ? mediaPath : "pipe:0",
@@ -1114,7 +1123,7 @@ ipcMain.handle("media:extractAudio", async (_e, { path: mediaPath, bytes }) => {
 function resolveFfprobePath() {
   try {
     const mod = require("ffprobe-static");
-    return (mod && mod.path) || mod || null;
+    return unpackedAsarPath((mod && mod.path) || mod || null);
   } catch {
     return null;
   }

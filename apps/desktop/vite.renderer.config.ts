@@ -31,8 +31,11 @@ const crossOriginIsolation = {
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: "src/renderer",
+  // Packaged main loads editor.html via file://, which needs relative asset URLs — absolute "/"
+  // paths only resolve correctly against the vite dev server, so this only applies to `build`.
+  base: command === "build" ? "./" : "/",
   server: { port: 5190, headers: crossOriginIsolation },
   preview: { port: 5190, headers: crossOriginIsolation },
   plugins: [serveEngineFixtures()],
@@ -53,4 +56,4 @@ export default defineConfig({
   resolve: {
     conditions: ["import", "module", "browser", "default"],
   },
-});
+}));

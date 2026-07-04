@@ -4,7 +4,12 @@
   "private": true,
   "main": "src/main/index.cjs",
   "scripts": {
+    "dev": "node scripts/dev.cjs",
     "dev:renderer": "vite --config vite.renderer.config.ts --port 5190",
+    "build": "vite build --config vite.renderer.config.ts",
+    "dist": "pnpm run build && electron-builder",
+    "dist:win": "pnpm run build && electron-builder --win",
+    "dist:mac": "pnpm run build && electron-builder --mac",
     "e2e": "playwright test",
     "e2e:spike": "playwright test e2e/spike.spec.ts",
     "test": "vitest run",
@@ -12,25 +17,62 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "undici": "^6.27.0"
+  },
+  "devDependencies": {
     "@palmier/ai": "workspace:*",
     "@palmier/core": "workspace:*",
     "@palmier/engine": "workspace:*",
     "@palmier/ui": "workspace:*",
-    "ffmpeg-static": "^5.2.0",
-    "ffprobe-static": "^3.1.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "undici": "^6.27.0"
-  },
-  "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@types/node": "^22",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@webgpu/types": "^0.1.40",
     "electron": "^31.0.0",
+    "electron-builder": "^26.15.3",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
     "typescript": "^5.5.0",
     "vite": "^5.4.0",
     "vitest": "^2.0.0"
+  },
+  "build": {
+    "appId": "io.palmier.pro",
+    "productName": "Palmier Pro",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "asar": true,
+    "files": [
+      "src/main/**/*.cjs",
+      "src/main/**/*.mjs",
+      "src/preload/**/*.cjs",
+      "dist/renderer/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "icon": "build/icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    }
   }
 }

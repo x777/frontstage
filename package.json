@@ -23,6 +23,9 @@
     "onlyBuiltDependencies": [
       "electron",
       "ffmpeg-static"
-    ]
+    ],
+    "overrides": {
+      "@noble/hashes": "1.8.0"
+    }
   }
 }
