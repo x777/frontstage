@@ -4,7 +4,7 @@ import { EditorStore, ProjectSession, SAMPLER_VERSION } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
-import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng } from "@palmier/ui";
+import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
 import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
@@ -324,12 +324,15 @@ async function bootstrap() {
     getManifest: () => library.getManifest(),
     newId: () => crypto.randomUUID(),
     generateImage: (input) => imageGenerator.generate(input),
-    renderFrame: async (atFrame: number) => {
+    renderFrame: async (atFrame: number, opts?: { maxEdge?: number; jpegQuality?: number }) => {
       const engine = engineRef.current;
       if (!engine) throw new Error("Engine not ready");
       await engine.seek(atFrame, "exact");
       const rgba = await engine.readRGBA();
-      return { rgba, width: engine.width, height: engine.height };
+      const { width, height } = engine;
+      if (!opts) return { rgba, width, height };
+      const jpegBase64 = await encodeFrameJPEG(rgba, width, height, opts);
+      return { rgba, width, height, jpegBase64 };
     },
     generation: generationFacade,
     transcription: transcriptionFacade,

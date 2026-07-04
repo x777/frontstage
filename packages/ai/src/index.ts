@@ -1,6 +1,7 @@
 export type { ToolBlock, ToolResult, ToolContext, ToolSpec } from "./tools/types.js";
 export { ok, errorResult, asUndoStep, ToolExecutor } from "./tools/executor.js";
 export { getTimelineTool, getMediaTool, inspectMediaTool, searchMediaTool } from "./tools/read-tools.js";
+export { inspectTimelineTool } from "./tools/inspect-timeline-tool.js";
 export { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClipsTool, trimClipsTool } from "./tools/clip-tools.js";
 export { rippleDeleteRangesTool, insertClipsTool } from "./tools/ripple-tools.js";
 export { getTranscriptTool, removeWordsTool, canTranscribe, classifyRefsByCache, transcribeRefs } from "./tools/transcription-tools.js";

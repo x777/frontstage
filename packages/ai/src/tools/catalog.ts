@@ -1,14 +1,12 @@
 /**
- * buildCatalog assembles the tool specs for one consumer. "inApp" (default) is the 38 tools the
+ * buildCatalog assembles the tool specs for one consumer. "inApp" (default) is the 39 tools the
  * in-app agent and web have always had, unchanged order. "mcp" appends get_projects/open_project/
- * new_project (41) — MCP-catalog-only, desktop-only (M13B T1, #238 ADAPTED).
- *
- * DEFERRED tools (require host interfaces from later plans):
- *   - inspect_timeline    — plan 6.3 (deep render analysis)
+ * new_project (42) — MCP-catalog-only, desktop-only (M13B T1, #238 ADAPTED).
  */
 
 import type { ToolSpec } from "./types.js";
 import { getTimelineTool, getMediaTool, inspectMediaTool, searchMediaTool } from "./read-tools.js";
+import { inspectTimelineTool } from "./inspect-timeline-tool.js";
 import { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClipsTool, trimClipsTool } from "./clip-tools.js";
 import { applyLayoutTool } from "./layout-tools.js";
 import { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./property-tools.js";
@@ -33,7 +31,7 @@ import {
 import { exportProjectTool } from "./export-tools.js";
 import { getProjectsTool, openProjectTool, newProjectTool } from "./project-tools.js";
 
-// mcp = inApp's 38 + the 3 project-nav tools (Swift's mcpServer/inAppAgent split, #238 ADAPTED —
+// mcp = inApp's 39 + the 3 project-nav tools (Swift's mcpServer/inAppAgent split, #238 ADAPTED —
 // see project-tools.ts). The in-app agent and web never see the nav tools: buildCatalog() defaults
 // to "inApp", so every pre-existing call site is unaffected.
 export type CatalogKind = "inApp" | "mcp";
@@ -44,6 +42,7 @@ export function buildCatalog(kind: CatalogKind = "inApp"): ToolSpec[] {
     getTimelineTool(),
     getMediaTool(),
     inspectMediaTool(),
+    inspectTimelineTool(),
     searchMediaTool(),
     // Clip mutation tools
     addClipsTool(),

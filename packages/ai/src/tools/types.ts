@@ -18,7 +18,12 @@ export interface ToolContext {
   getManifest: () => MediaManifest;
   newId: () => string;
   generateImage?: (input: ImageGenInput) => Promise<MediaManifestEntry>;
-  renderFrame?: (atFrame: number) => Promise<{ rgba: Uint8Array; width: number; height: number; jpegBase64?: string }>;
+  // opts requests a downscaled/re-encoded jpegBase64 (inspect_timeline); omitted, the call is
+  // byte-for-byte inspect_color's original shape — no jpegBase64 key at all.
+  renderFrame?: (
+    atFrame: number,
+    opts?: { maxEdge?: number; jpegQuality?: number },
+  ) => Promise<{ rgba: Uint8Array; width: number; height: number; jpegBase64?: string }>;
   generation?: {
     hasKey(): Promise<boolean>;
     addPlaceholder(entry: MediaManifestEntry): void;

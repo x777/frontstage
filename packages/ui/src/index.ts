@@ -38,6 +38,7 @@ export type { ProbedMedia } from "./media/media-library.js";
 export { MatteSheet } from "./media/MatteSheet.js";
 export type { MatteSheetProps, MatteSheetLibrary } from "./media/MatteSheet.js";
 export { renderMattePng } from "./media/matte-render.js";
+export { encodeFrameJPEG } from "./media/frame-encode.js";
 export { measureCaptionWidthFrac } from "./text/measure-text.js";
 export type { CaptionMeasureStyle } from "./text/measure-text.js";
 export { InspectorPanel } from "./inspector/InspectorPanel.js";

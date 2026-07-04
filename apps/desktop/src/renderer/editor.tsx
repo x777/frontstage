@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@palmier/core";
 import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng } from "@palmier/ui";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@palmier/ai";
@@ -257,12 +257,15 @@ const toolContext: ToolContext = {
   getManifest: () => library.getManifest(),
   newId: () => crypto.randomUUID(),
   generateImage: (input) => imageGenerator.generate(input),
-  renderFrame: async (atFrame: number) => {
+  renderFrame: async (atFrame: number, opts?: { maxEdge?: number; jpegQuality?: number }) => {
     const engine = engineRef.current;
     if (!engine) throw new Error("Engine not ready");
     await engine.seek(atFrame, "exact");
     const rgba = await engine.readRGBA();
-    return { rgba, width: engine.width, height: engine.height };
+    const { width, height } = engine;
+    if (!opts) return { rgba, width, height };
+    const jpegBase64 = await encodeFrameJPEG(rgba, width, height, opts);
+    return { rgba, width, height, jpegBase64 };
   },
   generation: generationFacade,
   transcription: transcriptionFacade,
@@ -272,9 +275,9 @@ const toolContext: ToolContext = {
   interopExport: interopExportFacade,
   projectName: () => session.getState().name,
 };
-// In-app agent: 38 tools, never the project-nav ones (see buildCatalog's "inApp" default).
+// In-app agent: 39 tools, never the project-nav ones (see buildCatalog's "inApp" default).
 const executor = new ToolExecutor(buildCatalog(), toolContext);
-// MCP server only: 38 + get_projects/open_project/new_project (41) — projects facade added here only.
+// MCP server only: 39 + get_projects/open_project/new_project (42) — projects facade added here only.
 const mcpExecutor = new ToolExecutor(buildCatalog("mcp"), { ...toolContext, projects: projectsFacade });
 const agentSession = new AgentSession({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -294,8 +297,8 @@ const mentionItems = library.getManifest().entries.map((e) => ({
   contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
 }));
 
-// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (41 tools: the 38 + project-nav)
-// backs the MCP server; the in-app agent keeps the plain 38-tool executor above.
+// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (42 tools: the 39 + project-nav)
+// backs the MCP server; the in-app agent keeps the plain 39-tool executor above.
 window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
   try {
     let result: unknown;
