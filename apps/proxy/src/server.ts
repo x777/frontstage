@@ -392,8 +392,11 @@ async function handleFalStatus(params: URLSearchParams, falUpstream: string, fal
     return;
   }
 
+  // Status/result address owner/alias (first two segments), never the full endpoint — nested
+  // routes 405 otherwise. Kept in sync with fal-wire.ts falAppId.
+  const appId = model.split("/").slice(0, 2).join("/");
   try {
-    const statusRes = await fetch(`${falUpstream}/${model}/requests/${job}/status`, {
+    const statusRes = await fetch(`${falUpstream}/${appId}/requests/${job}/status`, {
       headers: { Authorization: `Key ${falKey}` },
     });
     const statusJson: unknown = await statusRes.json();
@@ -404,7 +407,7 @@ async function handleFalStatus(params: URLSearchParams, falUpstream: string, fal
     }
 
     if ((statusJson as { status?: unknown } | null)?.status === "COMPLETED") {
-      const resultRes = await fetch(`${falUpstream}/${model}/requests/${job}`, {
+      const resultRes = await fetch(`${falUpstream}/${appId}/requests/${job}`, {
         headers: { Authorization: `Key ${falKey}` },
       });
       const resultJson: unknown = await resultRes.json();

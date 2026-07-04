@@ -315,14 +315,15 @@ function startFakeFalUpstream(): Promise<{
         res.end(JSON.stringify({ request_id: "job-123" }));
         return;
       }
-      if (req.method === "GET" && req.url === "/fal-ai/veo3/fast/requests/job-123/status") {
+      // Status/result live at owner/alias — the proxy must truncate the nested endpoint.
+      if (req.method === "GET" && req.url === "/fal-ai/veo3/requests/job-123/status") {
         const status = statusSequence[Math.min(statusCallCount, statusSequence.length - 1)];
         statusCallCount++;
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status }));
         return;
       }
-      if (req.method === "GET" && req.url === "/fal-ai/veo3/fast/requests/job-123") {
+      if (req.method === "GET" && req.url === "/fal-ai/veo3/requests/job-123") {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ video: { url: "https://v3.fal.media/files/result.mp4" } }));
         return;

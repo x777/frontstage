@@ -7,12 +7,19 @@ export function falSubmitRequest(modelEndpoint: string, input: Record<string, un
   return { url: `${FAL_QUEUE_BASE}/${modelEndpoint}`, body: JSON.stringify(input) };
 }
 
+// Status/result address the APP — owner/alias, the first two path segments — never the full
+// endpoint (fal-js queue.ts does the same). Nested routes 405 otherwise (live-hit: seedance,
+// elevenlabs). Submit alone takes the full path.
+export function falAppId(modelEndpoint: string): string {
+  return modelEndpoint.split("/").slice(0, 2).join("/");
+}
+
 export function falStatusRequest(modelEndpoint: string, jobId: string): { url: string } {
-  return { url: `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}/status` };
+  return { url: `${FAL_QUEUE_BASE}/${falAppId(modelEndpoint)}/requests/${jobId}/status` };
 }
 
 export function falResultRequest(modelEndpoint: string, jobId: string): { url: string } {
-  return { url: `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}` };
+  return { url: `${FAL_QUEUE_BASE}/${falAppId(modelEndpoint)}/requests/${jobId}` };
 }
 
 export function parseFalSubmit(json: unknown): { jobId: string } | { error: string } {

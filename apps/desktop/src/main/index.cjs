@@ -969,8 +969,11 @@ ipcMain.on("ai:streamChat", async (event, { id, body }) => {
 
 const FAL_QUEUE_BASE = "https://queue.fal.run";
 const falSubmitUrl = (modelEndpoint) => `${FAL_QUEUE_BASE}/${modelEndpoint}`;
-const falStatusUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}/status`;
-const falResultUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${modelEndpoint}/requests/${jobId}`;
+// Status/result address owner/alias (first two segments), never the full endpoint — nested
+// routes 405 otherwise. Kept in sync with fal-wire.ts falAppId.
+const falAppId = (modelEndpoint) => modelEndpoint.split("/").slice(0, 2).join("/");
+const falStatusUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${falAppId(modelEndpoint)}/requests/${jobId}/status`;
+const falResultUrl = (modelEndpoint, jobId) => `${FAL_QUEUE_BASE}/${falAppId(modelEndpoint)}/requests/${jobId}`;
 
 // Storage upload — REST host, not the queue host (verified against fal-js; see FAL_REST_BASE
 // in fal-wire.ts for the full contract note).

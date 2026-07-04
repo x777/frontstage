@@ -33,17 +33,35 @@ describe("falSubmitRequest", () => {
   });
 });
 
+// Queue status/result address the APP — owner/alias, the FIRST TWO path segments — never the
+// full endpoint (fal-js queue.ts does the same). The full path 405s on nested routes; live-hit
+// by seedance (fal-ai/bytedance/seedance/v1/pro/text-to-video) and elevenlabs during the smoke.
 describe("falStatusRequest", () => {
-  test("builds the status URL with the request id", () => {
+  test("truncates a nested endpoint to owner/alias", () => {
     const req = falStatusRequest("fal-ai/veo3/fast", "abc123");
-    expect(req.url).toBe("https://queue.fal.run/fal-ai/veo3/fast/requests/abc123/status");
+    expect(req.url).toBe("https://queue.fal.run/fal-ai/veo3/requests/abc123/status");
+  });
+
+  test("deeply nested endpoint (seedance) also truncates", () => {
+    const req = falStatusRequest("fal-ai/bytedance/seedance/v1/pro/text-to-video", "j1");
+    expect(req.url).toBe("https://queue.fal.run/fal-ai/bytedance/requests/j1/status");
+  });
+
+  test("two-segment endpoint is unchanged", () => {
+    const req = falStatusRequest("fal-ai/whisper", "j2");
+    expect(req.url).toBe("https://queue.fal.run/fal-ai/whisper/requests/j2/status");
   });
 });
 
 describe("falResultRequest", () => {
-  test("builds the result URL with the request id", () => {
+  test("truncates a nested endpoint to owner/alias", () => {
     const req = falResultRequest("fal-ai/veo3/fast", "abc123");
-    expect(req.url).toBe("https://queue.fal.run/fal-ai/veo3/fast/requests/abc123");
+    expect(req.url).toBe("https://queue.fal.run/fal-ai/veo3/requests/abc123");
+  });
+
+  test("submit keeps the FULL endpoint path (only status/result truncate)", () => {
+    const req = falSubmitRequest("fal-ai/bytedance/seedance/v1/pro/text-to-video", { prompt: "x" });
+    expect(req.url).toBe("https://queue.fal.run/fal-ai/bytedance/seedance/v1/pro/text-to-video");
   });
 });
 
