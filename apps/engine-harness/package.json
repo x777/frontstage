@@ -7,6 +7,8 @@
     "dev": "vite",
     "preview": "vite preview",
     "e2e": "playwright test",
+    "test:headed": "playwright test",
+    "test": "echo \"engine-harness: GPU specs need a local GPU (headed Chrome) — skipped in turbo; run 'pnpm -F @palmier/engine-harness test:headed' manually\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
