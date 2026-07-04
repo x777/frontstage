@@ -65,19 +65,35 @@ describe("formatSrt", () => {
   });
 
   test("hour rollover (3661.5s = 01:01:01,500)", () => {
-    const cues: SubtitleCue[] = [{ startSec: 3661.5, endSec: 3661.5, text: "x" }];
+    // endSec nudged by 0.1ms (sub-rounding-granularity) so the cue has a positive duration without
+    // changing either formatted timestamp — this test is about formatTimestamp's rollover math.
+    const cues: SubtitleCue[] = [{ startSec: 3661.5, endSec: 3661.5001, text: "x" }];
     expect(formatSrt(cues)).toBe("1\r\n01:01:01,500 --> 01:01:01,500\r\nx\r\n");
   });
 
   test("ms rounding at a 29.97fps frame boundary", () => {
     // frame 90 at 30000/1001 fps -> 90 * 1001/30000 = 3.003 s exactly -> 00:00:03,003
     const startSec = 90 * (1001 / 30000);
-    const cues: SubtitleCue[] = [{ startSec, endSec: startSec, text: "x" }];
+    const cues: SubtitleCue[] = [{ startSec, endSec: startSec + 0.0001, text: "x" }];
     expect(formatSrt(cues)).toBe("1\r\n00:00:03,003 --> 00:00:03,003\r\nx\r\n");
   });
 
   test("empty cue list yields an empty string", () => {
     expect(formatSrt([])).toBe("");
+  });
+
+  test("F4: zero/negative-duration cues are dropped, not emitted", () => {
+    const cues: SubtitleCue[] = [
+      { startSec: 0, endSec: 1, text: "Kept" },
+      { startSec: 1, endSec: 1, text: "Zero" },
+      { startSec: 2, endSec: 1.5, text: "Negative" },
+    ];
+    expect(formatSrt(cues)).toBe("1\r\n00:00:00,000 --> 00:00:01,000\r\nKept\r\n");
+  });
+
+  test("F5: a bare LF inside cue text becomes CRLF (block discipline)", () => {
+    const cues: SubtitleCue[] = [{ startSec: 0, endSec: 1, text: "Line one\nLine two" }];
+    expect(formatSrt(cues)).toBe("1\r\n00:00:00,000 --> 00:00:01,000\r\nLine one\r\nLine two\r\n");
   });
 });
 
@@ -98,12 +114,27 @@ describe("formatVtt", () => {
   });
 
   test("hour rollover (3661.5s = 01:01:01.500)", () => {
-    const cues: SubtitleCue[] = [{ startSec: 3661.5, endSec: 3661.5, text: "x" }];
+    // See the formatSrt equivalent above for why endSec is nudged by 0.1ms.
+    const cues: SubtitleCue[] = [{ startSec: 3661.5, endSec: 3661.5001, text: "x" }];
     expect(formatVtt(cues)).toBe("WEBVTT\n\n01:01:01.500 --> 01:01:01.500\nx\n");
   });
 
   test("no cues yields just the header", () => {
     expect(formatVtt([])).toBe("WEBVTT\n\n");
+  });
+
+  test("F4: zero/negative-duration cues are dropped, not emitted", () => {
+    const cues: SubtitleCue[] = [
+      { startSec: 0, endSec: 1, text: "Kept" },
+      { startSec: 1, endSec: 1, text: "Zero" },
+      { startSec: 2, endSec: 1.5, text: "Negative" },
+    ];
+    expect(formatVtt(cues)).toBe("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nKept\n");
+  });
+
+  test("F5: VTT keeps bare LF inside cue text as-is (no CRLF conversion)", () => {
+    const cues: SubtitleCue[] = [{ startSec: 0, endSec: 1, text: "Line one\nLine two" }];
+    expect(formatVtt(cues)).toBe("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nLine one\nLine two\n");
   });
 });
 
@@ -186,5 +217,21 @@ describe("cuesFromCaptionClips", () => {
       tracks: [makeTrack("t1", [makeClip({ mediaType: "video", sourceClipType: "video" })])],
     };
     expect(cuesFromCaptionClips(timeline, 30)).toEqual([]);
+  });
+
+  test("F5: clips with empty or whitespace-only textContent are skipped, not emitted as blank cues", () => {
+    const timeline: Timeline = {
+      ...defaultTimeline(),
+      fps: 30,
+      tracks: [
+        makeTrack("t1", [
+          makeClip({ id: "c1", captionGroupId: "g1", textContent: "Caption A", startFrame: 0, durationFrames: 30 }),
+          makeClip({ id: "c2", captionGroupId: "g1", textContent: "", startFrame: 30, durationFrames: 30 }),
+          makeClip({ id: "c3", captionGroupId: "g1", textContent: "   ", startFrame: 60, durationFrames: 30 }),
+          makeClip({ id: "c4", captionGroupId: "g1", startFrame: 90, durationFrames: 30 }), // textContent absent
+        ]),
+      ],
+    };
+    expect(cuesFromCaptionClips(timeline, 30)).toEqual([{ startSec: 0, endSec: 1, text: "Caption A" }]);
   });
 });

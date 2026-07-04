@@ -12,7 +12,7 @@ import {
 } from "@palmier/core";
 import type { ToolContext, ToolResult, ToolSpec } from "./types.js";
 import { asUndoStep, errorResult, ok } from "./executor.js";
-import { keyMissingError } from "./generate-tools.js";
+import { LOCAL_MODEL_UNAVAILABLE_MESSAGE } from "../transcription/transcription-service.js";
 
 const TRANSCRIPT_WORD_LIMIT = 10_000;
 
@@ -119,7 +119,9 @@ async function resolveTimelineWords(
     // M14A: a keyless call still proceeds when the local whisper fallback is ready (no fal call,
     // no credits) — only error when NEITHER path can transcribe.
     const keyed = await facade.hasKey().catch(() => false);
-    if (!keyed && !(facade.localReady?.() ?? false)) return { ok: false, result: keyMissingError("transcribe") };
+    if (!keyed && !(facade.localReady?.() ?? false)) {
+      return { ok: false, result: errorResult(LOCAL_MODEL_UNAVAILABLE_MESSAGE) };
+    }
     const fetched = await transcribeRefs(facade, uncachedRefs, a.language);
     for (const [ref, result] of fetched.resultByRef) resultByRef.set(ref, result);
     skipped = fetched.skipped;

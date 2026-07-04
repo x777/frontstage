@@ -36,7 +36,9 @@ export interface TranscribeOptions {
 
 const WHISPER_ENDPOINT = "fal-ai/whisper";
 
-const LOCAL_MODEL_UNAVAILABLE_MESSAGE =
+// Exported so the tools' pre-gates (transcription-tools.ts, caption-tools.ts) surface the exact
+// same copy the service itself throws on a keyless+not-ready race — one message, one place.
+export const LOCAL_MODEL_UNAVAILABLE_MESSAGE =
   "No fal.ai API key configured. Add one in Settings to transcribe, or download the local transcription model.";
 
 function toMessage(err: unknown): string {
@@ -156,8 +158,9 @@ export class TranscriptionService {
 
     try {
       // forceLocal short-circuits before hasKey() is ever evaluated — the background path must
-      // never touch fal, not even to check for a key.
-      const useFal = !forceLocal && (await this.gateway.hasKey());
+      // never touch fal, not even to check for a key. A rejecting hasKey (M10 rule) means "no
+      // key" — falls to local/keyless, not a hard failure of an otherwise-keyed run.
+      const useFal = !forceLocal && (await this.gateway.hasKey().catch(() => false));
       const { parsed, durationSeconds, provider, model } = useFal
         ? await this.runFal(mediaRef, language)
         : await this.runLocal(mediaRef, language);

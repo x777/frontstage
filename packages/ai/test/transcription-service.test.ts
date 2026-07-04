@@ -205,6 +205,37 @@ describe("TranscriptionService.transcribe: the provider seam", () => {
     await expect(service.transcribe("m1")).rejects.toThrow(/download the local transcription model/);
   });
 
+  // F2: run() awaits gateway.hasKey() directly now (pre-M14A never called it). Per the M10 rule, a
+  // rejecting hasKey means "no key" (not a hard failure) — .catch(() => false) at the await site.
+  test("F2: hasKey() rejects + local ready -> falls through to local, not a thrown rejection", async () => {
+    const entry = makeEntry();
+    const { host, writes } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({ hasKey: async () => { throw new Error("network down"); } });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const { local, transcribe } = await makeReadyLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    const result = await service.transcribe("m1");
+
+    expect(result.text).toBe("local hi");
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(calls.submit).toBe(0);
+    const record = JSON.parse(new TextDecoder().decode(writes[0]!.bytes));
+    expect(record.provider).toBe("local");
+  });
+
+  test("F2: hasKey() rejects + no local ready -> the keyless error, not the raw rejection", async () => {
+    const entry = makeEntry();
+    const { host } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({ hasKey: async () => { throw new Error("network down"); } });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const local = makeIdleLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    await expect(service.transcribe("m1")).rejects.toThrow(/download the local transcription model/);
+    expect(calls.submit).toBe(0);
+  });
+
   test("forceLocal ignores the key: never calls gateway.hasKey/upload/submit, even though keyed", async () => {
     const entry = makeEntry();
     const { host, writes } = makeHost([entry]);
@@ -252,6 +283,33 @@ describe("TranscriptionService.transcribe: the provider seam", () => {
     expect(a).toEqual(b);
     expect(transcribe).toHaveBeenCalledTimes(1);
     expect(calls.submit).toBe(0);
+  });
+
+  // F1: pins the OTHER dedupe-join interleaving — a keyed fal run already in flight, joined by a
+  // forceLocal (background) call for the same (ref, language). forceLocal isn't part of the dedupe
+  // key, so the joiner never runs its own provider decision; it just awaits the first caller's
+  // promise. No second gateway invocation is caused by the join, and the cache is tagged by the
+  // FIRST caller's provider (fal here) — never silently downgraded by the background joiner.
+  test("in-flight KEYED fal run joined by a forceLocal call: one gateway invocation total, both get the fal result, cache tagged fal", async () => {
+    const entry = makeEntry();
+    const { host, writes } = makeHost([entry]);
+    const { gateway, calls } = makeGateway({
+      hasKey: async () => true,
+      statuses: [{ status: "succeeded", resultJson: { text: "fal hi", chunks: [{ text: "fal hi", timestamp: [0, 1] }], inferred_languages: [] } }],
+    });
+    const extract: AudioExtractor = async () => ({ wav: SIXTEEN_KHZ_WAV, durationSeconds: 3 });
+    const { local, transcribe } = await makeReadyLocal();
+    const service = new TranscriptionService(gateway, host, extract, { ...NO_DELAY, local });
+
+    const [a, b] = await Promise.all([service.transcribe("m1"), service.transcribe("m1", { forceLocal: true })]);
+
+    expect(a.text).toBe("fal hi");
+    expect(b).toEqual(a);
+    expect(calls.submit).toBe(1);
+    expect(calls.upload).toBe(1);
+    expect(transcribe).not.toHaveBeenCalled();
+    const record = JSON.parse(new TextDecoder().decode(writes[0]!.bytes));
+    expect(record.provider).toBe("fal");
   });
 });
 

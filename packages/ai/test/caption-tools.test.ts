@@ -157,7 +157,7 @@ describe("add_captions tool", () => {
     expect(typeof out.captionGroupId).toBe("string");
   });
 
-  test("keyless + an uncached ref errors, naming Settings", async () => {
+  test("keyless + no local (F3): errors with the extended copy naming both Settings and the local model", async () => {
     const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
     const manifest = manifestOf(mediaEntry("m1", { hasAudio: true }));
     const { facade } = makeFacade({ hasKey: false });
@@ -165,6 +165,17 @@ describe("add_captions tool", () => {
     const result = await addCaptionsTool().run({}, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("Settings");
+    expect(textOf(result)).toContain("download the local transcription model");
+  });
+
+  test("keyless + local present but not ready (F3): still the extended copy, not silently different", async () => {
+    const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
+    const manifest = manifestOf(mediaEntry("m1", { hasAudio: true }));
+    const { facade } = makeFacade({ hasKey: false, localReady: false });
+    const ctx = makeCtx(tl, manifest, facade);
+    const result = await addCaptionsTool().run({}, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("download the local transcription model");
   });
 
   test("keyless + local-ready: transcribes via the local path, no Settings error and no confirm gate at a huge estimate", async () => {

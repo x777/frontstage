@@ -23,18 +23,31 @@ function formatTimestamp(seconds: number, msSeparator: "," | "."): string {
   return `${pad(h, 2)}:${pad(m, 2)}:${pad(s, 2)}${msSeparator}${pad(ms, 3)}`;
 }
 
+// Zero/negative-duration cues (a glitchy transcript segment, or a degenerate span) are dropped
+// rather than clamped — VTT requires end > start, and a dropped cue is simpler to reason about
+// than a synthetic 1ms one.
+function positiveDuration(cue: SubtitleCue): boolean {
+  return cue.endSec > cue.startSec;
+}
+
+// SRT is a CRLF-discipline format throughout; a bare LF surviving inside multi-line cue text
+// (e.g. from a user-edited caption clip) would otherwise break that discipline mid-block.
+function toCrlf(text: string): string {
+  return text.replace(/\r\n|\r|\n/g, "\r\n");
+}
+
 /** 1-based index blocks, "," ms separator, CRLF endings, blank line between blocks. */
 export function formatSrt(cues: SubtitleCue[]): string {
-  const blocks = cues.map((cue, i) => {
+  const blocks = cues.filter(positiveDuration).map((cue, i) => {
     const range = `${formatTimestamp(cue.startSec, ",")} --> ${formatTimestamp(cue.endSec, ",")}`;
-    return `${i + 1}\r\n${range}\r\n${cue.text}\r\n`;
+    return `${i + 1}\r\n${range}\r\n${toCrlf(cue.text)}\r\n`;
   });
   return blocks.join("\r\n");
 }
 
 /** "WEBVTT" header, "." ms separator, LF endings, blank line between blocks. */
 export function formatVtt(cues: SubtitleCue[]): string {
-  const blocks = cues.map((cue) => {
+  const blocks = cues.filter(positiveDuration).map((cue) => {
     const range = `${formatTimestamp(cue.startSec, ".")} --> ${formatTimestamp(cue.endSec, ".")}`;
     return `${range}\n${cue.text}\n`;
   });
@@ -61,9 +74,14 @@ export function cuesFromCaptionClips(timeline: Timeline, fps: number): SubtitleC
     }
   }
   clips.sort((a, b) => a.startFrame - b.startFrame);
-  return clips.map((clip) => ({
-    startSec: clip.startFrame / fps,
-    endSec: (clip.startFrame + clip.durationFrames) / fps,
-    text: clip.textContent ?? "",
-  }));
+
+  const cues: SubtitleCue[] = [];
+  for (const clip of clips) {
+    // Mirrors cuesFromTranscript: an empty/whitespace-only caption clip yields no cue at all,
+    // rather than an empty text line inside an otherwise-valid SRT/VTT block.
+    const text = clip.textContent?.trim();
+    if (!text) continue;
+    cues.push({ startSec: clip.startFrame / fps, endSec: (clip.startFrame + clip.durationFrames) / fps, text });
+  }
+  return cues;
 }

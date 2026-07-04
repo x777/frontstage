@@ -17,8 +17,9 @@ import {
 } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
-import { keyMissingError, confirmationResult } from "./generate-tools.js";
+import { confirmationResult } from "./generate-tools.js";
 import { canTranscribe, classifyRefsByCache, transcribeRefs } from "./transcription-tools.js";
+import { LOCAL_MODEL_UNAVAILABLE_MESSAGE } from "../transcription/transcription-service.js";
 
 const TEXT_CASES = ["auto", "upper", "lower"] as const;
 type TextCase = (typeof TEXT_CASES)[number];
@@ -114,7 +115,7 @@ export function addCaptionsTool(): ToolSpec {
         // no credits) — only error when NEITHER path can transcribe.
         const keyed = await facade.hasKey().catch(() => false);
         const localReady = facade.localReady?.() ?? false;
-        if (!keyed && !localReady) return keyMissingError("generate captions");
+        if (!keyed && !localReady) return errorResult(LOCAL_MODEL_UNAVAILABLE_MESSAGE);
 
         // Cost gate (M10C pattern): only the fal path spends credits — local transcription is
         // always free, so a keyless+local call skips the confirm-threshold entirely.

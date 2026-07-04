@@ -163,7 +163,7 @@ describe("get_transcript tool", () => {
     expect(out.clips[0].words[0][1]).toBe("hi");
   });
 
-  test("keyless + an uncached ref errors, naming Settings", async () => {
+  test("keyless + no local (F3): errors with the extended copy naming both Settings and the local model", async () => {
     const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
     const manifest = manifestOf(mediaEntry("m1", { hasAudio: true }));
     const { facade } = makeFacade({ hasKey: false });
@@ -171,6 +171,17 @@ describe("get_transcript tool", () => {
     const result = await getTranscriptTool().run({}, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("Settings");
+    expect(textOf(result)).toContain("download the local transcription model");
+  });
+
+  test("keyless + local present but not ready (F3): still the extended copy, not silently different", async () => {
+    const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
+    const manifest = manifestOf(mediaEntry("m1", { hasAudio: true }));
+    const { facade } = makeFacade({ hasKey: false, localReady: false });
+    const ctx = makeCtx(tl, manifest, facade);
+    const result = await getTranscriptTool().run({}, ctx);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("download the local transcription model");
   });
 
   test("keyless + local-ready: transcribes without the key gate", async () => {
