@@ -325,8 +325,9 @@ const mentionItems = library.getManifest().entries.map((e) => ({
   contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
 }));
 
-// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (42 tools: the 39 + project-nav)
-// backs the MCP server; the in-app agent keeps the plain 39-tool executor above.
+// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (43 tools: the 40 shared + the 3
+// project-nav) backs the MCP server; the in-app agent keeps the 41-tool executor above (the 40
+// shared + read_skill) — see catalog.ts's buildCatalog for the authoritative counts.
 window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
   try {
     let result: unknown;

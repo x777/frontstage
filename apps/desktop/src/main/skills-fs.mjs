@@ -64,6 +64,9 @@ export function writeSkill(skillsRoot, id, text) {
   fs.writeFileSync(path.join(dir, SKILL_MD), text, "utf8");
 }
 
+// fs.rmSync has no "dereference" option: rm on a path that is itself a symlink always unlinks the
+// link, never recurses through to whatever it points at (verified against Node's fs.rm semantics,
+// matching Foundation's removeItem). No live symlink test here — see exportSkillToAgent below.
 export function removeSkill(skillsRoot, id) {
   fs.rmSync(skillDirPath(skillsRoot, id), { recursive: true, force: true });
 }
@@ -107,6 +110,13 @@ export function exportSkillToAgent(skillsRoot, homeDir, id, agent) {
   const dest = exportDestDir(homeDir, agent, id);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.rmSync(dest, { recursive: true, force: true }); // overwrite any prior copy, per Swift
-  fs.cpSync(source, dest, { recursive: true });
+  // dereference:false is already Node's default; pinned explicitly so a symlinked `source` (an
+  // attacker-planted <id> folder) is re-linked, never dereferenced-and-recursed-into to copy a
+  // symlink target's contents — matches Foundation's copyItem. No live symlink regression test:
+  // creating a real Windows symlink here needs elevated privilege this sandbox doesn't have (a
+  // junction can be created without it, but cp's internal re-link step still needs the privilege
+  // to recreate it at `dest`, so the live path can't be exercised end-to-end). Pinned instead via
+  // a mock asserting this exact options object (skills-fs.test.ts).
+  fs.cpSync(source, dest, { recursive: true, dereference: false });
   return dest;
 }

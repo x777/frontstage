@@ -1,6 +1,8 @@
 // Pure SKILL.md model + hand-rolled frontmatter parser — ported verbatim from Swift's
 // SkillFrontmatter.parse / SkillStore.parseSkill (Agent/Skills/{Skill,SkillStore}.swift). No YAML
 // dependency: only `name`/`description` are recognized; either missing rejects the whole file.
+// Deliberate deviation from "verbatim": JS's .trim() strips \r, so CRLF (Windows-authored) files
+// parse correctly here, unlike Swift's CharacterSet.whitespaces — a cross-platform improvement.
 
 export interface Skill {
   id: string;

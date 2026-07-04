@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "vitest";
+import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -223,5 +223,47 @@ describe("exportSkillToAgent", () => {
 
   test("rejects a skill that doesn't exist", () => {
     expect(() => exportSkillToAgent(root, home, "nonexistent", "claude")).toThrow(/skill not found/);
+  });
+
+  test("copies with dereference:false explicitly pinned (non-dereferencing cp — see skills-fs.mjs comment)", () => {
+    writeSkill(root, "my-skill", "content");
+    const cpSpy = vi.spyOn(fs, "cpSync");
+    exportSkillToAgent(root, home, "my-skill", "claude");
+    expect(cpSpy).toHaveBeenCalledWith(
+      path.join(root, "my-skill"),
+      exportDestDir(home, "claude", "my-skill"),
+      { recursive: true, dereference: false },
+    );
+    cpSpy.mockRestore();
+  });
+});
+
+// M15 review finding (Medium): no regression coverage existed for a symlinked <id> skill folder.
+// Real symlink creation needs elevated privilege on this Windows sandbox for a PLAIN symlink, but
+// an NTFS junction needs none and is enough to prove the same thing: a directory-type reparse
+// point that fs.rmSync (no recursion through it) must not dereference. exportSkillToAgent's cp
+// step can't be exercised live the same way (see skills-fs.mjs comment) — that side is pinned
+// above via a mock asserting the exact options object instead.
+describe("removeSkill — symlinked <id> folder (non-dereferencing rm)", () => {
+  test("unlinks the symlinked folder itself; the real target directory is untouched", (ctx) => {
+    const targetDir = fs.mkdtempSync(path.join(os.tmpdir(), "palmier-symlink-target-"));
+    fs.writeFileSync(path.join(targetDir, "marker.txt"), "must-survive");
+    const linkPath = path.join(root, "linked-skill");
+    try {
+      fs.symlinkSync(targetDir, linkPath, "junction");
+    } catch {
+      // This environment can't create even a junction/symlink (e.g. a locked-down container) —
+      // skip rather than fail; the safety property is still pinned by the mock-level test above.
+      ctx.skip();
+      return;
+    }
+
+    expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
+    removeSkill(root, "linked-skill");
+
+    expect(fs.existsSync(linkPath)).toBe(false);
+    expect(fs.existsSync(targetDir)).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, "marker.txt"))).toBe(true);
+    fs.rmSync(targetDir, { recursive: true, force: true });
   });
 });

@@ -73,6 +73,20 @@ describe("parseSkillFile — the frontmatter matrix", () => {
     expect(result?.body).toBe("first line\n\n  indented middle line\n\nlast line");
   });
 
+  test("CRLF (Windows-authored) frontmatter parses identically to LF for name/description — deliberate Windows-tolerance deviation from Swift (see file header comment)", () => {
+    const lf = "---\nname: My Skill\ndescription: Does a thing.\n---\n\nBody line one.\nBody line two.\n";
+    const crlf = lf.replace(/\n/g, "\r\n");
+    const lfResult = parseSkillFile("crlf-lf", lf);
+    const crlfResult = parseSkillFile("crlf-crlf", crlf);
+    expect(crlfResult?.skill.name).toBe("My Skill");
+    expect(crlfResult?.skill.description).toBe("Does a thing.");
+    expect(crlfResult?.skill.name).toBe(lfResult?.skill.name);
+    expect(crlfResult?.skill.description).toBe(lfResult?.skill.description);
+    // Cosmetic: the raw CRLF body retains embedded \r before each internal \n (only the outer
+    // edges are trimmed) — stripping it matches the LF body exactly.
+    expect(crlfResult?.body.replace(/\r/g, "")).toBe(lfResult?.body);
+  });
+
   test("NEW_SKILL_TEMPLATE itself parses successfully and round-trips", () => {
     const result = parseSkillFile("new-skill", NEW_SKILL_TEMPLATE);
     expect(result).toEqual({

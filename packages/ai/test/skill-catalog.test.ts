@@ -74,6 +74,43 @@ describe("SkillCatalog — refresh", () => {
   });
 });
 
+describe("SkillCatalog — shape validation (JSONDecoder parity: reject the whole payload, don't drop-and-continue)", () => {
+  test("malformed top-level (an object, not an array) -> refresh() rejects, cache untouched", async () => {
+    const deps = makeDeps();
+    deps.fetchText.mockImplementation(async () => JSON.stringify({ oops: "not an array" }));
+    const catalog = new SkillCatalog(deps);
+    await expect(catalog.refresh()).rejects.toThrow();
+    expect(deps.cacheWrite).not.toHaveBeenCalled();
+  });
+
+  test("an entry with a non-string field -> refresh() rejects", async () => {
+    const deps = makeDeps();
+    deps.fetchText.mockImplementation(async () =>
+      JSON.stringify([{ id: "foo", name: "Foo", description: "does foo", sha: 12345, path: "skills/foo/SKILL.md" }]),
+    );
+    const catalog = new SkillCatalog(deps);
+    await expect(catalog.refresh()).rejects.toThrow();
+  });
+
+  test("well-formed entries -> refresh() still succeeds (happy path unaffected by the new guard)", async () => {
+    const deps = makeDeps();
+    const catalog = new SkillCatalog(deps);
+    await expect(catalog.refresh()).resolves.toEqual(ENTRIES);
+  });
+
+  test("loadCached() swallows a shape-invalid cache the same way it swallows invalid JSON", async () => {
+    const deps = makeDeps({ cached: JSON.stringify({ not: "an array" }) });
+    const catalog = new SkillCatalog(deps);
+    await expect(catalog.loadCached()).resolves.toEqual([]);
+  });
+
+  test("loadCached() swallows an array whose entries are missing a field", async () => {
+    const deps = makeDeps({ cached: JSON.stringify([{ id: "foo", name: "Foo" }]) });
+    const catalog = new SkillCatalog(deps);
+    await expect(catalog.loadCached()).resolves.toEqual([]);
+  });
+});
+
 describe("SkillCatalog — skillText", () => {
   test("fetches <baseUrl>/<entry.path> and returns the fetched text", async () => {
     const deps = makeDeps();

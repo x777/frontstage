@@ -55,6 +55,7 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
 
   const [entries, setEntries] = useState<SkillCatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [editing, setEditing] = useState(false);
@@ -158,11 +159,14 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
 
   async function handleInstall(entry: SkillCatalogEntry) {
     setInstalling((prev) => new Set(prev).add(entry.id));
+    setInstallError(null);
     try {
       const bodyText = await catalog.skillText(entry);
       await store.install(entry, bodyText);
       bump();
       await switchSelection(entry.id);
+    } catch (e) {
+      setInstallError(e instanceof Error ? e.message : String(e));
     } finally {
       setInstalling((prev) => {
         const next = new Set(prev);
@@ -410,6 +414,11 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
             {catalogError && entries.length === 0 && (
               <div data-testid="skills-catalog-error" style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted, padding: theme.spacing.sm }}>
                 Catalog: {catalogError}
+              </div>
+            )}
+            {installError && (
+              <div data-testid="skills-install-error" style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted, padding: theme.spacing.sm }}>
+                Install failed: {installError}
               </div>
             )}
           </div>

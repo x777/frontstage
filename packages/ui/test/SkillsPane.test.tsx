@@ -97,6 +97,83 @@ test("install flow: Install button -> catalog.skillText -> store.install -> row 
   expect(store.installedSha("community-skill")).toBe("sha1sha1sha1");
 });
 
+test("install failure (catalog.skillText rejects): clears the spinner and shows an inline error, no white-screen", async () => {
+  const storage = new FakeStorage();
+  const store = new SkillStore(storage);
+  const entry: SkillCatalogEntry = {
+    id: "broken-skill",
+    name: "Broken Skill",
+    description: "will fail to fetch",
+    sha: "shabroken1234",
+    path: "skills/broken-skill/SKILL.md",
+  };
+  const catalog = new SkillCatalog({
+    fetchText: async (url: string) => {
+      if (url.endsWith("catalog.json")) return JSON.stringify([entry]);
+      throw new Error("network down");
+    },
+    cacheRead: async () => null,
+    cacheWrite: async () => {},
+  });
+
+  render(<SkillsPane store={store} catalog={catalog} />);
+  await screen.findByTestId("skills-available-broken-skill");
+  fireEvent.click(screen.getByTestId("skills-install-broken-skill"));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("skills-install-error").textContent).toContain("network down");
+  });
+  expect(screen.queryByTestId("skills-spinner")).toBeNull();
+  expect(screen.getByTestId("skills-install-broken-skill")).toBeTruthy(); // Install button back, not stuck
+  expect(screen.getByTestId("skills-pane")).toBeTruthy(); // still rendered
+});
+
+test("install failure (store.install rejects on bad frontmatter): shows an inline error, no white-screen", async () => {
+  const storage = new FakeStorage();
+  const store = new SkillStore(storage);
+  const entry: SkillCatalogEntry = {
+    id: "malformed-skill",
+    name: "Malformed Skill",
+    description: "missing frontmatter fields",
+    sha: "shamalformed1",
+    path: "skills/malformed-skill/SKILL.md",
+  };
+  const catalog = new SkillCatalog({
+    fetchText: async (url: string) =>
+      url.endsWith("catalog.json") ? JSON.stringify([entry]) : "no frontmatter at all here",
+    cacheRead: async () => null,
+    cacheWrite: async () => {},
+  });
+
+  render(<SkillsPane store={store} catalog={catalog} />);
+  await screen.findByTestId("skills-available-malformed-skill");
+  fireEvent.click(screen.getByTestId("skills-install-malformed-skill"));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("skills-install-error")).toBeTruthy();
+  });
+  expect(screen.queryByTestId("skills-spinner")).toBeNull();
+  expect(screen.getByTestId("skills-pane")).toBeTruthy();
+});
+
+test("catalog shape validation: a malformed-but-valid-JSON catalog response surfaces via catalogError, not a crash", async () => {
+  const storage = new FakeStorage();
+  const store = new SkillStore(storage);
+  const catalog = new SkillCatalog({
+    fetchText: async (url: string) =>
+      url.endsWith("catalog.json") ? JSON.stringify({ not: "an array of entries" }) : "",
+    cacheRead: async () => null,
+    cacheWrite: async () => {},
+  });
+
+  render(<SkillsPane store={store} catalog={catalog} />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("skills-catalog-error")).toBeTruthy();
+  });
+  expect(screen.getByTestId("skills-pane")).toBeTruthy(); // no white-screen
+});
+
 test("update badge shows when the catalog sha diverges from the ledger; Update re-installs at the new sha", async () => {
   const storage = new FakeStorage();
   const oldBody = skillText("Comm Skill", "d", "old body");
