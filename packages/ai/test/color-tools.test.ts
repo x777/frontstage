@@ -235,6 +235,49 @@ describe("apply_color", () => {
     expect(result.isError).toBe(true);
     expect(result.blocks[0]!.kind === "text" ? (result.blocks[0] as { text: string }).text : "").toContain("not available on web");
   });
+
+  // Idempotency (M14C final-review Medium #2): a path already under luts/ is already the stored,
+  // project-relative path — re-passing it (re-apply/edit-intensity) must reference it as-is, never
+  // re-read/re-store it (which ENOENTs against a relative path on desktop, or would mint a dup).
+  test("lut.path: re-applying an already-stored luts/ path is idempotent — no read/store call, path unchanged", async () => {
+    const store = new EditorStore(makeTimeline());
+    const readLocalFile = vi.fn(async () => new TextEncoder().encode(CUBE_TEXT));
+    const storeLut = vi.fn(async (filename: string) => `luts/${filename}`);
+    const ctx = makeLutCtx(store, { readLocalFile, store_: storeLut });
+
+    const result = await applyColorTool().run(
+      { clipIds: ["c1"], lut: { path: "luts/Rec709.cube", strength: 0.9 } },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(readLocalFile).not.toHaveBeenCalled();
+    expect(storeLut).not.toHaveBeenCalled();
+
+    const tl = store.getSnapshot().timeline;
+    const loc = findClip(tl, "c1")!;
+    const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+    const lutEffect = clip.effects?.find((e) => e.type === "color.lut");
+    expect(lutEffect?.params["path"]?.string).toBe("luts/Rec709.cube");
+    expect(lutEffect?.params["intensity"]?.value).toBeCloseTo(0.9);
+  });
+
+  test("lut.path: editing intensity on an already-stored luts/ path works with no ctx.lut facade at all", async () => {
+    // Editing just the intensity re-passes the SAME stored path every time (LUTSection's slider
+    // flow); this must not require ctx.lut (no file to read/store) so it can't ENOENT.
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeCtx(store); // no `lut` facade wired at all
+    const result = await applyColorTool().run(
+      { clipIds: ["c1"], lut: { path: "luts/Rec709.cube", strength: 0.25 } },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    const clip = tl.tracks[0]!.clips.find((c) => c.id === "c1")!;
+    const lutEffect = clip.effects?.find((e) => e.type === "color.lut");
+    expect(lutEffect?.params["path"]?.string).toBe("luts/Rec709.cube");
+    expect(lutEffect?.params["intensity"]?.value).toBeCloseTo(0.25);
+  });
 });
 
 // ── apply_effect ──────────────────────────────────────────────────────────────

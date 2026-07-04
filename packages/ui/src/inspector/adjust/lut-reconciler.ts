@@ -12,9 +12,31 @@ const LUT_TYPE = "color.lut";
  *
  * A bare filename (pre-M14C picks, or no project open) isn't project-relative and can't be loaded
  * from here — skipped, same as today (still needs a re-pick).
+ *
+ * A permanently-missing/unparseable file (M14C final-review Medium #3) attempts exactly once
+ * (`known` gates re-attempts), logs one console.warn, and records it in `failed` so LUTSection can
+ * show "file missing" instead of silently pretending the LUT is loaded.
  */
 export class LutReconciler {
   private known = new Set<string>();
+  // Paths attempted-and-failed (missing bytes or unparseable) — one warn ever per path, and the
+  // inspector's LUTSection can query isFailed() to show "file missing" instead of pretending loaded.
+  private failed = new Set<string>();
+  private listeners = new Set<() => void>();
+
+  subscribe(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
+
+  private notify(): void {
+    for (const l of this.listeners) l();
+  }
+
+  /** True once a load attempt for this project-relative path has failed (missing file or bad .cube). */
+  isFailed(path: string): boolean {
+    return this.failed.has(path);
+  }
 
   reconcile(
     timeline: Timeline,
@@ -41,9 +63,22 @@ export class LutReconciler {
     registerLUT: (path: string, cube: CubeLUT) => void,
   ): Promise<void> {
     const bytes = await readDerived(path);
-    if (!bytes) return;
+    if (!bytes) {
+      this.markFailed(path, "file missing");
+      return;
+    }
     const cube = parseCubeLUT(new TextDecoder().decode(bytes));
-    if (!cube) return;
+    if (!cube) {
+      this.markFailed(path, "invalid .cube content");
+      return;
+    }
     registerLUT(path, cube);
+    this.notify();
+  }
+
+  private markFailed(path: string, reason: string): void {
+    console.warn(`[LutReconciler] "${path}" could not be loaded (${reason}) — not retrying`);
+    this.failed.add(path);
+    this.notify();
   }
 }

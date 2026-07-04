@@ -132,6 +132,46 @@ describe("editor-store", () => {
     expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.volume).toBe(1);
   });
 
+  test("dispatch coalesces consecutive same-key commands into one undo entry (single continuous drag)", () => {
+    const timeline = { ...defaultTimeline(), tracks: [makeTrack([makeClip("c1")])] };
+    const store = new EditorStore(timeline);
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.5, "trim-c1"));
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.3, "trim-c1"));
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.2, "trim-c1"));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.volume).toBe(0.2);
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.volume).toBe(1); // pre-gesture value
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("breakCoalescing() ends the run — two gestures reusing the same coalesce key produce two undo entries", () => {
+    // Models two consecutive trim gestures on the SAME already-selected clip edge: the coalesce
+    // key ("trim-"+clipId) is identical across gestures because it's a per-clip constant, so
+    // without an explicit break at gesture end the second gesture would merge into the first's
+    // undo entry (the M14C bug: select() on an already-selected clip is a no-op and never resets
+    // lastCoalesceKey). TimelinePanel now calls store.breakCoalescing() on pointerup for this.
+    const timeline = { ...defaultTimeline(), tracks: [makeTrack([makeClip("c1")])] };
+    const store = new EditorStore(timeline);
+
+    // Gesture 1 — a couple of drag ticks
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.5, "trim-c1"));
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.4, "trim-c1"));
+    store.breakCoalescing(); // gesture 1 end (pointerup)
+
+    // Gesture 2 — same clip, same coalesce key
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.3, "trim-c1"));
+    store.dispatch(setClipPropertyCommand("c1", "volume", 0.2, "trim-c1"));
+    store.breakCoalescing(); // gesture 2 end (pointerup)
+
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.volume).toBe(0.2);
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.volume).toBe(0.4); // undoes gesture 2 only
+    expect(store.canUndo()).toBe(true);
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.volume).toBe(1); // undoes gesture 1
+    expect(store.canUndo()).toBe(false);
+  });
+
   test("undo when stack empty is a no-op", () => {
     const store = new EditorStore(defaultTimeline());
     const before = store.getSnapshot();

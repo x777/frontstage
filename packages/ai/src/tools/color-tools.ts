@@ -77,8 +77,12 @@ export function applyColorTool(): ToolSpec {
       // .cube persistence (M14C T2, the Swift LUTLoader.store pattern): the raw path is a local
       // file path the agent was given — read it, validate it, copy it into the project (luts/<name>,
       // unique-suffix on collision), and reference the STORED project-relative path from here on.
+      // A path already under luts/ is already the stored, project-relative path (re-apply / edit-
+      // intensity flows re-pass it unchanged) — reference it as-is, mirroring Swift LUTLoader.store's
+      // same-path short-circuit, instead of re-reading/re-storing it (which ENOENTs on desktop since
+      // it's not an absolute path, or mints a duplicate luts/<name> copy).
       let effectiveInput = input;
-      if (input.lut?.path) {
+      if (input.lut?.path && !input.lut.path.startsWith("luts/")) {
         if (!ctx.lut) return errorResult("apply_color: LUT storage is not available in this context");
         if (!ctx.lut.readLocalFile) {
           return errorResult("apply_color: reading a local .cube path is not available on web");

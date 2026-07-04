@@ -531,6 +531,11 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       if (drag && drag.pointerId === e.pointerId) {
         drag = null;
         snapLineXRef.current = null;
+        // Every drag-gesture family (move, trim, ripple-trim) ends its coalesce run here — mirrors
+        // reorder's unconditional setSelectedGap(null) — so a follow-up gesture on the same clip
+        // edge (re-selecting an already-selected clip is a no-op, unlike reorder's gap reset)
+        // starts its own undo entry instead of merging into this one's.
+        store.breakCoalescing();
         const cv = canvasRef.current;
         if (cv) cv.releasePointerCapture(e.pointerId);
         scheduleDraw();

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
-import { LUTSection } from "../src/inspector/adjust/index.js";
+import { LUTSection, LutReconciler } from "../src/inspector/adjust/index.js";
 import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
 import type { Clip, Track } from "@palmier/core";
 import type { CubeLUT } from "@palmier/core";
@@ -155,6 +155,30 @@ test("LUTSection: Remove fully removes even with a non-default intensity", () =>
 
   const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
   expect(clip.effects?.find((e) => e.type === "color.lut")).toBeUndefined();
+});
+
+test("LUTSection: a reconciler-failed path shows 'file missing', not silently pretending it's loaded", async () => {
+  const store = new EditorStore(makeTimeline([makeClip("c1", {
+    effects: [{ id: "e1", type: "color.lut", enabled: true, params: { path: { string: "luts/gone.cube" }, intensity: { value: 1 } } }],
+  })]));
+  const reconciler = new LutReconciler();
+  const readDerived = vi.fn(async () => null); // simulates a deleted/missing file
+  const registerLUT = vi.fn();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  render(<LUTSection store={store} clipIds={["c1"]} reconciler={reconciler} />);
+  act(() => { fireEvent.click(screen.getByTestId("adjust-section-LUTs")); });
+
+  expect(screen.queryByTestId("lut-missing")).toBeNull();
+
+  // Reconcile happens out-of-band (mirrors Editor.tsx's store-driven wiring); LUTSection re-renders
+  // via the reconciler's subscribe() once the failed attempt resolves.
+  act(() => { reconciler.reconcile(store.getSnapshot().timeline, readDerived, registerLUT); });
+  await waitFor(() => { expect(screen.getByTestId("lut-missing")).toBeInTheDocument(); });
+
+  expect(registerLUT).not.toHaveBeenCalled();
+  expect(screen.getByTestId("lut-name").textContent).toBe("luts/gone.cube");
+  warn.mockRestore();
 });
 
 test("LUTSection: invalid .cube file shows parse error, registerLUT not called, no dispatch", async () => {

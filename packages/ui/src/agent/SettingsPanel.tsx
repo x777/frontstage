@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { DEFAULT_CONFIRM_THRESHOLD } from "./generation-settings.js";
 
 export type KeyConfig =
   | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => Promise<void>; onClearKey: () => Promise<void> }
@@ -344,8 +345,14 @@ function ConfirmThresholdField({ value, onChange }: { value: number; onChange: (
         data-testid="settings-confirm-threshold"
         value={value}
         onChange={(e) => {
-          const n = Number(e.target.value);
-          onChange(Number.isFinite(n) ? n : 0);
+          const raw = e.target.value;
+          if (raw.trim() === "") {
+            // Number("") is 0, not NaN — an emptied field means "cleared", not "always ask".
+            onChange(DEFAULT_CONFIRM_THRESHOLD);
+            return;
+          }
+          const n = Number(raw);
+          onChange(Number.isFinite(n) ? n : DEFAULT_CONFIRM_THRESHOLD);
         }}
         style={{
           background: theme.bg.surface,

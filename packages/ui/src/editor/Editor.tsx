@@ -515,7 +515,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
         }
         preview={<PreviewPanel store={store} media={media} engineRef={engineRef} />}
         timeline={<TimelinePanel store={store} dragController={dragController} library={library} />}
-        inspector={<InspectorPanel store={store} library={library} engineRef={engineRef} />}
+        inspector={<InspectorPanel store={store} library={library} engineRef={engineRef} lutReconciler={lutReconciler} />}
       />
 
       <ExportProgress state={exportState} />

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { EditorStore, Clip, CubeLUT } from "@palmier/core";
 import {
   findClip,
@@ -15,6 +15,7 @@ import { useStore } from "../../store/use-store.js";
 import { AdjustSection } from "./AdjustSection.js";
 import { AdjustSlider } from "./AdjustSlider.js";
 import { theme } from "../../theme/theme.js";
+import type { LutReconciler } from "./lut-reconciler.js";
 
 const LUT_TYPE = "color.lut";
 
@@ -26,13 +27,24 @@ export interface LUTSectionProps {
   // project (luts/<name>, unique-suffix on collision) and the STORED path is what gets referenced
   // and registered — absent, falls back to the bare filename (pre-M14C behavior).
   library?: { storeLut(filename: string, bytes: Uint8Array): Promise<string> };
+  // Missing-.cube surfacing (M14C final-review Medium #3): shares the SAME reconciler instance that
+  // re-registers LUTs on project load, so a permanently-missing/unparseable file (deleted from
+  // disk, never persisted) shows "file missing" here instead of silently pretending it's loaded.
+  reconciler?: LutReconciler;
 }
 
-export function LUTSection({ store, clipIds, engineRef, library }: LUTSectionProps) {
+export function LUTSection({ store, clipIds, engineRef, library, reconciler }: LUTSectionProps) {
   const [expanded, setExpanded] = useState(false);
   const [parseError, setParseError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timeline = useStore(store, (s) => s.timeline);
+  // Force a re-render when the reconciler resolves an attempt (success or failure) — it's a plain
+  // class, not observable state, so isFailed() wouldn't otherwise be re-read after a late failure.
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!reconciler) return;
+    return reconciler.subscribe(() => forceUpdate((n) => n + 1));
+  }, [reconciler]);
 
   const clips: Clip[] = clipIds.flatMap((id) => {
     const loc = findClip(timeline, id);
@@ -49,6 +61,7 @@ export function LUTSection({ store, clipIds, engineRef, library }: LUTSectionPro
     (c) => (c.effects?.find((e) => e.type === LUT_TYPE)?.params["path"]?.string ?? "") === firstPath,
   );
   const lutName = allSamePath ? (firstPath || "None") : "—";
+  const lutMissing = allSamePath && firstPath !== "" && (reconciler?.isFailed(firstPath) ?? false);
 
   const d = effectDescriptor(LUT_TYPE);
   const intensitySpec = d?.params.find((p) => p.key === "intensity");
@@ -171,6 +184,16 @@ export function LUTSection({ store, clipIds, engineRef, library }: LUTSectionPro
             style={{ fontSize: theme.fontSize.xs, color: theme.status.error }}
           >
             Invalid .cube file
+          </span>
+        )}
+
+        {/* Missing file — the stored path resolved to nothing on the last load attempt */}
+        {!parseError && lutMissing && (
+          <span
+            data-testid="lut-missing"
+            style={{ fontSize: theme.fontSize.xs, color: theme.status.error }}
+          >
+            File missing — re-pick the .cube file
           </span>
         )}
 

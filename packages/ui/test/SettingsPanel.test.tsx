@@ -247,3 +247,11 @@ test("SettingsPanel: the confirm-threshold field accepts 0 (always ask)", () => 
   fireEvent.change(screen.getByTestId("settings-confirm-threshold"), { target: { value: "0" } });
   expect(onConfirmThresholdChange).toHaveBeenCalledWith(0);
 });
+
+test("SettingsPanel: clearing the confirm-threshold field restores the default (50), not 0", () => {
+  // Number("") is 0, not NaN — clearing the input must not silently become "always ask".
+  const onConfirmThresholdChange = vi.fn();
+  render(<SettingsPanel {...makeKeychainProps()} confirmThreshold={10} onConfirmThresholdChange={onConfirmThresholdChange} />);
+  fireEvent.change(screen.getByTestId("settings-confirm-threshold"), { target: { value: "" } });
+  expect(onConfirmThresholdChange).toHaveBeenCalledWith(50);
+});

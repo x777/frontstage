@@ -27,6 +27,7 @@ import { LUTSection } from "./adjust/LUTSection.js";
 import { EffectsSection } from "./adjust/EffectsSection.js";
 import { BlendControl } from "./adjust/BlendControl.js";
 import { computeFrameHistograms } from "./adjust/frame-histogram.js";
+import type { LutReconciler } from "./adjust/lut-reconciler.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
@@ -38,6 +39,8 @@ export interface InspectorPanelProps {
   store: EditorStore;
   library?: MediaLibraryLike;
   engineRef?: { current: PlaybackEngine | null };
+  // Missing-.cube surfacing (M14C final-review Medium #3) — see LUTSection's `reconciler` prop.
+  lutReconciler?: LutReconciler;
 }
 
 type Histogram = { y: number[]; r: number[]; g: number[]; b: number[] };
@@ -54,7 +57,7 @@ function isNonTextVisual(c: Clip): boolean {
   return VISUAL_TYPES.has(c.mediaType) && c.mediaType !== "text";
 }
 
-export function InspectorPanel({ store, library, engineRef }: InspectorPanelProps) {
+export function InspectorPanel({ store, library, engineRef, lutReconciler }: InspectorPanelProps) {
   const selection = useStore(store, (s) => s.selection);
   const playhead = useStore(store, (s) => s.playhead);
   const timeline = useStore(store, (s) => s.timeline);
@@ -124,7 +127,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
           <CurvesSection store={store} clipIds={selIds} histogram={histogram} />
           <ColorWheelsSection store={store} clipIds={selIds} />
           <HueCurvesSection store={store} clipIds={selIds} hueHistogram={hueHistogram} />
-          <LUTSection store={store} clipIds={selIds} engineRef={engineRef} library={lutLibrary} />
+          <LUTSection store={store} clipIds={selIds} engineRef={engineRef} library={lutLibrary} reconciler={lutReconciler} />
           <EffectsSection store={store} clipIds={selIds} />
           <BlendControl store={store} clipIds={selIds} />
         </div>
@@ -426,7 +429,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
 
       {/* LUT */}
       {isVisual && !isText && (
-        <LUTSection store={store} clipIds={[clipId]} engineRef={engineRef} library={lutLibrary} />
+        <LUTSection store={store} clipIds={[clipId]} engineRef={engineRef} library={lutLibrary} reconciler={lutReconciler} />
       )}
 
       {/* Effects */}

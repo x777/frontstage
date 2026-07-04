@@ -107,26 +107,66 @@ describe("LutReconciler", () => {
     expect(readDerived).toHaveBeenCalledTimes(1);
   });
 
-  test("missing bytes (readDerived -> null): registerLUT never called", async () => {
+  test("missing bytes (readDerived -> null): registerLUT never called, warns once, isFailed() true, no retry", async () => {
     const reconciler = new LutReconciler();
     const readDerived = vi.fn(async () => null);
     const registerLUT = vi.fn();
-    reconciler.reconcile(timelineOf([lutClip("c1", "luts/gone.cube")]), readDerived, registerLUT);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tl = timelineOf([lutClip("c1", "luts/gone.cube")]);
 
+    expect(reconciler.isFailed("luts/gone.cube")).toBe(false);
+    reconciler.reconcile(tl, readDerived, registerLUT);
     await vi.waitFor(() => expect(readDerived).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 0));
     expect(registerLUT).not.toHaveBeenCalled();
+    expect(reconciler.isFailed("luts/gone.cube")).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // Repeated reconcile calls (e.g. every store notification) must not retry or warn again.
+    reconciler.reconcile(tl, readDerived, registerLUT);
+    reconciler.reconcile(tl, readDerived, registerLUT);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(readDerived).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    warn.mockRestore();
   });
 
-  test("invalid .cube content: registerLUT never called", async () => {
+  test("invalid .cube content: registerLUT never called, warns once, isFailed() true", async () => {
     const reconciler = new LutReconciler();
     const readDerived = vi.fn(async () => new TextEncoder().encode("not a cube"));
     const registerLUT = vi.fn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     reconciler.reconcile(timelineOf([lutClip("c1", "luts/bad.cube")]), readDerived, registerLUT);
 
     await vi.waitFor(() => expect(readDerived).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 0));
     expect(registerLUT).not.toHaveBeenCalled();
+    expect(reconciler.isFailed("luts/bad.cube")).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  test("subscribe() is notified after a failed load resolves", async () => {
+    const reconciler = new LutReconciler();
+    const readDerived = vi.fn(async () => null);
+    const registerLUT = vi.fn();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cb = vi.fn();
+    reconciler.subscribe(cb);
+
+    reconciler.reconcile(timelineOf([lutClip("c1", "luts/gone.cube")]), readDerived, registerLUT);
+    await vi.waitFor(() => expect(cb).toHaveBeenCalledTimes(1));
+  });
+
+  test("a successfully loaded path is never marked failed", async () => {
+    const reconciler = new LutReconciler();
+    const readDerived = vi.fn(async () => new TextEncoder().encode(CUBE_TEXT));
+    const registerLUT = vi.fn();
+    reconciler.reconcile(timelineOf([lutClip("c1", "luts/a.cube")]), readDerived, registerLUT);
+
+    await vi.waitFor(() => expect(registerLUT).toHaveBeenCalledTimes(1));
+    expect(reconciler.isFailed("luts/a.cube")).toBe(false);
   });
 
   test("a clip with no effects, or a non-lut effect, is ignored", () => {

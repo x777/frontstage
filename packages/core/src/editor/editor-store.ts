@@ -155,6 +155,16 @@ export class EditorStore {
     this.emit();
   }
 
+  /**
+   * Ends the current coalesce run without touching any state. Call this at drag-gesture end
+   * (pointerup/cancel) so a follow-up gesture reusing the same coalesceKey (e.g. two separate
+   * trim drags on an already-selected clip edge, where select() on an already-selected clip is a
+   * no-op) starts its own undo entry instead of silently merging into the prior gesture's.
+   */
+  breakCoalescing(): void {
+    this.lastCoalesceKey = null;
+  }
+
   dispatch(cmd: Command): void {
     const prior = this.state.timeline;
     const next = cmd.apply(prior);
