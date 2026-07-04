@@ -220,6 +220,8 @@ export const theme = {
     clipLabel: "var(--color-timeline-clip-label)",
     generatingScrim: "var(--color-timeline-generating-scrim)",
     failedScrim: "var(--color-timeline-failed-scrim)",
+    playhead: "var(--color-timeline-playhead)",
+    snap: "var(--color-timeline-snap)",
   },
   generating: {
     overlayBg: "var(--color-generating-overlay-bg)",

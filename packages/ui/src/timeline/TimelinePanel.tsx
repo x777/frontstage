@@ -68,6 +68,10 @@ export function generationStatusByRef(entries: MediaManifestEntry[]): Map<string
 function resolvePalette(el: Element): TimelinePalette {
   const s = getComputedStyle(el);
   const get = (v: string) => s.getPropertyValue(v).trim();
+  const getPx = (v: string, fallback: number) => {
+    const n = parseFloat(get(v));
+    return Number.isFinite(n) ? n : fallback;
+  };
   return {
     bgBase: get("--bg-base") || "#0a0a0a",
     bgSurface: get("--bg-surface") || "#161616",
@@ -84,11 +88,15 @@ function resolvePalette(el: Element): TimelinePalette {
     trackImage: get("--track-image") || "#B72DD2",
     trackText: get("--track-text") || "#B72DD2",
     trackLottie: get("--track-lottie") || "#E0A800",
-    trimHandle: get("--color-timeline-trim-handle") || "rgba(0,0,0,0.25)",
-    clipLabel: get("--color-timeline-clip-label") || "rgba(255,255,255,0.85)",
+    trimHandle: get("--color-timeline-trim-handle") || "rgba(255,255,255,0.34)",
+    clipLabel: get("--color-timeline-clip-label") || "rgba(255,255,255,1)",
     generatingScrim: get("--color-timeline-generating-scrim") || "rgba(10,10,10,0.72)", // matches --color-timeline-generating-scrim
     failedScrim: get("--color-timeline-failed-scrim") || "rgba(229,79,79,0.55)", // matches --color-timeline-failed-scrim
     rulerLabelFontPx: get("--font-xs") || "10px",
+    playhead: get("--color-timeline-playhead") || "rgb(255,69,58)",
+    snapIndicator: get("--color-timeline-snap") || "rgb(255,214,10)",
+    clipDetailMinWidth: getPx("--size-clip-detail-min", 32),
+    clipLabelMinWidth: getPx("--size-clip-label-min", 56),
   };
 }
 

@@ -156,11 +156,13 @@
   /* Preview */
   --color-preview-letterbox: #000000;
 
-  /* Timeline */
-  --color-timeline-trim-handle: rgba(0, 0, 0, 0.25);
-  --color-timeline-clip-label: rgba(255, 255, 255, 0.85);
+  /* Timeline (M16C T3, ClipRenderer.swift/PlayheadOverlay.swift/SnapIndicatorOverlay.swift verbatim) */
+  --color-timeline-trim-handle: rgba(255, 255, 255, 0.34); /* AppTheme.Text.muted — was wrongly rgba(0,0,0,0.25), corrected */
+  --color-timeline-clip-label: rgba(255, 255, 255, 1); /* AppTheme.Text.primary — was wrongly 0.85 alpha, corrected */
   --color-timeline-generating-scrim: rgba(10, 10, 10, 0.72);
   --color-timeline-failed-scrim: rgba(229, 79, 79, 0.55);
+  --color-timeline-playhead: rgb(255, 69, 58); /* NSColor.systemRed, dark appearance — PlayheadOverlay.Playhead.color */
+  --color-timeline-snap: rgb(255, 214, 10); /* NSColor.systemYellow, dark appearance — SnapIndicatorOverlay */
 
   /* Shadows (CSS blur = 2 x SwiftUI shadow radius; offsets/colors verbatim from AppTheme.Shadow) */
   --shadow-sm: 0 0.5px 2px rgba(0, 0, 0, 0.3);
