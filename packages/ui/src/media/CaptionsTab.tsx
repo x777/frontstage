@@ -12,6 +12,7 @@ import { canTranscribe, classifyRefsByCache, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
 import { Select } from "../primitives/Select.js";
+import { Button } from "../primitives/Button.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionPresetGallery, isHighlightPreset } from "./CaptionPresetGallery.js";
 
@@ -67,10 +68,16 @@ function summarizeSuccess(text: string): string {
   return text;
 }
 
-const labelStyle: React.CSSProperties = { fontSize: theme.fontSize.xxs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium };
+// Inspector-row language (fields.tsx/AdjustmentRow): fixed label column, control to its right.
+const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: theme.spacing.xs };
+const labelStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.xs,
+  color: theme.text.tertiary,
+  minWidth: theme.size.inspectorLabel,
+  flexShrink: 0,
+};
 const mutedStyle: React.CSSProperties = { fontSize: theme.fontSize.xxs, color: theme.text.muted, fontWeight: theme.fontWeight.regular };
 const fieldGap: React.CSSProperties = { display: "flex", flexDirection: "column", gap: theme.spacing.xxs };
-const rowGap: React.CSSProperties = { display: "flex", gap: theme.spacing.xs };
 const inputStyle: React.CSSProperties = {
   background: theme.bg.surface,
   border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
@@ -210,7 +217,7 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
   return (
     <div data-testid="captions-tab" style={{ position: "relative", display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: theme.spacing.sm, display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
-        <div style={fieldGap}>
+        <div style={rowStyle}>
           <span style={labelStyle}>Source</span>
           <Select
             testid="captions-source-select"
@@ -220,7 +227,7 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
           />
         </div>
 
-        <div style={fieldGap}>
+        <div style={rowStyle}>
           <span style={labelStyle}>Language</span>
           <input
             data-testid="captions-language-input"
@@ -232,56 +239,54 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
           />
         </div>
 
-        <div style={rowGap}>
-          <div style={{ ...fieldGap, flex: 1 }}>
-            <span style={labelStyle}>Text case</span>
-            <Select
-              testid="captions-textcase-select"
-              value={textCase}
-              options={[{ value: "auto", label: "Auto" }, { value: "upper", label: "UPPER" }, { value: "lower", label: "lower" }]}
-              onChange={setTextCase}
-            />
-          </div>
-          <div style={{ ...fieldGap, flex: 1 }}>
-            <span style={labelStyle}>Max words</span>
-            <input
-              data-testid="captions-maxwords-input"
-              type="number"
-              min={1}
-              value={maxWords}
-              onChange={(e) => setMaxWords(e.target.value)}
-              placeholder="No limit"
-              style={inputStyle}
-            />
-          </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Text case</span>
+          <Select
+            testid="captions-textcase-select"
+            value={textCase}
+            options={[{ value: "auto", label: "Auto" }, { value: "upper", label: "UPPER" }, { value: "lower", label: "lower" }]}
+            onChange={setTextCase}
+          />
         </div>
 
-        <div style={rowGap}>
-          <div style={{ ...fieldGap, flex: 1 }}>
-            <span style={labelStyle}>Font</span>
-            <input
-              data-testid="captions-fontname-input"
-              type="text"
-              value={fontName}
-              onChange={(e) => setFontName(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-          <div style={{ ...fieldGap, width: "72px", flexShrink: 0 }}>
-            <span style={labelStyle}>Size</span>
-            <input
-              data-testid="captions-fontsize-input"
-              type="number"
-              min={12}
-              max={300}
-              value={fontSize}
-              onChange={(e) => setFontSize(Math.max(12, Math.min(300, Number(e.target.value) || 48)))}
-              style={inputStyle}
-            />
-          </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Max words</span>
+          <input
+            data-testid="captions-maxwords-input"
+            type="number"
+            min={1}
+            value={maxWords}
+            onChange={(e) => setMaxWords(e.target.value)}
+            placeholder="No limit"
+            style={inputStyle}
+          />
         </div>
 
-        <div style={fieldGap}>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Font</span>
+          <input
+            data-testid="captions-fontname-input"
+            type="text"
+            value={fontName}
+            onChange={(e) => setFontName(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={rowStyle}>
+          <span style={labelStyle}>Size</span>
+          <input
+            data-testid="captions-fontsize-input"
+            type="number"
+            min={12}
+            max={300}
+            value={fontSize}
+            onChange={(e) => setFontSize(Math.max(12, Math.min(300, Number(e.target.value) || 48)))}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={rowStyle}>
           <span style={labelStyle}>Color</span>
           <input
             data-testid="captions-color-input"
@@ -292,29 +297,28 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
           />
         </div>
 
-        <div style={rowGap}>
-          <div style={{ ...fieldGap, flex: 1 }}>
-            <span style={labelStyle}>Center X</span>
-            <input
-              data-testid="captions-centerx-input"
-              type="number"
-              step={0.01}
-              value={centerX}
-              onChange={(e) => setCenterX(snapToHalf(Number(e.target.value)))}
-              style={inputStyle}
-            />
-          </div>
-          <div style={{ ...fieldGap, flex: 1 }}>
-            <span style={labelStyle}>Center Y</span>
-            <input
-              data-testid="captions-centery-input"
-              type="number"
-              step={0.01}
-              value={centerY}
-              onChange={(e) => setCenterY(snapToHalf(Number(e.target.value)))}
-              style={inputStyle}
-            />
-          </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Center X</span>
+          <input
+            data-testid="captions-centerx-input"
+            type="number"
+            step={0.01}
+            value={centerX}
+            onChange={(e) => setCenterX(snapToHalf(Number(e.target.value)))}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={rowStyle}>
+          <span style={labelStyle}>Center Y</span>
+          <input
+            data-testid="captions-centery-input"
+            type="number"
+            step={0.01}
+            value={centerY}
+            onChange={(e) => setCenterY(snapToHalf(Number(e.target.value)))}
+            style={inputStyle}
+          />
         </div>
 
         <div style={fieldGap}>
@@ -327,7 +331,7 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
           />
         </div>
 
-        <div data-testid="captions-estimate" style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
+        <div data-testid="captions-estimate" style={{ fontSize: theme.fontSize.xs, color: theme.text.tertiary, fontWeight: theme.fontWeight.medium }}>
           {estimate === null
             ? ""
             : estimate.targetCount === 0
@@ -368,24 +372,16 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            data-testid="captions-generate"
+          <Button
+            testid="captions-generate"
+            variant="accent"
+            gradient="ai"
+            size="regular"
             disabled={!canGenerate}
             onClick={handleGenerate}
-            style={{
-              background: theme.accent.primary,
-              border: "none",
-              borderRadius: theme.radius.xs,
-              color: theme.text.onAccent,
-              cursor: !canGenerate ? "not-allowed" : "pointer",
-              fontSize: theme.fontSize.sm,
-              fontWeight: theme.fontWeight.medium,
-              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-              opacity: !canGenerate ? theme.opacity.disabled : theme.opacity.opaque,
-            }}
           >
             Generate
-          </button>
+          </Button>
         </div>
       </div>
 
