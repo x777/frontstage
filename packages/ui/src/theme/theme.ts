@@ -22,9 +22,11 @@ export const theme = {
   accent: {
     timecode: "var(--accent-timecode)",
     primary: "var(--accent-primary)",
+    glassTint: "var(--color-glass-tint)",
   },
   status: {
     error: "var(--status-error)",
+    success: "var(--status-success)",
   },
   track: {
     video: "var(--track-video)",
@@ -51,6 +53,8 @@ export const theme = {
     mixedFill: 0.3,
   },
   shadow: {
+    sm: "var(--shadow-sm)",
+    md: "var(--shadow-md)",
     lg: "var(--shadow-lg)",
   },
   radius: {
@@ -103,10 +107,23 @@ export const theme = {
     bold: "var(--font-weight-bold)",
   },
   iconSize: {
+    xxs: "var(--icon-size-xxs)",
+    xs: "var(--icon-size-xs)",
+    sm: "var(--icon-size-sm)",
+    smMd: "var(--icon-size-sm-md)",
+    md: "var(--icon-size-md)",
+    mdLg: "var(--icon-size-md-lg)",
+    lg: "var(--icon-size-lg)",
     lgXl: "var(--icon-size-lg-xl)",
+    xl: "var(--icon-size-xl)",
   },
   letterSpacing: {
+    tight: "var(--letter-spacing-tight)",
     wide: "var(--letter-spacing-wide)",
+  },
+  gradients: {
+    ai: "var(--gradient-ai)",
+    aiDark: "var(--gradient-ai-dark)",
   },
   size: {
     topBar: "var(--size-topbar)",
@@ -141,6 +158,23 @@ export const theme = {
     presetCardMin: "var(--size-preset-card-min)",
     presetPreviewHeight: "var(--size-preset-preview-height)",
     colorSwatch: "var(--size-color-swatch)",
+    adjustLabelCol: "var(--size-adjust-label-col)",
+    panelHeader: "var(--size-panel-header)",
+    projectCardW: "var(--size-project-card-w)",
+    projectCardH: "var(--size-project-card-h)",
+    clipDetailMin: "var(--size-clip-detail-min)",
+    clipLabelMin: "var(--size-clip-label-min)",
+    captionPreviewMaxH: "var(--size-caption-preview-max-h)",
+    toolImagePreviewMaxH: "var(--size-tool-image-preview-max-h)",
+    genMediaAreaMinH: "var(--size-gen-media-area-min-h)",
+    genLoadingH: "var(--size-gen-loading-h)",
+    genPromptMinH: "var(--size-gen-prompt-min-h)",
+    genRefTileW: "var(--size-gen-ref-tile-w)",
+    genRefTileH: "var(--size-gen-ref-tile-h)",
+    exportSheetW: "var(--size-export-sheet-w)",
+    exportSheetH: "var(--size-export-sheet-h)",
+    matteSheetW: "var(--size-matte-sheet-w)",
+    matteControlW: "var(--size-matte-control-w)",
   },
   adjust: {
     tempCool: "var(--color-adjust-temp-cool)",
@@ -196,6 +230,8 @@ export const theme = {
     badgeText: "var(--color-folder-badge-text)",
   },
   anim: {
+    hover: "var(--anim-hover)",
+    transition: "var(--anim-transition)",
     shimmerDuration: "var(--anim-shimmer-duration)",
     progressDuration: "var(--anim-progress-duration)",
     presetPreviewDuration: "var(--anim-preset-preview-duration)",
