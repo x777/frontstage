@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
+import { Icon, IconButton, type IconName } from "../primitives/index.js";
 import {
   RULER_HEIGHT,
   DEFAULT_TRACK_HEIGHT,
@@ -12,6 +13,10 @@ import {
 } from "@palmier/core";
 
 export const TRACK_HEADER_WIDTH = 160;
+
+// Row icons per TimelineHeaderView.swift (iconSize 14pt there; xxs frame here is the kit's
+// smallest button, per the M16C T2 brief).
+const ROW_ICON_SIZE = 10;
 
 export function TrackHeaders({ store }: { store: EditorStore }) {
   const tracks = useStore(store, (s) => s.timeline.tracks);
@@ -40,6 +45,11 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
     setDragTrackId(null);
   }
 
+  // Visual tracks are always clamped above every audio track (EditorViewModel+Tracks.swift), so
+  // the first "audio"-typed row marks the video/audio zone boundary for the divider below.
+  const firstAudioIndex = tracks.findIndex((t) => t.type === "audio");
+  const hasZoneDivider = firstAudioIndex > 0;
+
   return (
     <div
       ref={listRef}
@@ -59,8 +69,22 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
       {tracks.map((track, i) => {
         const isAudio = track.type === "audio";
         const toggleBtn = isAudio
-          ? { testid: `track-mute-${track.id}`, on: track.muted, label: track.muted ? "Unmute" : "Mute", glyph: track.muted ? "🔇" : "🔊", cmd: () => store.dispatch(toggleTrackMuteCommand(track.id)) }
-          : { testid: `track-hide-${track.id}`, on: track.hidden, label: track.hidden ? "Show" : "Hide", glyph: track.hidden ? "🚫" : "👁", cmd: () => store.dispatch(toggleTrackHiddenCommand(track.id)) };
+          ? {
+              testid: `track-mute-${track.id}`,
+              on: track.muted,
+              active: !track.muted,
+              label: track.muted ? "Unmute" : "Mute",
+              icon: (track.muted ? "volume-off" : "volume") as IconName,
+              cmd: () => store.dispatch(toggleTrackMuteCommand(track.id)),
+            }
+          : {
+              testid: `track-hide-${track.id}`,
+              on: track.hidden,
+              active: !track.hidden,
+              label: track.hidden ? "Show" : "Hide",
+              icon: (track.hidden ? "eye-off" : "eye") as IconName,
+              cmd: () => store.dispatch(toggleTrackHiddenCommand(track.id)),
+            };
         const isDragging = dragTrackId === track.id;
         return (
           <div
@@ -70,11 +94,14 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
               height: DEFAULT_TRACK_HEIGHT,
               display: "flex",
               alignItems: "center",
-              gap: theme.spacing.xs,
-              padding: `0 ${theme.spacing.sm}`,
-              borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+              gap: theme.spacing.sm,
+              paddingLeft: theme.spacing.sm,
+              paddingRight: theme.spacing.sm,
               boxSizing: "border-box",
-              background: isDragging ? theme.bg.raised : undefined,
+              borderLeft: `${theme.size.trackStrip} solid ${theme.track[track.type]}`,
+              borderBottom: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
+              borderTop: i === firstAudioIndex && hasZoneDivider ? `${theme.borderWidth.thick} solid ${theme.border.divider}` : undefined,
+              background: isDragging ? theme.bg.prominent : undefined,
             }}
           >
             <span
@@ -83,47 +110,41 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
               onPointerMove={(e) => onGripPointerMove(e, track.id)}
               onPointerUp={onGripPointerUp}
               onPointerCancel={onGripPointerUp}
-              style={{ cursor: isDragging ? "grabbing" : "grab", color: theme.text.muted, fontSize: theme.fontSize.sm, touchAction: "none" }}
+              style={{ display: "flex", cursor: isDragging ? "grabbing" : "grab", color: theme.text.muted, touchAction: "none" }}
             >
-              &#x2807;
+              <Icon name="grip" size={ROW_ICON_SIZE} />
             </span>
-            <span style={{ flex: 1, color: theme.text.primary, fontSize: theme.fontSize.sm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span
+              style={{
+                flex: 1,
+                color: theme.text.secondary,
+                fontSize: theme.fontSize.sm,
+                fontWeight: theme.fontWeight.medium,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               {track.type} {i + 1}
             </span>
-            <button
-              data-testid={toggleBtn.testid}
-              aria-pressed={toggleBtn.on}
-              title={toggleBtn.label}
-              onClick={toggleBtn.cmd}
-              style={headerButtonStyle(toggleBtn.on)}
-            >
-              {toggleBtn.glyph}
-            </button>
-            <button
-              data-testid={`track-synclock-${track.id}`}
-              aria-pressed={track.syncLocked}
-              title={track.syncLocked ? "Unlock Sync" : "Sync Lock"}
-              onClick={() => store.dispatch(toggleTrackSyncLockCommand(track.id))}
-              style={headerButtonStyle(track.syncLocked)}
-            >
-              {track.syncLocked ? "🔒" : "🔓"}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
+              <IconButton
+                frame="xxs"
+                testid={`track-synclock-${track.id}`}
+                ariaPressed={track.syncLocked}
+                active={track.syncLocked}
+                title={track.syncLocked ? "Unlock Sync" : "Sync Lock"}
+                onClick={() => store.dispatch(toggleTrackSyncLockCommand(track.id))}
+              >
+                <Icon name={track.syncLocked ? "lock" : "lock-open"} size={ROW_ICON_SIZE} />
+              </IconButton>
+              <IconButton frame="xxs" testid={toggleBtn.testid} ariaPressed={toggleBtn.on} active={toggleBtn.active} title={toggleBtn.label} onClick={toggleBtn.cmd}>
+                <Icon name={toggleBtn.icon} size={ROW_ICON_SIZE} />
+              </IconButton>
+            </div>
           </div>
         );
       })}
     </div>
   );
-}
-
-function headerButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    background: active ? theme.bg.raised : "transparent",
-    color: active ? theme.text.primary : theme.text.muted,
-    border: "none",
-    borderRadius: theme.radius.xs,
-    cursor: "pointer",
-    fontSize: theme.fontSize.sm,
-    padding: theme.spacing.xxs,
-    lineHeight: 1,
-  };
 }

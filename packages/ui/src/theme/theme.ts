@@ -177,6 +177,7 @@ export const theme = {
     exportSheetH: "var(--size-export-sheet-h)",
     matteSheetW: "var(--size-matte-sheet-w)",
     matteControlW: "var(--size-matte-control-w)",
+    trackStrip: "var(--size-track-strip)",
   },
   adjust: {
     tempCool: "var(--color-adjust-temp-cool)",

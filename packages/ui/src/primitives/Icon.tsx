@@ -11,7 +11,14 @@ export type IconName =
   | "chevron-right"
   | "chevron-down"
   | "play"
-  | "pause";
+  | "pause"
+  | "eye"
+  | "eye-off"
+  | "lock"
+  | "lock-open"
+  | "volume"
+  | "volume-off"
+  | "grip";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -77,6 +84,51 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <line x1="9" y1="5" x2="9" y2="19" />
       <line x1="15" y1="5" x2="15" y2="19" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="M4 4l16 16" />
+      <path d="M6.7 7.3A15 15 0 0 0 2 12s3.8 6 10 6c1.1 0 2.1-.2 3-.5M9.5 5.6c.8-.4 1.6-.6 2.5-.6 6.2 0 10 7 10 7a15.9 15.9 0 0 1-3.4 4.1" />
+      <path d="M14.5 14.5a3 3 0 0 1-4-4" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  "lock-open": (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 7.5-2" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M4 9v6h4l5 5V4L8 9H4z" />
+      <path d="M16.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M19 6a9 9 0 0 1 0 12" />
+    </>
+  ),
+  "volume-off": (
+    <>
+      <path d="M4 9v6h4l5 5V4L8 9H4z" />
+      <path d="M22 9l-6 6M16 9l6 6" />
+    </>
+  ),
+  grip: (
+    <>
+      <line x1="6" y1="8" x2="18" y2="8" />
+      <line x1="6" y1="12" x2="18" y2="12" />
+      <line x1="6" y1="16" x2="18" y2="16" />
     </>
   ),
 };

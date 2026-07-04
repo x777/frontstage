@@ -231,6 +231,9 @@
   --anim-shimmer-duration: 1.35s;
   --anim-progress-duration: 45s; /* matches Swift GeneratingOverlay.progressDuration=45s */
 
+  /* Track header row (M16C T2, TimelineHeaderView.swift stripWidth) */
+  --size-track-strip: 3px;
+
   /* Media folder tile (M12A T4) */
   --color-folder-tile-bg: rgba(255, 255, 255, 0.04);
   --color-folder-icon: rgba(245, 239, 228, 0.85);
