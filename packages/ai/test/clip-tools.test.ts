@@ -109,20 +109,19 @@ describe("add_clips", () => {
     expect(added).toBeDefined();
   });
 
-  test("never adopts fps from the added clip's source (#233 standing rule) — added clip is 24fps, timeline stays 30fps", async () => {
+  test("adopts RESOLUTION but never fps from the added clip's source (#233 standing rule) — added clip is 24fps/3840x2160, timeline stays 30fps but adopts 3840x2160", async () => {
     const store = new EditorStore(makeTimeline());
     const ctx = makeCtx(store);
     const spec = addClipsTool();
     const result = await spec.run({ clips: [{ mediaId: "media-1", startFrame: 0 }] }, ctx);
     expect(result.isError).toBe(false);
     const tl = store.getSnapshot().timeline;
-    // Swift (post-#177/#233) auto-matches RESOLUTION on the agent add path but never fps.
-    // TS's add_clips has no settings-adoption step at all yet (see layout-tools.ts's comment) —
-    // so today neither fps nor resolution is adopted; this test pins the fps half of that as a
-    // permanent invariant regardless of when/if resolution-adoption gets ported.
+    // Swift (post-#177/#233) auto-matches RESOLUTION on the agent add path but never fps — this
+    // pins the fps half as a permanent invariant, now alongside the resolution adoption itself.
     expect(tl.fps).toBe(30);
-    expect(tl.width).toBe(1920);
-    expect(tl.height).toBe(1080);
+    expect(tl.width).toBe(3840);
+    expect(tl.height).toBe(2160);
+    expect(tl.settingsConfigured).toBe(true);
   });
 
   test("adds to a new track when trackIndex omitted", async () => {
@@ -135,7 +134,9 @@ describe("add_clips", () => {
   });
 
   test("two clips in one call = ONE undo step", async () => {
-    const store = new EditorStore(makeTimeline());
+    // Pre-configured so the resolution-adoption step (its own separate undo entry, mirroring
+    // Swift) doesn't fire here — this test is only about the add itself being atomic.
+    const store = new EditorStore({ ...makeTimeline(), settingsConfigured: true });
     const ctx = makeCtx(store);
     const spec = addClipsTool();
     const beforeCount = store.getSnapshot().timeline.tracks[0]!.clips.length;

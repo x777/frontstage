@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   EditorStore,
   defaultTimeline,
@@ -142,6 +142,98 @@ describe("apply_color", () => {
     const clip2Undo = tlUndo.tracks[loc2u.trackIndex]!.clips[loc2u.clipIndex]!;
     expect(clip1Undo.effects).toBeUndefined();
     expect(clip2Undo.effects).toBeUndefined();
+  });
+
+  // ── lut.path persistence (M14C T2) ──────────────────────────────────────────
+
+  const CUBE_TEXT = `LUT_3D_SIZE 2
+0.0 0.0 0.0
+1.0 0.0 0.0
+0.0 1.0 0.0
+1.0 1.0 0.0
+0.0 0.0 1.0
+1.0 0.0 1.0
+0.0 1.0 1.0
+1.0 1.0 1.0
+`;
+
+  function makeLutCtx(store: EditorStore, opts: { readLocalFile?: (p: string) => Promise<Uint8Array>; store_?: (n: string, b: Uint8Array) => Promise<string> } = {}) {
+    const ctx = makeCtx(store);
+    return {
+      ...ctx,
+      lut: {
+        store: opts.store_ ?? (async (filename: string) => `luts/${filename}`),
+        readLocalFile: opts.readLocalFile ?? (async () => new TextEncoder().encode(CUBE_TEXT)),
+      },
+    };
+  }
+
+  test("lut.path: reads the local file, stores it into the project, and references the STORED path", async () => {
+    const store = new EditorStore(makeTimeline());
+    const storeLut = vi.fn(async (filename: string) => `luts/${filename}`);
+    const readLocalFile = vi.fn(async (p: string) => { expect(p).toBe("/Users/x/Rec709.cube"); return new TextEncoder().encode(CUBE_TEXT); });
+    const ctx = makeLutCtx(store, { readLocalFile, store_: storeLut });
+
+    const result = await applyColorTool().run({ clipIds: ["c1"], lut: { path: "/Users/x/Rec709.cube", strength: 0.8 } }, ctx);
+    expect(result.isError).toBe(false);
+    expect(readLocalFile).toHaveBeenCalledWith("/Users/x/Rec709.cube");
+    expect(storeLut).toHaveBeenCalledWith("Rec709.cube", expect.any(Uint8Array));
+
+    const tl = store.getSnapshot().timeline;
+    const loc = findClip(tl, "c1")!;
+    const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+    const lutEffect = clip.effects?.find((e) => e.type === "color.lut");
+    expect(lutEffect?.params["path"]?.string).toBe("luts/Rec709.cube");
+    expect(lutEffect?.params["intensity"]?.value).toBeCloseTo(0.8);
+  });
+
+  test("lut.path: collision suffix flows through from ctx.lut.store verbatim", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeLutCtx(store, { store_: async () => "luts/Rec709-2.cube" });
+    const result = await applyColorTool().run({ clipIds: ["c1"], lut: { path: "/tmp/Rec709.cube" } }, ctx);
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    const clip = tl.tracks[0]!.clips.find((c) => c.id === "c1")!;
+    expect(clip.effects?.find((e) => e.type === "color.lut")?.params["path"]?.string).toBe("luts/Rec709-2.cube");
+  });
+
+  test("lut.path: no file at the given path -> isError, store unchanged", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const ctx = makeLutCtx(store, { readLocalFile: async () => { throw new Error("ENOENT"); } });
+    const result = await applyColorTool().run({ clipIds: ["c1"], lut: { path: "/nope.cube" } }, ctx);
+    expect(result.isError).toBe(true);
+    const block = result.blocks[0]!;
+    expect(block.kind === "text" ? block.text : "").toContain("No file at path");
+    expect(store.getSnapshot().timeline).toBe(before);
+  });
+
+  test("lut.path: invalid .cube content -> isError, store unchanged, nothing stored", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const storeLut = vi.fn(async (filename: string) => `luts/${filename}`);
+    const ctx = makeLutCtx(store, { readLocalFile: async () => new TextEncoder().encode("not a cube file"), store_: storeLut });
+    const result = await applyColorTool().run({ clipIds: ["c1"], lut: { path: "/tmp/bad.cube" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(result.blocks[0]!.kind === "text" ? (result.blocks[0] as { text: string }).text : "").toContain("Not a valid .cube 3D LUT");
+    expect(storeLut).not.toHaveBeenCalled();
+    expect(store.getSnapshot().timeline).toBe(before);
+  });
+
+  test("lut.path: no ctx.lut facade -> isError with a clear message", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeCtx(store);
+    const result = await applyColorTool().run({ clipIds: ["c1"], lut: { path: "/tmp/x.cube" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(result.blocks[0]!.kind === "text" ? (result.blocks[0] as { text: string }).text : "").toContain("not available in this context");
+  });
+
+  test("lut.path: ctx.lut present but readLocalFile absent (web) -> isError mentioning web", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = { ...makeCtx(store), lut: { store: async (n: string) => `luts/${n}` } };
+    const result = await applyColorTool().run({ clipIds: ["c1"], lut: { path: "/tmp/x.cube" } }, ctx);
+    expect(result.isError).toBe(true);
+    expect(result.blocks[0]!.kind === "text" ? (result.blocks[0] as { text: string }).text : "").toContain("not available on web");
   });
 });
 

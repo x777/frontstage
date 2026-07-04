@@ -83,15 +83,21 @@ function refitClipTransform(
   return { ...clip, transform: { ...clip.transform, height: clip.transform.height * heightScale }, scaleTrack };
 }
 
-/** set_project_settings' one undo step: fps applies ONLY when explicitly passed by the caller. */
+/**
+ * set_project_settings' one undo step: fps applies ONLY when explicitly passed by the caller.
+ * `label` defaults to Swift's generic applyTimelineSettings action name ("Change Project
+ * Settings"); set_project_settings itself overrides it to "Set Project Settings (Agent)",
+ * matching Swift's setActionName call right after applyTimelineSettings.
+ */
 export function applyTimelineSettingsCommand(
   fps: number,
   width: number,
   height: number,
   manifest: MediaManifest,
+  label = "Change Project Settings",
 ): Command {
   return {
-    label: "Set Project Settings (Agent)",
+    label,
     apply(timeline: Timeline): Timeline {
       const prevFPS = timeline.fps;
       const prevWidth = timeline.width;
@@ -114,4 +120,83 @@ export function applyTimelineSettingsCommand(
       return { ...timeline, tracks, fps, width, height, settingsConfigured: true };
     },
   };
+}
+
+export interface AgentResolutionAdoption {
+  // Dispatch BEFORE the caller's own undo step — Swift applies this as its own separate undo
+  // entry (applyTimelineSettings' default "Change Project Settings" action name) outside the
+  // add_clips/insert_clips/apply_layout undo group.
+  command: Command | null;
+  // Prefix onto the tool's result text ahead of everything else (Swift: settingsNote + " " + rest).
+  note: string | null;
+}
+
+/**
+ * Ported from Swift's checkProjectSettings(adoptFPS: false) + applySettingsIfNeededForAgent
+ * (EditorViewModel+ProjectSettings.swift / ToolExecutor+ProjectSettings.swift, post-#233 standing
+ * rule): the agent's add_clips/insert_clips/apply_layout paths auto-match the timeline's
+ * RESOLUTION to the first VIDEO asset among the ones being placed — fps is NEVER adopted here.
+ * No even-rounding: Swift's checkProjectSettings uses the clip's sourceWidth/sourceHeight verbatim
+ * (evenness is a render/export-canvas concern elsewhere — Matte.swift/TimelineRenderer.swift — not
+ * part of this adoption path).
+ *
+ * `orderedAssets` must be in the exact order Swift scans for "the first video asset": add_clips /
+ * insert_clips use the caller's entry order; apply_layout uses the layout's canonical slot order
+ * (not the caller's slot order) — see ToolExecutor+Layout.swift's `layout.slots.compactMap`.
+ */
+export function planAgentResolutionAdoption(
+  timeline: Timeline,
+  manifest: MediaManifest,
+  orderedAssets: MediaManifestEntry[],
+): AgentResolutionAdoption {
+  const firstVideo = orderedAssets.find((a) => a.type === "video");
+  if (!firstVideo) return { command: null, note: null };
+
+  const wasConfigured = timeline.settingsConfigured;
+  const timelineIsEmpty = timeline.tracks.every((t) => t.clips.length === 0);
+
+  let targetWidth = timeline.width;
+  let targetHeight = timeline.height;
+  let shouldApply = false;
+
+  if (!wasConfigured) {
+    // First clip ever — auto-detect settings silently, unconditionally (even a no-op resolution
+    // still needs to flip settingsConfigured to true).
+    targetWidth = firstVideo.sourceWidth ?? timeline.width;
+    targetHeight = firstVideo.sourceHeight ?? timeline.height;
+    shouldApply = true;
+  } else if (timelineIsEmpty) {
+    // Settings were configured before, but every clip is gone — treat like a fresh mismatch check.
+    const clipWidth = firstVideo.sourceWidth;
+    const clipHeight = firstVideo.sourceHeight;
+    const resMismatch =
+      (clipWidth !== undefined && clipWidth !== timeline.width) ||
+      (clipHeight !== undefined && clipHeight !== timeline.height);
+    if (resMismatch) {
+      targetWidth = clipWidth ?? timeline.width;
+      targetHeight = clipHeight ?? timeline.height;
+      shouldApply = true;
+    }
+  }
+
+  let command: Command | null = null;
+  let note: string | null = null;
+  if (shouldApply) {
+    command = applyTimelineSettingsCommand(timeline.fps, targetWidth, targetHeight, manifest);
+    if (targetWidth !== timeline.width || targetHeight !== timeline.height) {
+      note = wasConfigured
+        ? `Matched timeline resolution to clip: ${targetWidth}×${targetHeight}.`
+        : `Set timeline to ${targetWidth}×${targetHeight} to match clip.`;
+    }
+  }
+
+  const clipFPS = firstVideo.sourceFPS !== undefined ? Math.round(firstVideo.sourceFPS) : undefined;
+  if (clipFPS !== undefined && clipFPS !== timeline.fps) {
+    const fpsNote =
+      `Clip is ${clipFPS}fps but project is ${timeline.fps}fps; clips placed at ${timeline.fps}fps and frame ` +
+      `counts are interpreted at ${timeline.fps}fps. To conform, call set_project_settings then re-read get_timeline.`;
+    note = note ? `${note} ${fpsNote}` : fpsNote;
+  }
+
+  return { command, note };
 }

@@ -8,6 +8,7 @@ import {
   videoLayouts,
   layoutAnchors,
   layoutPlacement,
+  planAgentResolutionAdoption,
   LAYOUT_IDS,
   type LayoutFit,
   type LayoutSlot,
@@ -18,9 +19,9 @@ import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
 // Ported from Swift ToolExecutor+Layout.swift's `applyLayout` + the `apply_layout` ToolDefinitions
-// entry (#226). Validation order, error text, and the result summary follow Swift verbatim. One
-// delta from Swift: TS's add_clips has no settings-adoption step (checkProjectSettings isn't ported
-// yet), so placement mode here doesn't attempt one either — no settings-note prefix.
+// entry (#226). Validation order, error text, and the result summary follow Swift verbatim. The
+// media-placement mode inherits M14C T2's resolution auto-match (planAgentResolutionAdoption) via
+// the layout's canonical slot order, same as Swift's `layout.slots.compactMap`.
 
 const slotEntrySchema = z.object({
   slot: z.string(),
@@ -203,9 +204,33 @@ export function applyLayoutTool(): ToolSpec {
         }
       }
 
+      // Resolution auto-match (#233 standing rule: fps is never adopted here) — a separate undo
+      // step ahead of the layout, mirroring Swift's applySettingsIfNeededForAgent. Asset order is
+      // the layout's canonical slot order (not the caller's slot order), matching Swift's
+      // `layout.slots.compactMap { assetBySlot[$0.id] }`.
+      let settingsNote: string | null = null;
+      let effTl = tl;
+      let effFps = fps;
+      let effCanvasW = canvasW;
+      let effCanvasH = canvasH;
+      if (usesMedia) {
+        const orderedAssets = layoutSlots
+          .map((s) => assetBySlot.get(s.id))
+          .filter((e): e is MediaManifestEntry => e !== undefined);
+        const adoption = planAgentResolutionAdoption(tl, manifest, orderedAssets);
+        if (adoption.command) {
+          ctx.store.dispatch(adoption.command);
+          effTl = ctx.store.getSnapshot().timeline;
+          effFps = effTl.fps;
+          effCanvasW = effTl.width;
+          effCanvasH = effTl.height;
+        }
+        settingsNote = adoption.note;
+      }
+
       // --- mutation (validated above; everything below is a single undo step) ---
 
-      const tracksBefore = new Set(tl.tracks.map((t) => t.id));
+      const tracksBefore = new Set(effTl.tracks.map((t) => t.id));
       const reducers: ((t: Timeline) => Timeline)[] = [];
       const summaries: string[] = [];
       const clipsBySlot = new Map<string, string[]>();
@@ -239,7 +264,7 @@ export function applyLayoutTool(): ToolSpec {
             const seq = shouldLink ? [videoClipId, linkGroupId!, audioClipId!, audioTrackId!] : [videoClipId];
             let n = 0;
             const genId = () => seq[n++] ?? crypto.randomUUID();
-            const cmd = addClipCommand(assetEntry, { kind: "existing", index: idx }, startFrame, fps, undefined, genId, duration);
+            const cmd = addClipCommand(assetEntry, { kind: "existing", index: idx }, startFrame, effFps, undefined, genId, duration);
             return cmd.apply(t);
           });
         }
@@ -259,7 +284,7 @@ export function applyLayoutTool(): ToolSpec {
             const srcEntry = manifest.entries.find((en) => en.id === clip.mediaRef);
             const sourceW = srcEntry?.sourceWidth ?? 0;
             const sourceH = srcEntry?.sourceHeight ?? 0;
-            const placement = layoutPlacement(sourceW, sourceH, e.slot, canvasW, canvasH, fit, e.anchor.x, e.anchor.y);
+            const placement = layoutPlacement(sourceW, sourceH, e.slot, effCanvasW, effCanvasH, fit, e.anchor.x, e.anchor.y);
             return replaceClip(t, cid, (c) => ({
               ...c,
               transform: placement.transform,
@@ -283,6 +308,7 @@ export function applyLayoutTool(): ToolSpec {
 
       let prefix = "";
       if (createdTracks.length > 0) prefix += `Created ${createdTracks.join(", ")}. `;
+      if (settingsNote) prefix = `${settingsNote} ${prefix}`;
       const span = usesMedia ? ` at frame ${startFrame} for ${duration}` : " on existing clips";
       const tail = usesMedia ? "" : " Stacking follows current track order; reorder tracks if a PIP inset isn't on top.";
       return ok(`${prefix}Applied '${a.layout}' layout (${fit})${span}: ${summaries.join("; ")}.${tail}`);

@@ -1435,6 +1435,29 @@ ipcMain.handle("media:importCopy", (_e, dir, absPath, relPath) => {
   return { ok: true };
 });
 
+// .cube LUT persistence (M14C T2, apply_color's lut.path): unlike importCopy/importScan this reads
+// an ARBITRARY absolute path (not scoped to a project dir) — gated to .cube only, size-capped.
+const LUT_MAX_BYTES = 64 * 1024 * 1024;
+
+ipcMain.handle("media:readLocalFile", async (_e, absPath) => {
+  const ext = importExt(absPath);
+  if (ext !== "cube") return { error: "unsupported file extension: ." + ext };
+  let stat;
+  try {
+    stat = await fs.promises.stat(absPath);
+  } catch {
+    return { error: "path not found: " + absPath };
+  }
+  if (!stat.isFile()) return { error: "not a file: " + absPath };
+  if (stat.size > LUT_MAX_BYTES) return { error: "file too large (max " + (LUT_MAX_BYTES / (1024 * 1024)) + "MB)" };
+  try {
+    const buf = await fs.promises.readFile(absPath);
+    return { bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+  } catch (e) {
+    return { error: "read failed: " + e.message };
+  }
+});
+
 ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
   assertAuthorized(dir);
   const ext = importExt(relPath);

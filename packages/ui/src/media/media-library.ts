@@ -113,6 +113,39 @@ export class MediaLibrary {
     }
   }
 
+  // .cube LUT project persistence (M14C T2, the Swift LUTLoader.store pattern): stores bytes at
+  // luts/<filename> via the same writeDerived/pending-persist flow as transcripts, with a
+  // unique-suffix on a NAME collision (checked against both pending bytes and the saved gateway —
+  // content is not compared, only the name). Returns the stored project-relative path.
+  async storeLut(filename: string, bytes: Uint8Array): Promise<string> {
+    const relativePath = await this.reserveLutPath(filename);
+    this.writeDerived(relativePath, bytes);
+    return relativePath;
+  }
+
+  private async lutPathTaken(relativePath: string): Promise<boolean> {
+    if (this._bytes.has(relativePath)) return true;
+    if (!this._gateway) return false;
+    try {
+      return await this._gateway.hasMedia(relativePath);
+    } catch {
+      return false;
+    }
+  }
+
+  private async reserveLutPath(filename: string): Promise<string> {
+    const dot = filename.lastIndexOf(".");
+    const base = dot > 0 ? filename.slice(0, dot) : filename;
+    const ext = dot > 0 ? filename.slice(dot) : "";
+    let candidate = `luts/${filename}`;
+    let n = 2;
+    while (await this.lutPathTaken(candidate)) {
+      candidate = `luts/${base}-${n}${ext}`;
+      n++;
+    }
+    return candidate;
+  }
+
   get byteSource(): MediaByteSource {
     return {
       open: async (ref: string) => {

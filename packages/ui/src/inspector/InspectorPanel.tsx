@@ -30,6 +30,8 @@ import { computeFrameHistograms } from "./adjust/frame-histogram.js";
 
 interface MediaLibraryLike {
   entry(id: string): MediaManifestEntry | undefined;
+  // .cube project persistence (M14C T2) — see LUTSection's `library` prop.
+  storeLut?(filename: string, bytes: Uint8Array): Promise<string>;
 }
 
 export interface InspectorPanelProps {
@@ -56,6 +58,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
   const selection = useStore(store, (s) => s.selection);
   const playhead = useStore(store, (s) => s.playhead);
   const timeline = useStore(store, (s) => s.timeline);
+  const lutLibrary = library?.storeLut ? { storeLut: library.storeLut.bind(library) } : undefined;
 
   const [histogram, setHistogram] = useState<Histogram | undefined>(undefined);
   const [hueHistogram, setHueHistogram] = useState<number[] | undefined>(undefined);
@@ -121,7 +124,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
           <CurvesSection store={store} clipIds={selIds} histogram={histogram} />
           <ColorWheelsSection store={store} clipIds={selIds} />
           <HueCurvesSection store={store} clipIds={selIds} hueHistogram={hueHistogram} />
-          <LUTSection store={store} clipIds={selIds} engineRef={engineRef} />
+          <LUTSection store={store} clipIds={selIds} engineRef={engineRef} library={lutLibrary} />
           <EffectsSection store={store} clipIds={selIds} />
           <BlendControl store={store} clipIds={selIds} />
         </div>
@@ -423,7 +426,7 @@ export function InspectorPanel({ store, library, engineRef }: InspectorPanelProp
 
       {/* LUT */}
       {isVisual && !isText && (
-        <LUTSection store={store} clipIds={[clipId]} engineRef={engineRef} />
+        <LUTSection store={store} clipIds={[clipId]} engineRef={engineRef} library={lutLibrary} />
       )}
 
       {/* Effects */}

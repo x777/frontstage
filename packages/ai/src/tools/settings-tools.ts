@@ -9,11 +9,9 @@ import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 
 // Ported from Swift ToolExecutor+ProjectSettings.swift's `setProjectSettings` (#177). Validation
-// order and messages are Swift-verbatim. #233 note (report-bound, not ported here): Swift's
-// add_clips/insert_clips auto-match resolution (not fps) to the first clip when the timeline is
-// empty/unconfigured — TS's add_clips has no adoption step at all yet (see layout-tools.ts), so
-// there is nothing to align there besides the already-true fps exception this tool enforces: fps
-// changes ONLY from this tool's explicit `fps` argument, never implicitly.
+// order and messages are Swift-verbatim. fps changes ONLY from this tool's explicit `fps`
+// argument, never implicitly — add_clips/insert_clips/apply_layout's own resolution-only
+// auto-match (M14C T2, planAgentResolutionAdoption) never touches fps either (#233).
 
 const ASPECT_RATIO_NAMES = "16:9, 9:16, 1:1, 4:3, 2.4:1, 9:14";
 const QUALITY_NAMES = "720p, 1080p, 2K, 4K";
@@ -99,7 +97,7 @@ export function setProjectSettingsTool(): ToolSpec {
       const prevHeight = tl.height;
 
       const manifest = ctx.getManifest();
-      const cmd = applyTimelineSettingsCommand(newFPS, newWidth, newHeight, manifest);
+      const cmd = applyTimelineSettingsCommand(newFPS, newWidth, newHeight, manifest, "Set Project Settings (Agent)");
       ctx.store.dispatch(cmd);
 
       // Swift also rescales the playhead on fps change; it's outside the undo step there too.

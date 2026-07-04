@@ -32,6 +32,7 @@ import { DesktopAiGateway } from "./desktop-ai-gateway.js";
 import { DesktopGenGateway } from "./desktop-gen-gateway.js";
 import { makeDesktopAudioExtractor } from "./desktop-audio-extract.js";
 import { createDesktopMediaImport } from "./desktop-media-import.js";
+import { createDesktopLut } from "./desktop-lut.js";
 import { createDesktopInteropExport } from "./desktop-interop-export.js";
 import type { PlaybackEngine } from "@palmier/engine";
 
@@ -278,6 +279,7 @@ const toolContext: ToolContext = {
   mediaImport: mediaImportFacade,
   interopExport: interopExportFacade,
   projectName: () => session.getState().name,
+  lut: createDesktopLut(library),
 };
 // In-app agent: 39 tools, never the project-nav ones (see buildCatalog's "inApp" default).
 const executor = new ToolExecutor(buildCatalog(), toolContext);

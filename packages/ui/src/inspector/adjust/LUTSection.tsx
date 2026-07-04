@@ -22,9 +22,13 @@ export interface LUTSectionProps {
   store: EditorStore;
   clipIds: string[];
   engineRef?: { current: { registerLUT(path: string, cube: CubeLUT): void } | null };
+  // .cube project persistence (M14C T2): when present, a picked file's bytes are stored into the
+  // project (luts/<name>, unique-suffix on collision) and the STORED path is what gets referenced
+  // and registered — absent, falls back to the bare filename (pre-M14C behavior).
+  library?: { storeLut(filename: string, bytes: Uint8Array): Promise<string> };
 }
 
-export function LUTSection({ store, clipIds, engineRef }: LUTSectionProps) {
+export function LUTSection({ store, clipIds, engineRef, library }: LUTSectionProps) {
   const [expanded, setExpanded] = useState(false);
   const [parseError, setParseError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,13 +71,17 @@ export function LUTSection({ store, clipIds, engineRef }: LUTSectionProps) {
         if (fileInputRef.current) fileInputRef.current.value = ""; // allow re-picking the same file
         return;
       }
-      engineRef?.current?.registerLUT(file.name, cube);
-      store.dispatch(
-        setClipEffectsCommand(
-          clipIds,
-          (c) => setEffectString(c.effects, LUT_TYPE, "path", file.name, () => crypto.randomUUID()),
-        ),
-      );
+      const persistAndApply = async () => {
+        const path = library ? await library.storeLut(file.name, new TextEncoder().encode(text)) : file.name;
+        engineRef?.current?.registerLUT(path, cube);
+        store.dispatch(
+          setClipEffectsCommand(
+            clipIds,
+            (c) => setEffectString(c.effects, LUT_TYPE, "path", path, () => crypto.randomUUID()),
+          ),
+        );
+      };
+      void persistAndApply();
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
     reader.readAsText(file);

@@ -72,6 +72,17 @@ export interface ToolContext {
     // hosts wire this from @palmier/ui's renderMattePng. Absent -> create_matte errors cleanly.
     renderMatte?(hex: string, width: number, height: number): Promise<Uint8Array>;
   };
+  // .cube LUT project persistence (M14C T2, the Swift LUTLoader.store pattern) backing
+  // apply_color's lut.path — mirrors the inspector's LUTSection picker so both paths store the
+  // bytes the same way (luts/<name>, unique-suffix on collision) and reference the stored
+  // project-relative path in the effect param.
+  lut?: {
+    // Always available once a project's open (rides the library's writeDerived/pending-persist
+    // flow — cross-platform, no host-specific I/O). Returns the stored project-relative path.
+    store(filename: string, bytes: Uint8Array): Promise<string>;
+    // Desktop only (mirrors mediaImport.fromPath): reads bytes from an absolute local .cube path.
+    readLocalFile?(absPath: string): Promise<Uint8Array>;
+  };
   // Timeline interchange export facade (XMEML/FCPXML, + M14A T1's SRT/VTT) backing export_project —
   // the SAME object is also threaded into the UI's export command, so the agent tool and the File
   // menu share one save/timecode path per host.

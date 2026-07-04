@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, type FrameRange, type RippleInsertSpec } from "@palmier/core";
+import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, planAgentResolutionAdoption, type FrameRange, type RippleInsertSpec } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -95,6 +95,11 @@ export function insertClipsTool(): ToolSpec {
         specs.push({ entry, durationFrames: place.duration, trimStartFrame: place.trimStart, trimEndFrame: place.trimEnd });
       }
 
+      // Resolution auto-match (#233 standing rule: fps is never adopted here) — a separate undo
+      // step ahead of the insert, mirroring Swift's applySettingsIfNeededForAgent.
+      const adoption = planAgentResolutionAdoption(tl, manifest, specs.map((s) => s.entry));
+      if (adoption.command) ctx.store.dispatch(adoption.command);
+
       const base = ctx.newId();
       const ti = a.trackIndex;
       const at = a.atFrame;
@@ -104,7 +109,8 @@ export function insertClipsTool(): ToolSpec {
         return rippleInsertClipsSpecs(t, specs, ti, at, fps, detId).timeline;
       }]);
 
-      return ok(`Inserted ${specs.length} clip(s) at frame ${at} on track ${ti} (ripple).`);
+      const prefix = adoption.note ? `${adoption.note} ` : "";
+      return ok(`${prefix}Inserted ${specs.length} clip(s) at frame ${at} on track ${ti} (ripple).`);
     },
   };
 }

@@ -71,5 +71,5 @@ export { CONFIRM_THRESHOLD_STORAGE_KEY, DEFAULT_CONFIRM_THRESHOLD, readConfirmTh
 export { ModelPicker } from "./agent/ModelPicker.js";
 export type { ModelPickerProps } from "./agent/ModelPicker.js";
 export { localProjectStore } from "./storage/local-project-store.js";
-export { Select, BlendControl, AdjustSlider, ScrubbableNumberField, AdjustSection, AdjustmentRow, adjustmentRow, ColorWheelPad, ColorWheelControl, ColorWheelsSection, CurveEditor, CurvesSection, EffectsSection, LUTSection } from "./inspector/adjust/index.js";
+export { Select, BlendControl, AdjustSlider, ScrubbableNumberField, AdjustSection, AdjustmentRow, adjustmentRow, ColorWheelPad, ColorWheelControl, ColorWheelsSection, CurveEditor, CurvesSection, EffectsSection, LUTSection, LutReconciler } from "./inspector/adjust/index.js";
 export type { SelectProps, BlendControlProps, AdjustSliderProps, ScrubbableNumberFieldProps, AdjustSectionProps, AdjustmentRowProps, ColorWheelPadProps, ColorWheelControlProps, ColorWheelsSectionProps, CurveEditorProps, CurvesSectionProps, EffectsSectionProps, LUTSectionProps } from "./inspector/adjust/index.js";

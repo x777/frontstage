@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { EditorStore, GenerationLogEntry, MediaFolder, MediaManifestEntry, ProjectRef } from "@palmier/core";
+import type { CubeLUT, EditorStore, GenerationLogEntry, MediaFolder, MediaManifestEntry, ProjectRef } from "@palmier/core";
 import type { ProjectSession } from "@palmier/core";
 import type { AgentSession, ChatSessionStore, ModelEntry, ToolContext } from "@palmier/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
@@ -28,6 +28,7 @@ import type { MediaIndexingFacade } from "../media/MediaPanel.js";
 import { MediaDragController } from "../media/media-drag.js";
 import { FOLDER_DROP_ROOT } from "../media/FolderTile.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
+import { LutReconciler } from "../inspector/adjust/lut-reconciler.js";
 import { FileMenu } from "./FileMenu.js";
 import { AgentPanel } from "../agent/AgentPanel.js";
 import { GenerationPanel } from "../agent/GenerationPanel.js";
@@ -50,6 +51,10 @@ export interface EditorLibrary {
   deleteFolders(folderIds: string[]): { removedAssetIds: string[] };
   moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void;
   moveFolderToFolder(folderId: string, targetId: string | undefined): void;
+  // .cube project persistence (M14C T2) — both optional so hosts/tests that predate this still
+  // typecheck unmodified; the real MediaLibrary implements both.
+  storeLut?(filename: string, bytes: Uint8Array): Promise<string>;
+  readDerived?(relativePath: string): Promise<Uint8Array | null>;
 }
 
 export interface EditorProps {
@@ -248,6 +253,25 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
   useEffect(() => {
     return store.subscribe(() => persistLayout(store));
   }, [store]);
+
+  // LUT auto re-register (M14C T2): after a project load (or an agent apply_color pick), the
+  // engine's per-path texture cache is empty until the bytes are re-read/re-parsed — no re-pick
+  // needed. engineRef.current may not be ready yet on the first store notification; reconcile()
+  // no-ops until it is, and the very frequent playhead-change notifications during playback (or
+  // any other edit) give it plenty of chances to catch up once the engine finishes initializing.
+  const lutReconciler = useMemo(() => new LutReconciler(), [store]);
+  useEffect(() => {
+    if (!library.readDerived) return;
+    const readDerived = library.readDerived.bind(library);
+    const run = () => {
+      const registerLUT = engineRef?.current
+        ? (path: string, cube: CubeLUT) => engineRef.current!.registerLUT(path, cube)
+        : undefined;
+      lutReconciler.reconcile(store.getSnapshot().timeline, readDerived, registerLUT);
+    };
+    run();
+    return store.subscribe(run);
+  }, [store, library, engineRef, lutReconciler]);
 
   useEffect(() => {
     let listenersAttached = false;

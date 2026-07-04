@@ -6,6 +6,7 @@ import {
   computeScopes,
   scopesGap,
   effectDescriptor,
+  parseCubeLUT,
   type ApplyColorInput,
   type Effect,
   type Timeline,
@@ -16,6 +17,10 @@ import { ok, errorResult, asUndoStep } from "./executor.js";
 const numPair = z.array(z.tuple([z.number(), z.number()]));
 
 const withStack = (s: Effect[]): Effect[] | undefined => (s.length ? s : undefined);
+
+function basename(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
 
 export function applyColorTool(): ToolSpec {
   return {
@@ -62,25 +67,47 @@ export function applyColorTool(): ToolSpec {
         .optional(),
       lut: z.object({ path: z.string().optional(), strength: z.number().optional() }).optional(),
     }),
-    run(args, ctx) {
+    async run(args, ctx) {
       const input = args as ApplyColorInput;
       const tl = ctx.store.getSnapshot().timeline;
       for (const id of input.clipIds) {
         if (!findClip(tl, id)) return errorResult(`unknown clip: ${id}`);
       }
+
+      // .cube persistence (M14C T2, the Swift LUTLoader.store pattern): the raw path is a local
+      // file path the agent was given — read it, validate it, copy it into the project (luts/<name>,
+      // unique-suffix on collision), and reference the STORED project-relative path from here on.
+      let effectiveInput = input;
+      if (input.lut?.path) {
+        if (!ctx.lut) return errorResult("apply_color: LUT storage is not available in this context");
+        if (!ctx.lut.readLocalFile) {
+          return errorResult("apply_color: reading a local .cube path is not available on web");
+        }
+        let bytes: Uint8Array;
+        try {
+          bytes = await ctx.lut.readLocalFile(input.lut.path);
+        } catch {
+          return errorResult(`No file at path: ${input.lut.path}`);
+        }
+        const cube = parseCubeLUT(new TextDecoder().decode(bytes));
+        if (!cube) return errorResult(`Not a valid .cube 3D LUT: ${basename(input.lut.path)}`);
+        const relativePath = await ctx.lut.store(basename(input.lut.path), bytes);
+        effectiveInput = { ...input, lut: { ...input.lut, path: relativePath } };
+      }
+
       const reducer = (t: Timeline): Timeline => ({
         ...t,
         tracks: t.tracks.map((tr) => ({
           ...tr,
           clips: tr.clips.map((c) =>
-            input.clipIds.includes(c.id)
-              ? { ...c, effects: withStack(buildColorStack(c.effects, input, ctx.newId)) }
+            effectiveInput.clipIds.includes(c.id)
+              ? { ...c, effects: withStack(buildColorStack(c.effects, effectiveInput, ctx.newId)) }
               : c,
           ),
         })),
       });
       asUndoStep(ctx.store, "Color Grade (Agent)", [reducer]);
-      return ok(`Applied color grade to ${input.clipIds.length} clip(s).`);
+      return ok(`Applied color grade to ${effectiveInput.clipIds.length} clip(s).`);
     },
   };
 }

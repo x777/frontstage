@@ -349,6 +349,47 @@ describe("apply_layout — placement mode", () => {
     expect(store.getSnapshot().timeline).toEqual(before);
     expect(store.canUndo()).toBe(false);
   });
+
+  // M14C T2: apply_layout's media-placement mode inherits the shared resolution auto-match — via
+  // the layout's CANONICAL slot order (left, right), not the caller's slots-array order.
+  test("adopts resolution from the layout's canonical slot order on an unconfigured timeline; fps untouched", async () => {
+    const manifest = manifestOf(
+      assetEntry("a", { sourceWidth: 3840, sourceHeight: 2160, sourceFPS: 24 }),
+      assetEntry("b", { sourceWidth: 640, sourceHeight: 480 }),
+    );
+    // settingsConfigured: false (unconfigured) — side_by_side's canonical order is left, right.
+    const store = new EditorStore({ ...timeline([]), settingsConfigured: false });
+    const ctx = makeCtx(store, manifest);
+    // Caller lists "right" (asset b) before "left" (asset a) — canonical order must still win.
+    const r = await spec.run(
+      { layout: "side_by_side", durationFrames: 60, slots: [{ slot: "right", mediaRef: "b" }, { slot: "left", mediaRef: "a" }] },
+      ctx,
+    );
+    expect(r.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    expect(tl.width).toBe(3840);
+    expect(tl.height).toBe(2160);
+    expect(tl.fps).toBe(30);
+    expect(tl.settingsConfigured).toBe(true);
+    const text = r.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("Set timeline to 3840×2160 to match clip.");
+  });
+
+  test("configured timeline with existing clips: apply_layout placement does not adopt resolution", async () => {
+    const manifest = manifestOf(assetEntry("a", { sourceWidth: 3840, sourceHeight: 2160 }), assetEntry("b"), assetEntry("z"));
+    // Non-empty (an unrelated existing clip) + settingsConfigured: true -> checkProjectSettings
+    // short-circuits to .proceed before ever looking at resolution.
+    const store = new EditorStore(timeline([track("existing", [baseClip("keep", { mediaRef: "z" })])]));
+    const ctx = makeCtx(store, manifest);
+    const r = await spec.run(
+      { layout: "side_by_side", durationFrames: 60, slots: [{ slot: "left", mediaRef: "a" }, { slot: "right", mediaRef: "b" }] },
+      ctx,
+    );
+    expect(r.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    expect(tl.width).toBe(1920);
+    expect(tl.height).toBe(1080);
+  });
 });
 
 // ── re-layout mode ───────────────────────────────────────────────────────────

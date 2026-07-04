@@ -80,6 +80,32 @@ test("LUTSection: file pick calls registerLUT and dispatches color.lut path to s
   expect(effect?.params["path"]?.string).toBe("test.cube");
 });
 
+test("LUTSection: with a library, stores bytes at the project-relative path and uses THAT path for the effect + registerLUT", async () => {
+  const registerLUT = vi.fn();
+  const engineRef = { current: { registerLUT } };
+  const store = new EditorStore(makeTimeline([makeClip("c1")]));
+  const storeLut = vi.fn(async (filename: string) => `luts/${filename}`);
+  const library = { storeLut };
+
+  render(<LUTSection store={store} clipIds={["c1"]} engineRef={engineRef} library={library} />);
+  act(() => { fireEvent.click(screen.getByTestId("adjust-section-LUTs")); });
+
+  const file = new File([CUBE_TEXT], "test.cube", { type: "text/plain" });
+  const input = screen.getByTestId("lut-file-input");
+  act(() => { pickFile(input, file); });
+
+  await waitFor(() => { expect(registerLUT).toHaveBeenCalledTimes(1); });
+
+  expect(storeLut).toHaveBeenCalledTimes(1);
+  expect(storeLut.mock.calls[0]![0]).toBe("test.cube");
+  const [calledPath] = registerLUT.mock.calls[0] as [string, CubeLUT];
+  expect(calledPath).toBe("luts/test.cube");
+
+  const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  const effect = clip.effects?.find((e) => e.type === "color.lut");
+  expect(effect?.params["path"]?.string).toBe("luts/test.cube");
+});
+
 test("LUTSection: intensity slider ArrowRight increases intensity when LUT is loaded", () => {
   const store = new EditorStore(makeTimeline([makeClip("c1", {
     effects: [{ id: "e1", type: "color.lut", enabled: true, params: { path: { string: "test.cube" }, intensity: { value: 0.5 } } }],

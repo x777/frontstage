@@ -353,6 +353,9 @@ async function bootstrap() {
     mediaImport: mediaImportFacade,
     interopExport: interopExportFacade,
     projectName: () => session.getState().name,
+    // .cube LUT persistence (M14C T2): store() is cross-platform; readLocalFile is desktop-only
+    // (no arbitrary local-path fs access in a browser) — apply_color's lut.path errors cleanly here.
+    lut: { store: (filename, bytes) => library.storeLut(filename, bytes) },
   });
   const agentSession = new AgentSession({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

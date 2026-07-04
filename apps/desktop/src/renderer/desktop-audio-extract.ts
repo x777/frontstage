@@ -26,6 +26,10 @@ interface DesktopMediaBridge {
   // Timeline interchange export (M12B T3) — batched ffprobe timecode reads; missing paths are
   // simply absent from the result (0-based export), never an error.
   readTimecode(paths: string[]): Promise<Record<string, RawTimecodeProbe>>;
+  // .cube LUT persistence (M14C T2) — reads an ARBITRARY absolute local path (not project-scoped,
+  // unlike importCopy/importScan), so apply_color's lut.path can be validated/parsed in the
+  // renderer before it's stored into the project via the library's writeDerived flow.
+  readLocalFile(absPath: string): Promise<{ bytes: ArrayBuffer } | { error: string }>;
 }
 
 declare global {

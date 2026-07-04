@@ -30,4 +30,5 @@ export { EffectsSection } from "./EffectsSection.js";
 export type { EffectsSectionProps } from "./EffectsSection.js";
 export { LUTSection } from "./LUTSection.js";
 export type { LUTSectionProps } from "./LUTSection.js";
+export { LutReconciler } from "./lut-reconciler.js";
 export { computeFrameHistogram, computeFrameHistograms } from "./frame-histogram.js";

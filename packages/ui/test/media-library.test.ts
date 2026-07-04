@@ -297,6 +297,59 @@ test("readDerived: null when the gateway rejects (e.g. file not found)", async (
   await expect(lib.readDerived("media/missing.transcript.json")).resolves.toBeNull();
 });
 
+// ── storeLut (M14C T2) ────────────────────────────────────────────────────────
+
+test("storeLut: writes bytes at luts/<filename> (pending-persist) and returns that path", async () => {
+  const lib = new MediaLibrary();
+  const bytes = new Uint8Array([1, 2, 3]);
+
+  const relativePath = await lib.storeLut("Rec709.cube", bytes);
+
+  expect(relativePath).toBe("luts/Rec709.cube");
+  expect(lib.pendingMedia().get("luts/Rec709.cube")).toEqual(bytes);
+});
+
+test("storeLut: a name collision (in-memory) gets a unique -2 suffix", async () => {
+  const lib = new MediaLibrary();
+  const first = await lib.storeLut("Rec709.cube", new Uint8Array([1]));
+  const second = await lib.storeLut("Rec709.cube", new Uint8Array([2]));
+
+  expect(first).toBe("luts/Rec709.cube");
+  expect(second).toBe("luts/Rec709-2.cube");
+  expect(lib.pendingMedia().get("luts/Rec709.cube")).toEqual(new Uint8Array([1]));
+  expect(lib.pendingMedia().get("luts/Rec709-2.cube")).toEqual(new Uint8Array([2]));
+});
+
+test("storeLut: a THIRD collision keeps incrementing (-2 taken -> -3)", async () => {
+  const lib = new MediaLibrary();
+  await lib.storeLut("Rec709.cube", new Uint8Array([1]));
+  await lib.storeLut("Rec709.cube", new Uint8Array([2]));
+  const third = await lib.storeLut("Rec709.cube", new Uint8Array([3]));
+
+  expect(third).toBe("luts/Rec709-3.cube");
+});
+
+test("storeLut: an already-saved gateway path also counts as taken", async () => {
+  const lib = new MediaLibrary();
+  lib.setGateway({
+    writeMedia: async () => {},
+    readMedia: async () => { throw new Error("not found"); },
+    hasMedia: async (rel) => rel === "luts/Rec709.cube",
+  });
+
+  const path = await lib.storeLut("Rec709.cube", new Uint8Array([1]));
+
+  expect(path).toBe("luts/Rec709-2.cube");
+});
+
+test("storeLut: no extension in the filename still suffixes correctly", async () => {
+  const lib = new MediaLibrary();
+  await lib.storeLut("noext", new Uint8Array([1]));
+  const second = await lib.storeLut("noext", new Uint8Array([2]));
+
+  expect(second).toBe("luts/noext-2");
+});
+
 // ── folder / entry ops (T2) ─────────────────────────────────────────────────
 
 test("createFolder: appends a folder at root and emits", () => {

@@ -133,4 +133,52 @@ describe("insert_clips", () => {
     const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", trimStartFrame: 50, durationFrames: 20 }] }, c); // 50+20 > 60
     expect(res.isError).toBe(true);
   });
+
+  // M14C T2: insert_clips inherits the shared resolution auto-match (add_clips' path) — fps is
+  // never adopted (#233 standing rule).
+  test("adopts the first clip's resolution on an unconfigured timeline; fps untouched", async () => {
+    let n = 0;
+    const c: ToolContext = {
+      store: new EditorStore(tl([track("t", [])])), // defaultTimeline() -> settingsConfigured: false
+      getManifest: () => ({
+        version: 2,
+        entries: [{
+          id: "m1", name: "v.mp4", type: "video", source: { kind: "external", absolutePath: "/v.mp4" },
+          duration: 2, sourceWidth: 3840, sourceHeight: 2160, sourceFPS: 24,
+        }],
+        folders: [],
+      }),
+      newId: () => `id-${n++}`,
+    };
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", durationFrames: 20 }] }, c);
+    expect(res.isError).toBe(false);
+    const finalTl = c.store.getSnapshot().timeline;
+    expect(finalTl.width).toBe(3840);
+    expect(finalTl.height).toBe(2160);
+    expect(finalTl.fps).toBe(30);
+    expect(finalTl.settingsConfigured).toBe(true);
+    const text = res.blocks.map((b) => (b.kind === "text" ? b.text : "")).join("");
+    expect(text).toContain("Set timeline to 3840×2160 to match clip.");
+  });
+
+  test("configured timeline with existing clips: resolution stays untouched even when a new clip's source differs", async () => {
+    let n = 0;
+    const c: ToolContext = {
+      store: new EditorStore({ ...tl([track("t", [makeClip("old", 0, 30)])]), settingsConfigured: true }),
+      getManifest: () => ({
+        version: 2,
+        entries: [{
+          id: "m1", name: "v.mp4", type: "video", source: { kind: "external", absolutePath: "/v.mp4" },
+          duration: 2, sourceWidth: 3840, sourceHeight: 2160,
+        }],
+        folders: [],
+      }),
+      newId: () => `id-${n++}`,
+    };
+    const res = await insertClipsTool().run({ trackIndex: 0, atFrame: 0, clips: [{ mediaId: "m1", durationFrames: 20 }] }, c);
+    expect(res.isError).toBe(false);
+    const finalTl = c.store.getSnapshot().timeline;
+    expect(finalTl.width).toBe(1920);
+    expect(finalTl.height).toBe(1080);
+  });
 });

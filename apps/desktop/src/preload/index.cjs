@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld("desktopMedia", {
   importCopy: (dir, absPath, relPath) => ipcRenderer.invoke("media:importCopy", dir, absPath, relPath),
   importDownload: (dir, url, relPath) => ipcRenderer.invoke("media:importDownload", dir, url, relPath),
   readTimecode: (paths) => ipcRenderer.invoke("media:readTimecode", paths),
+  readLocalFile: (absPath) => ipcRenderer.invoke("media:readLocalFile", absPath),
 });
 
 contextBridge.exposeInMainWorld("desktopMcp", {

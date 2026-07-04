@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame } from "@palmier/core";
+import { findClip, addClipCommand, moveClipCommand, splitClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption } from "@palmier/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -37,6 +37,11 @@ export function addClipsTool(): ToolSpec {
         entries.push({ entry, trackIndex: c.trackIndex, startFrame: c.startFrame });
       }
 
+      // Resolution auto-match (#233 standing rule: fps is never adopted here) — a separate undo
+      // step ahead of the add, mirroring Swift's applySettingsIfNeededForAgent/checkProjectSettings.
+      const adoption = planAgentResolutionAdoption(tl, manifest, entries.map((e) => e.entry));
+      if (adoption.command) ctx.store.dispatch(adoption.command);
+
       const newIds: string[] = [];
       const commands = entries.map(({ entry, trackIndex, startFrame }) => {
         const target =
@@ -50,7 +55,8 @@ export function addClipsTool(): ToolSpec {
 
       asUndoStep(ctx.store, "Add Clips", commands.map((cmd) => cmd.apply.bind(cmd)));
 
-      return ok(`Added ${newIds.length} clip(s): ${newIds.join(", ")}`);
+      const prefix = adoption.note ? `${adoption.note} ` : "";
+      return ok(`${prefix}Added ${newIds.length} clip(s): ${newIds.join(", ")}`);
     },
   };
 }
