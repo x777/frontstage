@@ -139,6 +139,13 @@ export interface ToolContext {
     create(name: string): Promise<{ path: string }>;
     activePath(): string | undefined;
   };
+  // Skills facade (M15 T1, read_skill) — backs the tool's body lookup only; the SkillStore itself
+  // lives above the tool layer (hosts wire ctx.skills = { body: (id) => store.body(id) }). In-app
+  // agent context ONLY — absent on the MCP path (read_skill isn't in that catalog anyway; T2 keeps
+  // both guards).
+  skills?: {
+    body(id: string): string | undefined;
+  };
 }
 
 export interface ToolSpec {

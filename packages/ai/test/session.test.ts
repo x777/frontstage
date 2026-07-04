@@ -18,6 +18,7 @@ import {
   AgentSession,
   type AgentSessionDeps,
   toWireMessages,
+  DEFAULT_SYSTEM_PROMPT,
 } from "../src/index.js";
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ function makeCtx(store: EditorStore): ToolContext {
 class FakeGateway implements AiGateway {
   private queue: StreamEvent[][];
   readonly capturedModels: string[] = [];
+  readonly capturedSystems: string[] = [];
 
   constructor(turns: StreamEvent[][]) {
     this.queue = [...turns];
@@ -96,6 +98,7 @@ class FakeGateway implements AiGateway {
 
   async *streamChat(req: ChatRequest): AsyncIterable<StreamEvent> {
     this.capturedModels.push(req.model);
+    this.capturedSystems.push(req.system);
     const events = this.queue.shift();
     if (!events) throw new Error("FakeGateway: no more scripted turns");
     for (const ev of events) {
@@ -445,5 +448,61 @@ describe("AgentSession", () => {
     expect(assistantMsg).toBeDefined();
     const textBlock = assistantMsg!.content.find((b) => b.kind === "text");
     expect((textBlock as { kind: "text"; text: string }).text).toBe("hello after reload");
+  });
+
+  // M15 T1's digest seam: getSkillsSuffix is the injection point T2's hosts wire to
+  // `async () => { await store.reload(); return skillsSection(store.skillIndex); }`.
+  describe("getSkillsSuffix — the skills digest seam", () => {
+    test("absent -> system prompt unchanged (today's behavior)", async () => {
+      const store = new EditorStore(makeTimeline());
+      const simpleStop: StreamEvent[] = [{ type: "textDelta", text: "ok" }, { type: "done", finishReason: "stop" }];
+      const gateway = new FakeGateway([simpleStop]);
+      const deps = makeDeps([simpleStop], store, { gateway });
+      const session = new AgentSession(deps);
+      await session.send("hi");
+      expect(gateway.capturedSystems[0]).toBe(DEFAULT_SYSTEM_PROMPT);
+    });
+
+    test("present -> called once per send() and its result appended to every turn's system prompt", async () => {
+      const store = new EditorStore(makeTimeline());
+      const toolTurn: StreamEvent[] = [
+        { type: "toolCallComplete", id: "c1", name: "get_timeline", args: {} },
+        { type: "done", finishReason: "tool_calls" },
+      ];
+      const finalTurn: StreamEvent[] = [{ type: "textDelta", text: "done" }, { type: "done", finishReason: "stop" }];
+      const gateway = new FakeGateway([toolTurn, finalTurn]);
+      let calls = 0;
+      const getSkillsSuffix = async () => {
+        calls++;
+        return "\n# Skills\n- foo: does foo";
+      };
+      const deps = makeDeps([toolTurn, finalTurn], store, { gateway, getSkillsSuffix });
+      const session = new AgentSession(deps);
+      await session.send("go");
+
+      expect(calls).toBe(1);
+      expect(gateway.capturedSystems).toHaveLength(2);
+      for (const system of gateway.capturedSystems) {
+        expect(system).toBe(DEFAULT_SYSTEM_PROMPT + "\n# Skills\n- foo: does foo");
+      }
+    });
+
+    test("a fresh suffix is recomputed on the NEXT send() (per-run reload semantics)", async () => {
+      const store = new EditorStore(makeTimeline());
+      const stop: StreamEvent[] = [{ type: "textDelta", text: "ok" }, { type: "done", finishReason: "stop" }];
+      const gateway = new FakeGateway([stop, stop]);
+      let index = "- a: first";
+      const getSkillsSuffix = async () => `\n# Skills\n${index}`;
+      const deps = makeDeps([stop, stop], store, { gateway, getSkillsSuffix });
+      const session = new AgentSession(deps);
+
+      await session.send("first");
+      index = "- a: first\n- b: second";
+      await session.send("second");
+
+      expect(gateway.capturedSystems[0]).toContain("- a: first");
+      expect(gateway.capturedSystems[0]).not.toContain("- b: second");
+      expect(gateway.capturedSystems[1]).toContain("- b: second");
+    });
   });
 });

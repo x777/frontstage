@@ -30,6 +30,7 @@ export {
 } from "./tools/library-tools.js";
 export { applyLayoutTool } from "./tools/layout-tools.js";
 export { setProjectSettingsTool } from "./tools/settings-tools.js";
+export { readSkillTool } from "./tools/skill-tools.js";
 export type { CatalogKind } from "./tools/catalog.js";
 export { buildCatalog } from "./tools/catalog.js";
 export { exportProjectTool } from "./tools/export-tools.js";
@@ -45,7 +46,7 @@ export { toolsToOpenAI, toolsToMcp, buildChatBody, parseOpenRouterStream } from 
 export { buildImageBody, parseImageResponse } from "./agent/image.js";
 export type { AgentMessage, AgentContentBlock } from "./agent/conversation.js";
 export { toWireMessages, toolResultToText } from "./agent/conversation.js";
-export { DEFAULT_SYSTEM_PROMPT } from "./agent/system-prompt.js";
+export { DEFAULT_SYSTEM_PROMPT, skillsSection } from "./agent/system-prompt.js";
 export type {
   AgentSessionDeps,
   StreamingDraft,
@@ -107,3 +108,9 @@ export type {
 } from "./search/embedding-service.js";
 export { EmbeddingService } from "./search/embedding-service.js";
 export { createTransformersPipelines, loadTransformersPipelines, TRANSFORMERS_MODEL_INFO } from "./search/transformers-pipelines.js";
+export type { Skill } from "./skills/skill.js";
+export { parseSkillFile, replaceFrontmatterName, NEW_SKILL_TEMPLATE, sha12 } from "./skills/skill.js";
+export type { SkillStorage } from "./skills/skill-store.js";
+export { SkillStore } from "./skills/skill-store.js";
+export type { SkillCatalogEntry, SkillCatalogDeps } from "./skills/skill-catalog.js";
+export { SkillCatalog } from "./skills/skill-catalog.js";

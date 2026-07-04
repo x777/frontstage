@@ -51,6 +51,7 @@ const EXPECTED_NAMES = [
   "create_matte",
   "export_project",
   "set_project_settings",
+  "read_skill",
 ] as const;
 
 const MCP_ONLY_NAMES = ["get_projects", "open_project", "new_project"] as const;
@@ -111,15 +112,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 40 specs", () => {
+  test("returns exactly 41 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(40);
+    expect(catalog).toHaveLength(41);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(40);
+    expect(new Set(names).size).toBe(41);
   });
 
   test("names match the expected list exactly", () => {
@@ -149,12 +150,18 @@ describe("buildCatalog", () => {
     for (const n of MCP_ONLY_NAMES) expect(names).not.toContain(n);
   });
 
-  test('"mcp" returns exactly 43 specs: the 40 inApp tools + the 3 project-nav tools, in order', () => {
+  test('"inApp" includes read_skill; "mcp" does not (M15 T1 — inApp-only)', () => {
+    expect(buildCatalog("inApp").map((s) => s.name)).toContain("read_skill");
+    expect(buildCatalog("mcp").map((s) => s.name)).not.toContain("read_skill");
+  });
+
+  test('"mcp" returns exactly 43 specs: the 40 shared tools + the 3 project-nav tools, in order (unchanged by M15 T1)', () => {
     const mcp = buildCatalog("mcp");
     expect(mcp).toHaveLength(43);
-    const inAppNames = buildCatalog("inApp").map((s) => s.name);
+    // The shared base order, independent of either kind-specific tail (read_skill / the nav trio).
+    const baseNames = buildCatalog("inApp").map((s) => s.name).filter((n) => n !== "read_skill");
     const mcpNames = mcp.map((s) => s.name);
-    expect(mcpNames.slice(0, 40)).toEqual(inAppNames);
+    expect(mcpNames.slice(0, 40)).toEqual(baseNames);
     expect(mcpNames.slice(40)).toEqual(MCP_ONLY_NAMES);
   });
 

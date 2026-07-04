@@ -16,6 +16,13 @@ export interface AgentSessionDeps {
   newId?: () => string;
   id?: string;
   now?: () => string;
+  // Skills digest seam (M15 T1). Called once per send() before the turn loop, mirroring Swift's
+  // per-run `SkillStore.shared.reloadInBackground()` + `skillsSection(skillIndex)` in
+  // AgentService.runLoop(): the index is read once per run and reused across every turn within
+  // it. In-app agent ONLY — T2 wires this to `async () => { await store.reload();
+  // return skillsSection(store.skillIndex); }`; the MCP executor path has no equivalent and stays
+  // untouched. Absent -> no suffix, system prompt unchanged (today's behavior).
+  getSkillsSuffix?: () => Promise<string>;
 }
 
 export interface StreamingDraft {
@@ -45,6 +52,7 @@ export class AgentSession {
   private readonly systemPrompt: string;
   private readonly maxTurns: number;
   private readonly newId: () => string;
+  private readonly getSkillsSuffix?: () => Promise<string>;
 
   id: string;
   createdAt: string;
@@ -64,6 +72,7 @@ export class AgentSession {
     this.systemPrompt = deps.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
     this.maxTurns = deps.maxTurns ?? 20;
     this.newId = deps.newId ?? (() => crypto.randomUUID());
+    this.getSkillsSuffix = deps.getSkillsSuffix;
     const now = deps.now ?? (() => new Date().toISOString());
     this.id = deps.id ?? this.newId();
     this.createdAt = now();
@@ -186,6 +195,7 @@ export class AgentSession {
 
   private async runLoop(): Promise<void> {
     this.resolveOrphanedToolCalls();
+    const skillsSuffix = this.getSkillsSuffix ? await this.getSkillsSuffix() : "";
     let turn = 0;
 
     while (true) {
@@ -208,7 +218,7 @@ export class AgentSession {
 
       const req: ChatRequest = {
         model: this.model,
-        system: this.systemPrompt,
+        system: this.systemPrompt + skillsSuffix,
         tools: this.tools,
         messages: toWireMessages(this.messages),
       };
