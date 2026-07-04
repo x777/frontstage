@@ -1,5 +1,6 @@
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
+import { MenuList, type MenuListItem } from "../primitives/index.js";
 import { canLinkSelection, canUnlinkSelection, dispatchLinkSelection, dispatchUnlinkSelection, selectForwardFromClip, type EditorStore } from "@palmier/core";
 
 export interface ClipContextMenuState { x: number; y: number; clipId?: string }
@@ -12,38 +13,38 @@ export function ClipContextMenu({ store, menu, onClose }: { store: EditorStore; 
   const canUnlink = canUnlinkSelection(timeline, selection);
   const clipId = menu.clipId;
 
-  const item = (testid: string, label: string, enabled: boolean, run: () => void) => (
-    <button
-      data-testid={testid}
-      disabled={!enabled}
-      onClick={() => { run(); onClose(); }}
-      style={{
-        display: "block", width: "100%", textAlign: "left", border: "none",
-        background: "transparent", color: enabled ? theme.text.primary : theme.text.muted,
-        cursor: enabled ? "pointer" : "default",
-        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-        fontSize: theme.fontSize.sm,
-      }}
-    >
-      {label}
-    </button>
-  );
+  const items: MenuListItem[] = [
+    { id: "select-forward-track", label: "Select Forward on Track", disabled: clipId == null, testid: "ctx-select-forward-track" },
+    { id: "select-forward-all", label: "Select Forward on All Tracks", disabled: clipId == null, testid: "ctx-select-forward-all" },
+    { id: "link", label: "Link", disabled: !canLink, testid: "ctx-link" },
+    { id: "unlink", label: "Unlink", disabled: !canUnlink, testid: "ctx-unlink" },
+  ];
+
+  function handleSelect(id: string) {
+    switch (id) {
+      case "select-forward-track":
+        if (clipId != null) selectForwardFromClip(store, clipId, "track");
+        break;
+      case "select-forward-all":
+        if (clipId != null) selectForwardFromClip(store, clipId, "allTracks");
+        break;
+      case "link":
+        dispatchLinkSelection(store);
+        break;
+      case "unlink":
+        dispatchUnlinkSelection(store);
+        break;
+    }
+    onClose();
+  }
 
   return (
     <div
       data-testid="clip-context-menu"
       role="menu"
-      style={{
-        position: "absolute", left: menu.x, top: menu.y, zIndex: theme.z.menu,
-        background: theme.bg.raised, border: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
-        borderRadius: theme.radius.sm, padding: theme.spacing.xxs, minWidth: theme.size.menuMin,
-        boxShadow: theme.shadow.lg,
-      }}
+      style={{ position: "absolute", left: menu.x, top: menu.y, zIndex: theme.z.menu }}
     >
-      {item("ctx-select-forward-track", "Select Forward on Track", clipId != null, () => selectForwardFromClip(store, clipId!, "track"))}
-      {item("ctx-select-forward-all", "Select Forward on All Tracks", clipId != null, () => selectForwardFromClip(store, clipId!, "allTracks"))}
-      {item("ctx-link", "Link", canLink, () => dispatchLinkSelection(store))}
-      {item("ctx-unlink", "Unlink", canUnlink, () => dispatchUnlinkSelection(store))}
+      <MenuList items={items} onSelect={handleSelect} />
     </div>
   );
 }
