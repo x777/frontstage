@@ -30,6 +30,25 @@ export function mat2dMultiply(m: Mat2d, n: Mat2d): Mat2d {
   };
 }
 
+/** Inverse of an affine Mat2d, or null if degenerate (zero-area — e.g. width/height 0). */
+export function mat2dInvert(m: Mat2d): Mat2d | null {
+  const det = m.a * m.d - m.b * m.c;
+  if (det === 0) return null;
+  return {
+    a: m.d / det,
+    b: -m.b / det,
+    c: -m.c / det,
+    d: m.a / det,
+    e: (m.c * m.f - m.d * m.e) / det,
+    f: (m.b * m.e - m.a * m.f) / det,
+  };
+}
+
+/** Applies `m` to point `p` (matches the CG convention: x' = a*x + c*y + e, y' = b*x + d*y + f). */
+export function mat2dApply(m: Mat2d, p: { x: number; y: number }): { x: number; y: number } {
+  return { x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f };
+}
+
 const scale = (sx: number, sy: number): Mat2d => ({ a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 });
 const translate = (tx: number, ty: number): Mat2d => ({ a: 1, b: 0, c: 0, d: 1, e: tx, f: ty });
 const rotate = (rad: number): Mat2d => ({ a: Math.cos(rad), b: Math.sin(rad), c: -Math.sin(rad), d: Math.cos(rad), e: 0, f: 0 });

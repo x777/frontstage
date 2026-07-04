@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
 import { EditorStore } from "./editor-store.js";
-import { selectForwardAction, dispatchRippleDeleteSelection, dispatchRippleDeleteGap, dispatchLinkSelection, dispatchUnlinkSelection } from "./store-actions.js";
+import { selectForwardAction, selectForwardFromClip, dispatchRippleDeleteSelection, dispatchRippleDeleteGap, dispatchLinkSelection, dispatchUnlinkSelection } from "./store-actions.js";
 
 function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {
   return {
@@ -29,6 +29,26 @@ describe("selectForwardAction", () => {
     selectForwardAction(s, "track");
     expect([...s.getSnapshot().selection].sort()).toEqual(["b", "c"]);
     expect(s.getSnapshot().selectedTimelineRange).toBeNull();
+  });
+});
+
+describe("selectForwardFromClip", () => {
+  it("uses the given clip as anchor, ignoring the current selection", () => {
+    const s = new EditorStore(timeline([track("t", [clip("a", 0, 10), clip("b", 40, 10), clip("c", 80, 10)])]));
+    s.select(["a"]); // current selection's earliest is "a" — should be irrelevant here
+    s.setSelectedTimelineRange({ startFrame: 5, endFrame: 9 });
+    selectForwardFromClip(s, "b", "track");
+    expect([...s.getSnapshot().selection].sort()).toEqual(["b", "c"]);
+    expect(s.getSnapshot().selectedTimelineRange).toBeNull();
+  });
+
+  it("scope allTracks selects forward across every track from the given clip's frame", () => {
+    const s = new EditorStore(timeline([
+      track("t1", [clip("a", 0, 10), clip("b", 40, 10)]),
+      track("t2", [clip("x", 20, 10), clip("y", 50, 10)], "audio"),
+    ]));
+    selectForwardFromClip(s, "b", "allTracks"); // anchor frame 40
+    expect([...s.getSnapshot().selection].sort()).toEqual(["b", "y"]); // x (frame 20) excluded
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
 import { timelineTrackDisplayLabel, toggleTrackMuteCommand, toggleTrackHiddenCommand, toggleTrackSyncLockCommand, setTrackHeightCommand, pruneEmptyTracks, insertTrackCommand, reorderTrackLive, reorderTrackCommand } from "./track-commands.js";
+import { EditorStore } from "./editor-store.js";
 
 function track(id: string, type: Track["type"], clips: Clip[] = [], over: Partial<Track> = {}): Track {
   return { id, type, muted: false, hidden: false, syncLocked: false, clips, displayHeight: 120, ...over };
@@ -116,5 +117,22 @@ describe("reorderTrackCommand", () => {
     const tl = timeline([track("v0", "video"), track("v1", "video"), track("a0", "audio")]);
     const next = reorderTrackCommand("v0", 1).apply(tl);
     expect(next.tracks.map((t) => t.id)).toEqual(["v1", "v0", "a0"]);
+  });
+
+  it("coalesces a live-drag sequence (same coalesceKey) into one undo step, clips riding along", () => {
+    const c = { id: "clip1" } as unknown as Clip;
+    const tl = timeline([track("v0", "video", [c]), track("v1", "video"), track("v2", "video"), track("a0", "audio")]);
+    const store = new EditorStore(tl);
+    // A drag gesture ticks through several intermediate target indexes under one key...
+    store.dispatch(reorderTrackCommand("v0", 1, "reorder-v0"));
+    store.dispatch(reorderTrackCommand("v0", 2, "reorder-v0"));
+    store.dispatch(reorderTrackCommand("v0", 1, "reorder-v0"));
+    expect(store.getSnapshot().timeline.tracks.map((t) => t.id)).toEqual(["v1", "v0", "v2", "a0"]);
+    expect(store.getSnapshot().timeline.tracks[1]!.clips).toEqual([c]); // clip rode along
+    expect(store.canUndo()).toBe(true);
+    store.undo();
+    // ...so one undo restores the pre-drag order, not an intermediate tick.
+    expect(store.getSnapshot().timeline.tracks.map((t) => t.id)).toEqual(["v0", "v1", "v2", "a0"]);
+    expect(store.canUndo()).toBe(false);
   });
 });

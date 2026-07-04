@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { Clip } from "../src/clip.js";
-import { applyTextLayerAnim, buildRenderPlan, type TextLayer } from "../src/render-plan.js";
+import { applyTextLayerAnim, buildRenderPlan, topClipAtPoint, type RenderLayer, type RenderPlan, type TextLayer } from "../src/render-plan.js";
 import { defaultTimeline, type Track } from "../src/timeline.js";
 import { defaultCrop, defaultTransform } from "../src/transform.js";
 import { defaultTextStyle } from "../src/text-style.js";
+import { affineTransform } from "../src/mat2d.js";
 import type { Effect } from "../src/color/effect.js";
 import type { BlendMode } from "../src/color/blend-mode.js";
 import type { TextWordTiming } from "../src/text-animation.js";
@@ -224,5 +225,113 @@ describe("applyTextLayerAnim", () => {
     const r = applyTextLayerAnim(l);
     expect(r.transform).toEqual(baseTransform);
     expect(r.opacity).toBe(1);
+  });
+});
+
+describe("topClipAtPoint", () => {
+  const renderSize = { width: 200, height: 100 };
+  function rLayer(over: Partial<RenderLayer> = {}): RenderLayer {
+    return {
+      clipId: "c", mediaRef: "m", transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+      opacity: 1, crop: defaultCrop(), zIndex: 0, natSize: { width: 100, height: 100 },
+      ...over,
+    };
+  }
+  function plan(layers: RenderLayer[] = [], textLayers: TextLayer[] = []): RenderPlan {
+    return { layers, textLayers };
+  }
+
+  test("hits a full-footprint layer at its center", () => {
+    const p = plan([rLayer({ clipId: "a", natSize: { width: 200, height: 100 } })]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBe("a");
+  });
+
+  test("misses outside the layer's footprint", () => {
+    const p = plan([rLayer({ clipId: "a", natSize: { width: 100, height: 100 } })]); // covers [0,100]x[0,100]
+    expect(topClipAtPoint(p, renderSize, { x: 150, y: 50 })).toBeNull();
+  });
+
+  test("returns null for an empty plan", () => {
+    expect(topClipAtPoint(plan(), renderSize, { x: 10, y: 10 })).toBeNull();
+  });
+
+  test("z-order: lower zIndex (track 0) wins over a higher-index overlapping layer", () => {
+    const p = plan([
+      rLayer({ clipId: "back", zIndex: 1, natSize: { width: 200, height: 100 } }),
+      rLayer({ clipId: "front", zIndex: 0, natSize: { width: 200, height: 100 } }),
+    ]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBe("front");
+  });
+
+  test("falls through to a lower layer where the topmost doesn't cover the point", () => {
+    const p = plan([
+      rLayer({ clipId: "back", zIndex: 1, natSize: { width: 200, height: 100 } }), // full canvas
+      rLayer({ clipId: "front", zIndex: 0, natSize: { width: 50, height: 50 } }), // small corner only
+    ]);
+    expect(topClipAtPoint(p, renderSize, { x: 190, y: 90 })).toBe("back"); // outside front's small footprint
+  });
+
+  test("crop trims the footprint: a point inside the full rect but in the cropped margin misses", () => {
+    const p = plan([rLayer({
+      clipId: "a", natSize: { width: 200, height: 100 },
+      crop: { left: 0.5, top: 0, right: 0, bottom: 0 }, // left half cropped away
+    })]);
+    expect(topClipAtPoint(p, renderSize, { x: 50, y: 50 })).toBeNull(); // in the cropped-away left half
+    expect(topClipAtPoint(p, renderSize, { x: 150, y: 50 })).toBe("a"); // in the visible right half
+  });
+
+  test("respects a rotated transform (center always hits, far corner misses)", () => {
+    const t = { ...defaultTransform(), width: 0.3, height: 0.3, rotation: 45 };
+    const mat = affineTransform(t, { width: 100, height: 100 }, renderSize);
+    const p = plan([rLayer({ clipId: "r", transform: mat, natSize: { width: 100, height: 100 } })]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBe("r"); // canvas center = transform's pivot
+    expect(topClipAtPoint(p, renderSize, { x: 0, y: 0 })).toBeNull(); // far outside a 0.3-scale clip
+  });
+
+  test("opacity <= 0.01 is skipped (treated as invisible)", () => {
+    const p = plan([rLayer({ clipId: "a", opacity: 0.005, natSize: { width: 200, height: 100 } })]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBeNull();
+  });
+
+  test("text and video share one z-order — a topmost video layer beats a lower-track text layer", () => {
+    const textLayer: TextLayer = {
+      clipId: "text", text: "hi", style: defaultTextStyle(), opacity: 1, zIndex: 2,
+      transform: defaultTransform(),
+    };
+    const p = plan([rLayer({ clipId: "video", zIndex: 0, natSize: { width: 200, height: 100 } })], [textLayer]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBe("video");
+  });
+
+  test("a text layer on a lower track index than the video layer wins", () => {
+    const textLayer: TextLayer = {
+      clipId: "text", text: "hi", style: defaultTextStyle(), opacity: 1, zIndex: 0,
+      transform: defaultTransform(),
+    };
+    const p = plan([rLayer({ clipId: "video", zIndex: 1, natSize: { width: 200, height: 100 } })], [textLayer]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBe("text");
+  });
+
+  test("applies a text layer's entrance animation (scale) before hit-testing", () => {
+    const shrunk: TextLayer = {
+      clipId: "text", text: "hi", style: defaultTextStyle(), opacity: 1, zIndex: 0,
+      transform: defaultTransform(),
+      layerAnim: { opacity: 1, scale: 0.1, offsetY: 0 },
+    };
+    const p = plan([], [shrunk]);
+    expect(topClipAtPoint(p, renderSize, { x: 100, y: 50 })).toBe("text"); // center still hits
+    expect(topClipAtPoint(p, renderSize, { x: 0, y: 0 })).toBeNull(); // shrunk to 10% — corner now misses
+  });
+
+  test("integration: buildRenderPlan's natSize wiring hit-tests two stacked real clips", () => {
+    const sizes = new Map([["front", { width: 100, height: 100 }], ["back", { width: 100, height: 100 }]]);
+    const tl = {
+      ...defaultTimeline(),
+      tracks: [
+        track([clip({ id: "front", mediaRef: "front" })]), // track 0 — topmost
+        track([clip({ id: "back", mediaRef: "back" })], { id: "t2" }),
+      ],
+    };
+    const built = buildRenderPlan(tl, 10, sizes);
+    expect(topClipAtPoint(built, { width: 1920, height: 1080 }, { x: 960, y: 540 })).toBe("front");
   });
 });

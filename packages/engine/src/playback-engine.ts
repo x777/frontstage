@@ -1,6 +1,7 @@
 import {
   type Timeline,
   type CubeLUT,
+  type Size,
   timelineTotalFrames,
 } from "@palmier/core";
 import type { MediaByteSource } from "./media/media-source.js";
@@ -205,6 +206,9 @@ export class PlaybackEngine {
   async readRGBA(): Promise<Uint8Array> { return this.renderer.readRGBA(); }
   get width(): number { return this.timeline?.width ?? 0; }
   get height(): number { return this.timeline?.height ?? 0; }
+
+  /** Natural media dimensions by mediaRef, for the preview double-click hit test (topClipAtPoint). */
+  sourceSizes(): Map<string, Size> { return this.coordinator?.sourceSizes() ?? new Map(); }
 
   dispose(): void { this.pause(); this.audio?.dispose(); this.audioMixer?.dispose(); this.coordinator?.dispose(); this.renderer.dispose(); }
 }

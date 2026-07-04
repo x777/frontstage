@@ -8,6 +8,7 @@ import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.j
 import { replaceTrackClips, clipFromAsset, splitClipCommand, addClipCommand } from "./timeline-commands.js";
 import { linkedPartnerIds } from "../timeline/link-group.js";
 import { setDuration } from "../clip-mutations.js";
+import type { Command } from "./editor-store.js";
 
 export type RippleOutcome = { timeline: Timeline } | { refused: string };
 
@@ -291,6 +292,24 @@ export function rippleTrimClip(
 ): Timeline {
   const plan = planRippleTrim(timeline, clipId, edge, deltaFrames, propagateToLinked);
   return plan ? applyRippleTrim(timeline, plan) : timeline;
+}
+
+// Shift+drag trim edge — mirrors trimClipCommand's shape so the timeline pointer handler can pick
+// either by a single boolean, both coalescing per-gesture under the same key convention.
+export function rippleTrimClipCommand(
+  clipId: string,
+  edge: "left" | "right",
+  deltaFrames: number,
+  propagateToLinked: boolean,
+  coalesceKey?: string,
+): Command {
+  return {
+    label: "Ripple Trim",
+    coalesceKey,
+    apply(timeline: Timeline): Timeline {
+      return rippleTrimClip(timeline, clipId, edge, deltaFrames, propagateToLinked);
+    },
+  };
 }
 
 function entryDurationFrames(entry: MediaManifestEntry, fps: number): number {

@@ -11,6 +11,14 @@ export function selectForwardAction(store: EditorStore, scope: SelectForwardScop
   store.setSelectedTimelineRange(null);
 }
 
+// Context-menu entry point: the anchor is the exact right-clicked clip, not the earliest-selected
+// one (that distinction is selectForwardAction's job, for the keyboard shortcut).
+export function selectForwardFromClip(store: EditorStore, clipId: string, scope: SelectForwardScope): void {
+  const { timeline } = store.getSnapshot();
+  store.select(selectForward(timeline, clipId, scope)); // also clears the gap
+  store.setSelectedTimelineRange(null);
+}
+
 export function dispatchRippleDeleteSelection(store: EditorStore): RippleOutcome {
   const { timeline, selection } = store.getSnapshot();
   const ids = new Set(selection);

@@ -49,3 +49,28 @@ test("renders nothing when menu is null", () => {
   const { container } = render(<ClipContextMenu store={store} menu={null} onClose={() => {}} />);
   expect(container.firstChild).toBeNull();
 });
+
+test("Select Forward items are disabled when the menu has no clipId (e.g. a stale call site)", () => {
+  const store = new EditorStore(tl());
+  render(<ClipContextMenu store={store} menu={{ x: 0, y: 0 }} onClose={() => {}} />);
+  expect(screen.getByTestId("ctx-select-forward-track")).toBeDisabled();
+  expect(screen.getByTestId("ctx-select-forward-all")).toBeDisabled();
+});
+
+test("Select Forward on Track anchors on the right-clicked clip, not the current selection", () => {
+  const store = new EditorStore(tl());
+  store.select(["a"]); // "a" is on track 0, at frame 0
+  // clip("b", "audio") sits on track 1 at frame 0 too — right-click it directly.
+  render(<ClipContextMenu store={store} menu={{ x: 0, y: 0, clipId: "b" }} onClose={() => {}} />);
+  const btn = screen.getByTestId("ctx-select-forward-track");
+  expect(btn).not.toBeDisabled();
+  act(() => { fireEvent.click(btn); });
+  expect([...store.getSnapshot().selection]).toEqual(["b"]); // only b's own track, from its own frame
+});
+
+test("Select Forward on All Tracks reaches every track from the right-clicked clip's frame", () => {
+  const store = new EditorStore(tl());
+  render(<ClipContextMenu store={store} menu={{ x: 0, y: 0, clipId: "a" }} onClose={() => {}} />);
+  act(() => { fireEvent.click(screen.getByTestId("ctx-select-forward-all")); });
+  expect([...store.getSnapshot().selection].sort()).toEqual(["a", "b"]); // both at frame 0
+});

@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import type { Clip } from "../clip.js";
 import type { Timeline, Track } from "../timeline.js";
 import type { MediaManifestEntry } from "../media.js";
-import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap, trimValues, rippleTrimDurationDelta, syncLockedLeftRoom, planRippleTrim, rippleTrimClip, rippleInsertClips, rippleInsertClipsSpecs, resolvePlacement } from "./ripple-commands.js";
+import { clearRegion, validateShiftsForTrack, rippleDeleteSelectedClips, rippleDeleteRangesOnTrack, rippleDeleteRanges, rippleDeleteGap, trimValues, rippleTrimDurationDelta, syncLockedLeftRoom, planRippleTrim, rippleTrimClip, rippleTrimClipCommand, rippleInsertClips, rippleInsertClipsSpecs, resolvePlacement } from "./ripple-commands.js";
+import { EditorStore } from "./editor-store.js";
+import { trimClipCommand } from "./timeline-commands.js";
 
 export function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {
   return {
@@ -285,6 +287,39 @@ describe("planRippleTrim + rippleTrimClip", () => {
   it("returns the timeline unchanged for a zero delta", () => {
     const tl = timeline([track("t", [clip("a", 0, 30)])]);
     expect(rippleTrimClip(tl, "a", "right", 0, false)).toBe(tl);
+  });
+});
+
+describe("rippleTrimClipCommand", () => {
+  it("applies the same outcome as rippleTrimClip, ripping downstream clips left", () => {
+    const tl = timeline([track("t", [clip("a", 0, 30, { trimEndFrame: 10 }), clip("b", 30, 10)])]);
+    const next = rippleTrimClipCommand("a", "right", -10, false).apply(tl);
+    expect(next.tracks[0]!.clips.find((c) => c.id === "b")!.startFrame).toBe(20);
+  });
+
+  it("coalesces a shift-drag sequence (per-tick incremental deltas) into one undo step", () => {
+    // Each dispatch's delta is "how much more" since the last tick — the store applies commands
+    // against its live (already-mutated) state, so a caller must pass the increment, not the
+    // absolute offset from drag-start (same convention as moveClipCommand's absolute-position args).
+    const tl = timeline([track("t", [clip("a", 0, 30, { trimEndFrame: 30 }), clip("b", 30, 10)])]);
+    const store = new EditorStore(tl);
+    store.dispatch(rippleTrimClipCommand("a", "right", 5, false, "trim-a"));
+    store.dispatch(rippleTrimClipCommand("a", "right", 5, false, "trim-a"));
+    store.dispatch(rippleTrimClipCommand("a", "right", 10, false, "trim-a"));
+    expect(store.getSnapshot().timeline.tracks[0]!.clips.find((c) => c.id === "a")!.durationFrames).toBe(50);
+    expect(store.getSnapshot().timeline.tracks[0]!.clips.find((c) => c.id === "b")!.startFrame).toBe(50); // rippled
+    expect(store.canUndo()).toBe(true);
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]!.clips.find((c) => c.id === "a")!.durationFrames).toBe(30); // back to pre-drag
+    expect(store.canUndo()).toBe(false);
+  });
+
+  it("ripples downstream clips where a plain trim of the same delta would overwrite them", () => {
+    const tl = timeline([track("t", [clip("a", 0, 30, { trimEndFrame: 30 }), clip("b", 30, 10)])]);
+    const plain = trimClipCommand("a", "right", 20).apply(tl);
+    const rippled = rippleTrimClipCommand("a", "right", 20, false).apply(tl);
+    expect(plain.tracks[0]!.clips.find((c) => c.id === "b")!.startFrame).toBe(30); // untouched — would overlap
+    expect(rippled.tracks[0]!.clips.find((c) => c.id === "b")!.startFrame).toBe(50); // pushed forward
   });
 });
 

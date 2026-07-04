@@ -1,8 +1,8 @@
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
-import { canLinkSelection, canUnlinkSelection, dispatchLinkSelection, dispatchUnlinkSelection, type EditorStore } from "@palmier/core";
+import { canLinkSelection, canUnlinkSelection, dispatchLinkSelection, dispatchUnlinkSelection, selectForwardFromClip, type EditorStore } from "@palmier/core";
 
-export interface ClipContextMenuState { x: number; y: number }
+export interface ClipContextMenuState { x: number; y: number; clipId?: string }
 
 export function ClipContextMenu({ store, menu, onClose }: { store: EditorStore; menu: ClipContextMenuState | null; onClose: () => void }) {
   const selection = useStore(store, (s) => s.selection);
@@ -10,6 +10,7 @@ export function ClipContextMenu({ store, menu, onClose }: { store: EditorStore; 
   if (!menu) return null;
   const canLink = canLinkSelection(timeline, selection);
   const canUnlink = canUnlinkSelection(timeline, selection);
+  const clipId = menu.clipId;
 
   const item = (testid: string, label: string, enabled: boolean, run: () => void) => (
     <button
@@ -39,6 +40,8 @@ export function ClipContextMenu({ store, menu, onClose }: { store: EditorStore; 
         boxShadow: theme.shadow.lg,
       }}
     >
+      {item("ctx-select-forward-track", "Select Forward on Track", clipId != null, () => selectForwardFromClip(store, clipId!, "track"))}
+      {item("ctx-select-forward-all", "Select Forward on All Tracks", clipId != null, () => selectForwardFromClip(store, clipId!, "allTracks"))}
       {item("ctx-link", "Link", canLink, () => dispatchLinkSelection(store))}
       {item("ctx-unlink", "Unlink", canUnlink, () => dispatchUnlinkSelection(store))}
     </div>

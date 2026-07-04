@@ -15,7 +15,6 @@ import {
   trimLeftDelta,
   trimRightDelta,
   moveClipCommand,
-  trimClipCommand,
   splitClipCommand,
   removeClipCommand,
   addClipCommand,
@@ -28,6 +27,7 @@ import {
   rangeEdgeAnchorFrame,
   resolveDropPlan,
   planRippleInsertPreview,
+  selectForwardAction,
 } from "@palmier/core";
 import type { RippleInsertPreviewPlan } from "@palmier/core";
 import type { EditorStore, MediaManifestEntry } from "@palmier/core";
@@ -35,7 +35,7 @@ import { theme } from "../theme/theme.js";
 import { TrackHeaders, TRACK_HEADER_WIDTH } from "./TrackHeaders.js";
 import { drawTimeline } from "./draw-timeline.js";
 import type { TimelinePalette, DropIndicator, TimelineOverlays } from "./draw-timeline.js";
-import { hitTest } from "./pointer.js";
+import { hitTest, trimTickCommand, selectForwardScopeForKey } from "./pointer.js";
 import type { MediaDragController } from "../media/media-drag.js";
 import { ClipContextMenu, type ClipContextMenuState } from "./ClipContextMenu.js";
 
@@ -226,6 +226,9 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       originalStartFrame: number;
       hasNoSourceMedia: boolean;
       snapState: ReturnType<typeof newSnapState>;
+      // ripple trim (shift held at drag start; fixed for the gesture, like Swift's isRipple)
+      isRipple: boolean;
+      lastAbsoluteDelta: number;
     } | null;
 
     let drag: DragState = null;
@@ -306,6 +309,8 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
             originalStartFrame: clip.startFrame,
             hasNoSourceMedia,
             snapState: newSnapState(),
+            isRipple: e.shiftKey,
+            lastAbsoluteDelta: 0,
           };
         } else {
           // Clip body — start a move drag (DRAG_THRESHOLD before dispatching)
@@ -328,6 +333,8 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
             originalStartFrame: clip.startFrame,
             hasNoSourceMedia,
             snapState: newSnapState(),
+            isRipple: false,
+            lastAbsoluteDelta: 0,
           };
         }
       } else {
@@ -450,7 +457,8 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
           originalTrimStart: drag.originalTrimStart,
           hasNoSourceMedia: drag.hasNoSourceMedia,
         });
-        store.dispatch(trimClipCommand(drag.clipId, "left", delta, "trim-" + drag.clipId));
+        store.dispatch(trimTickCommand(drag.clipId, "left", delta, drag.isRipple, drag.lastAbsoluteDelta, "trim-" + drag.clipId));
+        drag.lastAbsoluteDelta = delta;
 
         if (snapResult) {
           snapLineXRef.current = xForFrame(geom, snapResult.frame);
@@ -481,7 +489,8 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
           originalTrimEnd: drag.originalTrimEnd,
           hasNoSourceMedia: drag.hasNoSourceMedia,
         });
-        store.dispatch(trimClipCommand(drag.clipId, "right", delta, "trim-" + drag.clipId));
+        store.dispatch(trimTickCommand(drag.clipId, "right", delta, drag.isRipple, drag.lastAbsoluteDelta, "trim-" + drag.clipId));
+        drag.lastAbsoluteDelta = delta;
 
         if (snapResult) {
           snapLineXRef.current = xForFrame(geom, snapResult.frame);
@@ -529,6 +538,13 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
     }
 
     function onKeyDown(e: KeyboardEvent) {
+      const forwardScope = selectForwardScopeForKey(e);
+      if (forwardScope) {
+        e.preventDefault();
+        selectForwardAction(store, forwardScope);
+        return;
+      }
+
       if (e.key === "s" || e.key === "b" || e.key === "S" || e.key === "B") {
         const snap = store.getSnapshot();
         const playhead = snap.playhead;
@@ -604,7 +620,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
           store.select([hit.clipId]);
         }
         const containerRect = containerRef.current!.getBoundingClientRect();
-        setMenu({ x: e.clientX - containerRect.left, y: e.clientY - containerRect.top });
+        setMenu({ x: e.clientX - containerRect.left, y: e.clientY - containerRect.top, clipId: hit.clipId });
       } else {
         setMenu(null);
       }

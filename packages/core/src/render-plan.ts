@@ -1,5 +1,5 @@
-import { affineTransform, type Mat2d, type Size } from "./mat2d.js";
-import type { Crop, Transform } from "./transform.js";
+import { affineTransform, mat2dApply, mat2dInvert, type Mat2d, type Size } from "./mat2d.js";
+import { defaultCrop, type Crop, type Transform } from "./transform.js";
 import type { Timeline } from "./timeline.js";
 import { clipTypeIsVisual } from "./clip-type.js";
 import { clipContains, cropAt, opacityAt, transformAt } from "./clip.js";
@@ -20,6 +20,9 @@ export interface RenderLayer {
   zIndex: number;
   effects?: Effect[];
   blendMode?: BlendMode;
+  /** Natural (pre-transform) pixel size the layer's Mat2d/crop were computed against — the hit
+   * test needs this to convert an inverse-transformed point back into crop-fraction units. */
+  natSize: Size;
 }
 
 export interface TextLayer {
@@ -120,8 +123,54 @@ export function buildRenderPlan(timeline: Timeline, frame: number, sourceSizes: 
         zIndex: ti,
         effects: clip.effects,
         blendMode: clip.blendMode,
+        natSize,
       });
     }
   }
   return { layers, textLayers };
+}
+
+export interface PreviewPoint { x: number; y: number }
+
+/**
+ * Topmost visible clip (by track z-order — the M13A convention: track 0 draws last/on top,
+ * matching the compositor's `tagged.sort((a,b) => b.zIndex - a.zIndex)` draw order in
+ * source-coordinator.ts) whose rendered footprint contains `point`, in composition-pixel space
+ * (0..renderSize.width, 0..renderSize.height). Text and video/image layers are ranked together by
+ * their raw track zIndex — not "text always above video" — since that's what the renderer actually
+ * draws. Crop trims the layer's own placed footprint (not a texture-only zoom), so a hit outside
+ * the cropped region misses even though it's inside the full (uncropped) transform rect.
+ */
+export function topClipAtPoint(plan: RenderPlan, renderSize: Size, point: PreviewPoint): string | null {
+  interface Candidate { clipId: string; zIndex: number; transform: Mat2d; natSize: Size; crop: Crop; opacity: number }
+  const candidates: Candidate[] = [];
+
+  for (const l of plan.layers) {
+    if (l.opacity <= 0.01) continue;
+    candidates.push({ clipId: l.clipId, zIndex: l.zIndex, transform: l.transform, natSize: l.natSize, crop: l.crop, opacity: l.opacity });
+  }
+  for (const t of plan.textLayers) {
+    const { transform, opacity } = applyTextLayerAnim(t);
+    if (opacity <= 0.01) continue;
+    candidates.push({
+      clipId: t.clipId, zIndex: t.zIndex, opacity,
+      transform: affineTransform(transform, renderSize, renderSize),
+      natSize: renderSize, crop: defaultCrop(),
+    });
+  }
+
+  // Ascending zIndex: track 0 (topmost) first.
+  candidates.sort((a, b) => a.zIndex - b.zIndex);
+
+  for (const c of candidates) {
+    const inv = mat2dInvert(c.transform);
+    if (!inv) continue;
+    const nat = mat2dApply(inv, point);
+    const left = c.crop.left * c.natSize.width;
+    const right = (1 - c.crop.right) * c.natSize.width;
+    const top = c.crop.top * c.natSize.height;
+    const bottom = (1 - c.crop.bottom) * c.natSize.height;
+    if (nat.x >= left && nat.x <= right && nat.y >= top && nat.y <= bottom) return c.clipId;
+  }
+  return null;
 }

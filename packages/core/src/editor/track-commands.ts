@@ -94,9 +94,10 @@ export function reorderTrackLive(timeline: Timeline, id: string, targetIndex: nu
   return { ...timeline, tracks };
 }
 
-export function reorderTrackCommand(id: string, targetIndex: number): Command {
+export function reorderTrackCommand(id: string, targetIndex: number, coalesceKey?: string): Command {
   return {
     label: "Reorder Track",
+    coalesceKey,
     apply(timeline: Timeline): Timeline {
       return reorderTrackLive(timeline, id, targetIndex);
     },

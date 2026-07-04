@@ -8,6 +8,7 @@ import { TransportBar } from "./TransportBar.js";
 import { TransformOverlay } from "./TransformOverlay.js";
 import { CropOverlay } from "./CropOverlay.js";
 import { useStore } from "../store/use-store.js";
+import { selectClipAtPreviewPoint } from "./preview-hit-test.js";
 
 export interface PreviewPanelProps {
   store: EditorStore;
@@ -156,6 +157,23 @@ export function PreviewPanel({ store, media, engineRef: engineRefProp }: Preview
     ro.observe(canvas);
     return () => ro.disconnect();
   }, []);
+
+  // Double-click the preview -> select the topmost clip under the point at the current frame.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    function onDoubleClick(e: MouseEvent): void {
+      const engine = engineRef.current;
+      const cv = canvasRef.current;
+      if (!engine || !cv) return;
+      const rect = cv.getBoundingClientRect();
+      selectClipAtPreviewPoint(store, engine.sourceSizes(), { x: e.clientX, y: e.clientY }, rect);
+    }
+
+    canvas.addEventListener("dblclick", onDoubleClick);
+    return () => canvas.removeEventListener("dblclick", onDoubleClick);
+  }, [store]);
 
   const timeline = useStore(store, (s) => s.timeline);
   const durationFrames = timelineTotalFrames(timeline);
