@@ -14,8 +14,8 @@ describe("gen-catalog: lookups", () => {
     expect(genModel("does-not-exist")).toBeUndefined();
   });
 
-  test("listGenModels() returns all 9 curated entries", () => {
-    expect(listGenModels()).toHaveLength(9);
+  test("listGenModels() returns all 10 curated entries", () => {
+    expect(listGenModels()).toHaveLength(10);
   });
 
   test("listGenModels(kind) filters by kind", () => {
@@ -23,7 +23,9 @@ describe("gen-catalog: lookups", () => {
       ["kling-2.5", "seedance-1.0", "veo3.1-fast"].sort(),
     );
     expect(listGenModels("image").map((e) => e.id).sort()).toEqual(["flux-dev", "nano-banana"].sort());
-    expect(listGenModels("audio").map((e) => e.id).sort()).toEqual(["elevenlabs-tts", "minimax-music"].sort());
+    expect(listGenModels("audio").map((e) => e.id).sort()).toEqual(
+      ["elevenlabs-tts", "minimax-music", "mmaudio-v2"].sort(),
+    );
     expect(listGenModels("upscale").map((e) => e.id)).toEqual(["seedvr-upscale"]);
     expect(listGenModels("transcribe").map((e) => e.id)).toEqual(["whisper"]);
   });
@@ -322,5 +324,34 @@ describe("buildInput: every entry maps normalized params to its fal body", () =>
       chunk_level: "word",
       language: "fr",
     });
+  });
+
+  test("mmaudio-v2 (video-to-audio) carries videoUrl, prompt, and duration", () => {
+    const entry = genModel("mmaudio-v2")!;
+    expect(entry.buildInput({ prompt: "footsteps on gravel", videoUrl: "https://example.com/span.mp4", duration: 5 })).toEqual({
+      video_url: "https://example.com/span.mp4",
+      prompt: "footsteps on gravel",
+      duration: 5,
+    });
+  });
+
+  test("mmaudio-v2 defaults duration to 8s and videoUrl to empty when omitted", () => {
+    const entry = genModel("mmaudio-v2")!;
+    expect(entry.buildInput({ prompt: "x" })).toEqual({ video_url: "", prompt: "x", duration: 8 });
+  });
+});
+
+describe("gen-catalog: video-to-audio caps (M14C T3)", () => {
+  test("mmaudio-v2 accepts and requires a video source; elevenlabs/minimax do not accept one", () => {
+    expect(genModel("mmaudio-v2")!.caps.acceptsVideo).toBe(true);
+    expect(genModel("mmaudio-v2")!.caps.requiresVideo).toBe(true);
+    expect(genModel("elevenlabs-tts")!.caps.acceptsVideo).toBeUndefined();
+    expect(genModel("minimax-music")!.caps.acceptsVideo).toBeUndefined();
+  });
+
+  test("category is set for all curated audio models", () => {
+    expect(genModel("elevenlabs-tts")!.caps.category).toBe("speech");
+    expect(genModel("minimax-music")!.caps.category).toBe("music");
+    expect(genModel("mmaudio-v2")!.caps.category).toBe("sfx");
   });
 });

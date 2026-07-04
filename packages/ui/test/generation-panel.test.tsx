@@ -1,19 +1,41 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { GenerationPanel } from "../src/agent/GenerationPanel.js";
+import { MEDIA_DRAG_MIME } from "../src/media/FolderTile.js";
 import type { MediaManifestEntry } from "@palmier/core";
 
-function makeFacade(opts: { hasKey?: boolean; startJobResult?: { jobId: string } | { error: string } } = {}) {
+function makeFacade(opts: { hasKey?: boolean; startJobResult?: { jobId: string } | { error: string }; entryUrl?: (id: string) => Promise<string | undefined> } = {}) {
   return {
     hasKey: vi.fn().mockResolvedValue(opts.hasKey ?? true),
     addPlaceholder: vi.fn(),
     startJob: vi.fn().mockResolvedValue(opts.startJobResult ?? { jobId: "job-1" }),
     confirmThreshold: 50,
+    entryUrl: opts.entryUrl ? vi.fn(opts.entryUrl) : vi.fn(async (id: string) => `https://example.com/${id}.png`),
   };
 }
 
 function makeNewId() {
   let n = 0;
   return () => `id-${n++}`;
+}
+
+function makeDataTransfer(initial?: { kind: "asset" | "folder"; id: string }) {
+  const store = new Map<string, string>();
+  if (initial) store.set(MEDIA_DRAG_MIME, JSON.stringify(initial));
+  return {
+    setData: (type: string, val: string) => { store.set(type, val); },
+    getData: (type: string) => store.get(type) ?? "",
+    get types() { return Array.from(store.keys()); },
+    effectAllowed: "move",
+    files: [] as unknown as FileList,
+  };
+}
+
+function imageEntry(id: string, name = `${id}.png`): MediaManifestEntry {
+  return { id, name, type: "image", source: { kind: "project", relativePath: `media/${id}.png` }, duration: 1 };
+}
+
+function videoAssetEntry(id: string, name = `${id}.mp4`): MediaManifestEntry {
+  return { id, name, type: "video", source: { kind: "project", relativePath: `media/${id}.mp4` }, duration: 5 };
 }
 
 test("tab switch swaps the model options by kind", async () => {
@@ -140,5 +162,112 @@ test("upscale tab: honest-disabled note, Generate stays disabled", async () => {
   await waitFor(() => {
     expect(screen.getByTestId("gen-upscale-note").textContent).toContain("coming soon");
     expect(screen.getByTestId("gen-submit")).toBeDisabled();
+  });
+});
+
+// ── references drop zone (M14C T3, the M10D deferral) ───────────────────────
+
+describe("references drop zone", () => {
+  test("video tab: shows the zone; accepts an internal image asset, rejects a video asset", async () => {
+    const img = imageEntry("img-1");
+    const vid = videoAssetEntry("vid-1");
+    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => [img, vid]} />);
+
+    const zone = await screen.findByTestId("gen-references-zone");
+
+    const imgDt = makeDataTransfer({ kind: "asset", id: "img-1" });
+    fireEvent.dragOver(zone, { dataTransfer: imgDt });
+    fireEvent.drop(zone, { dataTransfer: imgDt });
+    expect(await screen.findByTestId("gen-reference-img-1")).toBeInTheDocument();
+
+    const vidDt = makeDataTransfer({ kind: "asset", id: "vid-1" });
+    fireEvent.dragOver(zone, { dataTransfer: vidDt });
+    fireEvent.drop(zone, { dataTransfer: vidDt });
+    expect(screen.queryByTestId("gen-reference-vid-1")).toBeNull();
+  });
+
+  test("image tab: shows the zone too", async () => {
+    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => []} />);
+    fireEvent.click(screen.getByTestId("gen-kind-tab-image"));
+    expect(await screen.findByTestId("gen-references-zone")).toBeInTheDocument();
+  });
+
+  test("upscale tab: no references zone (untouched single-source flow)", async () => {
+    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => []} />);
+    fireEvent.click(screen.getByTestId("gen-kind-tab-upscale"));
+    await waitFor(() => expect(screen.getByTestId("gen-upscale-note")).toBeInTheDocument());
+    expect(screen.queryByTestId("gen-references-zone")).toBeNull();
+  });
+
+  test("remove clears a dropped reference", async () => {
+    const img = imageEntry("img-1");
+    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => [img]} />);
+
+    const zone = await screen.findByTestId("gen-references-zone");
+    const dt = makeDataTransfer({ kind: "asset", id: "img-1" });
+    fireEvent.dragOver(zone, { dataTransfer: dt });
+    fireEvent.drop(zone, { dataTransfer: dt });
+    await screen.findByTestId("gen-reference-img-1");
+
+    fireEvent.click(screen.getByTestId("gen-reference-remove-img-1"));
+    expect(screen.queryByTestId("gen-reference-img-1")).toBeNull();
+    expect(screen.getByTestId("gen-references-empty")).toBeInTheDocument();
+  });
+
+  test("submit resolves each reference to a URL via entryUrl", async () => {
+    const img = imageEntry("img-1");
+    const facade = makeFacade();
+    render(<GenerationPanel generation={facade} newId={makeNewId()} entries={() => [img]} />);
+
+    const zone = await screen.findByTestId("gen-references-zone");
+    const dt = makeDataTransfer({ kind: "asset", id: "img-1" });
+    fireEvent.dragOver(zone, { dataTransfer: dt });
+    fireEvent.drop(zone, { dataTransfer: dt });
+    await screen.findByTestId("gen-reference-img-1");
+
+    fireEvent.change(screen.getByTestId("gen-prompt"), { target: { value: "a neon city at night" } });
+    await waitFor(() => expect(screen.getByTestId("gen-submit")).not.toBeDisabled());
+    await act(async () => { fireEvent.click(screen.getByTestId("gen-submit")); });
+
+    expect(facade.entryUrl).toHaveBeenCalledWith("img-1");
+    // References clear after a successful submit.
+    await waitFor(() => expect(screen.getByTestId("gen-references-empty")).toBeInTheDocument());
+  });
+
+  test("over the reference cap: trims to the cap and shows a note", async () => {
+    const imgs = Array.from({ length: 6 }, (_, i) => imageEntry(`img-${i}`));
+    const facade = makeFacade();
+    render(<GenerationPanel generation={facade} newId={makeNewId()} entries={() => imgs} />);
+
+    const zone = await screen.findByTestId("gen-references-zone");
+    for (const img of imgs) {
+      const dt = makeDataTransfer({ kind: "asset", id: img.id });
+      fireEvent.dragOver(zone, { dataTransfer: dt });
+      fireEvent.drop(zone, { dataTransfer: dt });
+    }
+    for (const img of imgs) await screen.findByTestId(`gen-reference-${img.id}`);
+
+    fireEvent.change(screen.getByTestId("gen-prompt"), { target: { value: "a neon city at night" } });
+    await waitFor(() => expect(screen.getByTestId("gen-submit")).not.toBeDisabled());
+    await act(async () => { fireEvent.click(screen.getByTestId("gen-submit")); });
+
+    expect(facade.entryUrl).toHaveBeenCalledTimes(4); // DEFAULT_MAX_REFERENCES
+    const note = await screen.findByTestId("gen-references-note");
+    expect(note.textContent).toContain("first 4");
+  });
+
+  test("dropping a duplicate asset is a no-op", async () => {
+    const img = imageEntry("img-1");
+    render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} entries={() => [img]} />);
+
+    const zone = await screen.findByTestId("gen-references-zone");
+    const dt = makeDataTransfer({ kind: "asset", id: "img-1" });
+    fireEvent.dragOver(zone, { dataTransfer: dt });
+    fireEvent.drop(zone, { dataTransfer: dt });
+    fireEvent.dragOver(zone, { dataTransfer: dt });
+    fireEvent.drop(zone, { dataTransfer: dt });
+
+    await screen.findByTestId("gen-reference-img-1");
+    expect(screen.getAllByTestId("gen-reference-img-1")).toHaveLength(1);
   });
 });

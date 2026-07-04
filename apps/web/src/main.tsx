@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, SAMPLER_VERSION } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
+import { renderSpanToMp4 } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
@@ -292,6 +293,12 @@ async function bootstrap() {
     get confirmThreshold() {
       return readConfirmThreshold();
     },
+    // generate_audio's video-to-audio span source (M14C T3) — the SAME headless export pipeline
+    // the real export gateway drives (runExport), just silent (no audio) and shrunk to shortSide.
+    renderSpanToMp4: (startFrame: number, frameCount: number, shortSide: number) =>
+      renderSpanToMp4(store.getSnapshot().timeline, library.byteSource, { startFrame, frameCount, shortSide }),
+    uploadFile: (bytes: Uint8Array, contentType: string, fileName: string) =>
+      genGateway.uploadFile(bytes, contentType, fileName),
   };
 
   // Delegates through the ref (not a captured instance) so any future recreate is picked up.

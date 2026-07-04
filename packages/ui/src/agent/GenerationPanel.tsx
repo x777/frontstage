@@ -5,8 +5,13 @@ import type { GenModelEntry, GenModelKind, GenToolParams, StartJobArgs } from "@
 import { genModel, listGenModels, validateGenParams, estimateCredits, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { Select } from "../inspector/adjust/Select.js";
+import { isMediaDrag, readMediaDragPayload } from "../media/FolderTile.js";
 
 const IMAGE_DURATION_SECONDS = 5; // mirrors generate-image-tool.ts
+
+// No per-model cap declared today (M14C T3) -> this generic ceiling applies, mirroring Swift's
+// supportsReferences gate (hidden only when a model explicitly declares zero references).
+const DEFAULT_MAX_REFERENCES = 4;
 
 const KIND_TABS: { kind: GenModelKind; label: string }[] = [
   { kind: "video", label: "Video" },
@@ -30,6 +35,11 @@ export interface GenerationFacade {
   startJob(args: StartJobArgs): Promise<{ jobId: string } | { error: string }>;
   entryUrl?(mediaRef: string): Promise<string | undefined>;
   confirmThreshold: number;
+  // generate_audio's video-to-audio span source (M14C T3) — unused by this panel (no span UI
+  // here yet), declared so both hosts' ONE facade object satisfies this type without excess-
+  // property errors.
+  renderSpanToMp4?(startFrame: number, frameCount: number, shortSide: number): Promise<Uint8Array>;
+  uploadFile?(bytes: Uint8Array, contentType: string, fileName: string): Promise<string>;
 }
 
 export interface GenerationPanelProps {
@@ -41,7 +51,9 @@ export interface GenerationPanelProps {
 
 // Builds the full-sentinel GenerationInput placeholder(s) the SAME way generate-tools.ts does —
 // only called after validateGenParams already passed, so params are known-valid here.
-function buildPlaceholders(entry: GenModelEntry, params: GenToolParams, newId: () => string): MediaManifestEntry[] {
+// referenceIds (M14C T3) records which library assets fed params.imageUrls, mirroring Swift's
+// genInput.imageURLAssetIds — video/image kinds only, ignored (no references UI) for the rest.
+function buildPlaceholders(entry: GenModelEntry, params: GenToolParams, newId: () => string, referenceIds: string[] = []): MediaManifestEntry[] {
   const createdAt = new Date().toISOString();
 
   if (entry.kind === "video") {
@@ -52,6 +64,7 @@ function buildPlaceholders(entry: GenModelEntry, params: GenToolParams, newId: (
       duration,
       aspectRatio: params.aspectRatio ?? "",
       resolution: params.resolution,
+      imageURLAssetIds: referenceIds.length > 0 ? referenceIds : undefined,
       createdAt,
     };
     return [
@@ -88,6 +101,7 @@ function buildPlaceholders(entry: GenModelEntry, params: GenToolParams, newId: (
         aspectRatio: params.aspectRatio ?? "",
         numImages,
         outputIndex: i,
+        imageURLAssetIds: referenceIds.length > 0 ? referenceIds : undefined,
         createdAt,
       };
       placeholders.push(
@@ -114,6 +128,9 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
   const [instrumental, setInstrumental] = useState(false);
   const [numImages, setNumImages] = useState(1);
   const [upscaleMediaId, setUpscaleMediaId] = useState<string | undefined>(undefined);
+  const [references, setReferences] = useState<MediaManifestEntry[]>([]);
+  const [referencesTargeted, setReferencesTargeted] = useState(false);
+  const [referencesNote, setReferencesNote] = useState<string | null>(null);
 
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,6 +164,10 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
     setKind(k);
     setModelId(listGenModels(k)[0]?.id ?? "");
     resetControls();
+    // References are cleared on a TAB switch only, not on a model change within the same tab —
+    // mirrors Swift's clearReferences() call site (GenerationView's selectedType onChange).
+    setReferences([]);
+    setReferencesNote(null);
   }
 
   function handleModelChange(id: string) {
@@ -165,6 +186,23 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
     const inputs = entry.caps.upscaleInputs ?? [];
     return (entries?.() ?? []).filter((e) => (e.type === "video" || e.type === "image") && inputs.includes(e.type));
   }, [entry, entries]);
+
+  // References strip (M14C T3, the M10D deferral): image + video tabs only, mirroring Swift's
+  // DropZoneView/supportsReferences gate — hidden only when a model explicitly declares zero.
+  const referenceCap = entry?.caps.maxReferenceImages ?? DEFAULT_MAX_REFERENCES;
+  const showReferences = entry != null && (kind === "image" || kind === "video") && referenceCap > 0;
+
+  function handleReferenceDrop(e: React.DragEvent) {
+    setReferencesTargeted(false);
+    const payload = readMediaDragPayload(e);
+    if (!payload || payload.kind !== "asset") return;
+    e.preventDefault();
+    const asset = entries?.().find((en) => en.id === payload.id);
+    // Image-type entries only — Swift's dropZone(accepting:) zone filter.
+    if (!asset || asset.type !== "image") return;
+    if (references.some((r) => r.id === asset.id)) return;
+    setReferences((prev) => [...prev, asset]);
+  }
 
   const params: GenToolParams = useMemo(() => {
     if (!entry) return {};
@@ -204,8 +242,28 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
 
     setBusy(true);
     try {
-      const input = entry.buildInput(params);
-      const placeholders = buildPlaceholders(entry, params, newId);
+      // References resolve to URLs at submit (M14C T3) — capped to referenceCap, over-cap trims
+      // with a note (Swift's "trim or disable"). buildInput/buildPlaceholders never mutate the
+      // memoized params directly; a resolved copy carries imageUrls when references were used.
+      let resolvedParams = params;
+      let referenceIds: string[] = [];
+      if (showReferences && references.length > 0 && generation.entryUrl) {
+        const capped = references.slice(0, referenceCap);
+        setReferencesNote(capped.length < references.length ? `Only the first ${referenceCap} reference(s) were used.` : null);
+        const urls: string[] = [];
+        const ids: string[] = [];
+        for (const ref of capped) {
+          const url = await generation.entryUrl(ref.id);
+          if (url) { urls.push(url); ids.push(ref.id); }
+        }
+        if (urls.length > 0) {
+          resolvedParams = { ...params, imageUrls: urls };
+          referenceIds = ids;
+        }
+      }
+
+      const input = entry.buildInput(resolvedParams);
+      const placeholders = buildPlaceholders(entry, resolvedParams, newId, referenceIds);
       for (const p of placeholders) generation.addPlaceholder(p);
       const result = await generation.startJob({
         modelEndpoint: entry.endpoint,
@@ -220,6 +278,7 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
       }
       setPrompt("");
       setLyrics("");
+      setReferences([]);
       setStatus("Generation started — see the media library.");
     } finally {
       setBusy(false);
@@ -456,9 +515,67 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
               </>
             )}
 
-            <div data-testid="gen-references-hint" style={mutedStyle}>
-              Reference media: coming soon.
-            </div>
+            {showReferences ? (
+              <div style={fieldGap}>
+                <span style={labelStyle}>References</span>
+                <div
+                  data-testid="gen-references-zone"
+                  onDragOver={(e) => { if (isMediaDrag(e)) { e.preventDefault(); setReferencesTargeted(true); } }}
+                  onDragLeave={() => setReferencesTargeted(false)}
+                  onDrop={handleReferenceDrop}
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: theme.spacing.xs,
+                    padding: theme.spacing.xs,
+                    borderRadius: theme.radius.sm,
+                    border: `${theme.borderWidth.thin} dashed ${referencesTargeted ? theme.accent.primary : theme.border.subtle}`,
+                    background: referencesTargeted ? theme.bg.surface : "transparent",
+                  }}
+                >
+                  {references.length === 0 && (
+                    <span data-testid="gen-references-empty" style={mutedStyle}>Drop image references here</span>
+                  )}
+                  {references.map((ref) => (
+                    <div
+                      key={ref.id}
+                      data-testid={`gen-reference-${ref.id}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: theme.spacing.xxs,
+                        background: theme.bg.surface,
+                        border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+                        borderRadius: theme.radius.xs,
+                        padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                      }}
+                    >
+                      <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.secondary, maxWidth: "8rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {ref.name}
+                      </span>
+                      <button
+                        data-testid={`gen-reference-remove-${ref.id}`}
+                        aria-label={`Remove ${ref.name}`}
+                        onClick={() => setReferences((prev) => prev.filter((r) => r.id !== ref.id))}
+                        style={{ background: "none", border: "none", color: theme.text.muted, cursor: "pointer", fontSize: theme.fontSize.xs, padding: 0, lineHeight: 1 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {referencesNote && (
+                  <div data-testid="gen-references-note" style={mutedStyle}>{referencesNote}</div>
+                )}
+              </div>
+            ) : (
+              kind === "audio" && (
+                <div data-testid="gen-references-hint" style={mutedStyle}>
+                  Reference media: coming soon.
+                </div>
+              )
+            )}
           </>
         )}
 

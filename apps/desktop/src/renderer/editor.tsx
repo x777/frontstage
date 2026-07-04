@@ -35,6 +35,7 @@ import { createDesktopMediaImport } from "./desktop-media-import.js";
 import { createDesktopLut } from "./desktop-lut.js";
 import { createDesktopInteropExport } from "./desktop-interop-export.js";
 import type { PlaybackEngine } from "@palmier/engine";
+import { renderSpanToMp4 } from "@palmier/engine";
 
 const engineRef: { current: PlaybackEngine | null } = { current: null };
 const store = new EditorStore(defaultTimeline());
@@ -187,6 +188,12 @@ const generationFacade = {
   get confirmThreshold() {
     return readConfirmThreshold();
   },
+  // generate_audio's video-to-audio span source (M14C T3) — the SAME headless export pipeline
+  // the real export gateway drives (runExport), just silent (no audio) and shrunk to shortSide.
+  renderSpanToMp4: (startFrame: number, frameCount: number, shortSide: number) =>
+    renderSpanToMp4(store.getSnapshot().timeline, library.byteSource, { startFrame, frameCount, shortSide }),
+  uploadFile: (bytes: Uint8Array, contentType: string, fileName: string) =>
+    genGateway.uploadFile(bytes, contentType, fileName),
 };
 
 // Delegates through the ref (not a captured instance) so any future recreate is picked up.

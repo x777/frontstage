@@ -1,4 +1,4 @@
-import { timelineTotalFrames, type Timeline } from "@palmier/core";
+import { timelineTotalFrames, fitShortestSide, type Timeline } from "@palmier/core";
 import { SourceCoordinator } from "../compositor/source-coordinator.js";
 import type { MediaByteSource } from "../media/media-source.js";
 import { FrameRenderer } from "../render/webgpu-renderer.js";
@@ -10,14 +10,35 @@ export interface ExportOptions {
   bitrate?: number;
 }
 
-export async function runExport(timeline: Timeline, media: MediaByteSource, sink: ExportSink, onProgress?: (completed: number, total: number) => void): Promise<Blob | undefined> {
-  const { width, height, fps } = timeline;
+// A sub-range/downscaled render (M14C T3's generate_audio span-render): omitted fields fall back
+// to a full, full-resolution, audio-included export — the existing runExport behavior.
+export interface SpanRenderOptions {
+  startFrame?: number;
+  frameCount?: number;
+  includeAudio?: boolean;
+  width?: number;
+  height?: number;
+}
+
+export async function runExport(
+  timeline: Timeline,
+  media: MediaByteSource,
+  sink: ExportSink,
+  onProgress?: (completed: number, total: number) => void,
+  renderOpts?: SpanRenderOptions,
+): Promise<Blob | undefined> {
+  const width = renderOpts?.width ?? timeline.width;
+  const height = renderOpts?.height ?? timeline.height;
+  const fps = timeline.fps;
   const totalFrames = timelineTotalFrames(timeline);
+  const startFrame = renderOpts?.startFrame ?? 0;
+  const frameCount = renderOpts?.frameCount ?? Math.max(0, totalFrames - startFrame);
+  const includeAudio = renderOpts?.includeAudio ?? true;
 
   const offscreen = new OffscreenCanvas(width, height);
   const renderer = await FrameRenderer.create(offscreen);
   const coord = await SourceCoordinator.create(timeline, media);
-  const mixer = await AudioMixer.create(timeline, media);
+  const mixer = includeAudio ? await AudioMixer.create(timeline, media) : undefined;
 
   await sink.configure({
     width,
@@ -27,7 +48,8 @@ export async function runExport(timeline: Timeline, media: MediaByteSource, sink
   });
 
   try {
-    for (let frame = 0; frame < totalFrames; frame++) {
+    for (let i = 0; i < frameCount; i++) {
+      const frame = startFrame + i;
       const { layers, cleanup } = await coord.layersForScrub(frame);
       try {
         await renderer.composite(layers, { width, height });
@@ -39,11 +61,11 @@ export async function runExport(timeline: Timeline, media: MediaByteSource, sink
       await sink.pushFrame({
         offscreen,
         renderer,
-        timestampUs: Math.round(frame * 1e6 / fps),
+        timestampUs: Math.round(i * 1e6 / fps),
         durationUs: Math.round(1e6 / fps),
-        keyFrame: frame % fps === 0,
+        keyFrame: i % fps === 0,
       });
-      onProgress?.(frame + 1, totalFrames);
+      onProgress?.(i + 1, frameCount);
     }
 
     if (mixer) {
@@ -84,4 +106,29 @@ export async function exportTimelineToMp4(
 ): Promise<Blob> {
   const blob = await runExport(timeline, media, new WebCodecsMp4Sink(opts));
   return blob!;
+}
+
+// Headless span render for generate_audio's video-to-audio source (M14C T3, the M10 deferral):
+// silent (no audio track — Swift's TimelineRenderer.render(includeAudio: false)), shrunk to
+// shortSide, reusing the SAME composite/encode pipeline the real export gateways drive — just
+// with no save dialog and no file write. Both hosts wire ToolContext.generation.renderSpanToMp4
+// to this directly.
+export async function renderSpanToMp4(
+  timeline: Timeline,
+  media: MediaByteSource,
+  opts: { startFrame: number; frameCount: number; shortSide?: number },
+): Promise<Uint8Array> {
+  const { width, height } = opts.shortSide != null
+    ? fitShortestSide(timeline.width, timeline.height, opts.shortSide)
+    : { width: timeline.width, height: timeline.height };
+
+  const blob = await runExport(timeline, media, new WebCodecsMp4Sink(), undefined, {
+    startFrame: opts.startFrame,
+    frameCount: opts.frameCount,
+    includeAudio: false,
+    width,
+    height,
+  });
+  if (!blob) throw new Error("Span render produced no output");
+  return new Uint8Array(await blob.arrayBuffer());
 }

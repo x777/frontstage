@@ -15,6 +15,14 @@ export interface GenModelCaps {
   supportsInstrumental?: boolean;
   numImagesMax?: number;
   upscaleInputs?: ("video" | "image")[];
+  // M14C T3 (generate_audio's video-to-audio source, the M10 deferral) — mirrors Swift's
+  // AudioModelConfig.Input: acceptsVideo gates the tool's videoSource* fields; requiresVideo
+  // mirrors Swift's "acceptsVideo && !inputs.contains(.text)" — no source given is an error.
+  acceptsVideo?: boolean;
+  requiresVideo?: boolean;
+  // Drives the auto-place undo action name ("Add <label>") — mirrors Swift's
+  // AudioModelConfig.Category. Defaults to "music" when supportsLyrics, else "speech".
+  category?: "speech" | "music" | "sfx";
 }
 
 export type GenPricing =
@@ -38,6 +46,9 @@ export interface GenToolParams {
   imageUrls?: string[];
   sourceUrl?: string;
   language?: string;
+  // generate_audio's video-to-audio source (M14C T3) — the uploaded media-ref file or
+  // span-rendered mp4's URL, separate from sourceUrl (upscale/transcribe's convention).
+  videoUrl?: string;
 }
 
 export interface GenModelEntry {
@@ -194,6 +205,7 @@ const CATALOG: GenModelEntry[] = [
     kind: "audio",
     displayName: "ElevenLabs TTS Turbo v2.5",
     caps: {
+      category: "speech",
       voices: [
         "Rachel", "Aria", "Roger", "Sarah", "Laura", "Charlie", "George", "Callum", "River",
         "Liam", "Charlotte", "Alice", "Matilda", "Will", "Jessica", "Eric", "Chris", "Brian",
@@ -218,6 +230,7 @@ const CATALOG: GenModelEntry[] = [
     kind: "audio",
     displayName: "MiniMax Music",
     caps: {
+      category: "music",
       supportsLyrics: true,
     },
     pricing: {
@@ -229,6 +242,34 @@ const CATALOG: GenModelEntry[] = [
       const body: Record<string, unknown> = { prompt: params.lyrics ?? params.prompt ?? "" };
       if (params.sourceUrl) body["reference_audio_url"] = params.sourceUrl;
       return body;
+    },
+  },
+  {
+    id: "mmaudio-v2",
+    endpoint: "fal-ai/mmaudio-v2",
+    kind: "audio",
+    displayName: "MMAudio V2",
+    caps: {
+      category: "sfx",
+      acceptsVideo: true,
+      requiresVideo: true,
+    },
+    pricing: {
+      // $0.001/s — fal.ai 2026-07. FLAGGED: fal's own schema documents this endpoint's output as
+      // a MUXED video file (the generated audio synced onto the input video), not a standalone
+      // audio file — needs a real-key smoke test to confirm the downloaded bytes work as this
+      // app's "audio" asset type. Mirrors Swift's AudioGenerationSubmission, which also downloads
+      // and labels every audio-kind result uniformly (assetType .audio, "mp3") regardless of the
+      // real backend model's container.
+      kind: "audioPerSecond",
+      creditsPerSecond: 0.1,
+    },
+    buildInput(params) {
+      return {
+        video_url: params.videoUrl ?? "",
+        prompt: params.prompt ?? "",
+        duration: params.duration ?? 8,
+      };
     },
   },
 

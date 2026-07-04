@@ -1,8 +1,8 @@
 import { z } from "zod";
-import type { GenerationInput, MediaManifestEntry } from "@palmier/core";
-import { createPlaceholderEntry } from "@palmier/core";
+import type { EditorStore, GenerationInput, MediaManifestEntry, Timeline } from "@palmier/core";
+import { addClipCommand, createPlaceholderEntry, resolveOrCreateAudioTrack, timelineTotalFrames } from "@palmier/core";
 import type { ToolResult, ToolSpec, ToolContext } from "./types.js";
-import { ok, errorResult } from "./executor.js";
+import { ok, errorResult, asUndoStep } from "./executor.js";
 import { genModel, listGenModels, validateGenParams } from "../generation/gen-catalog.js";
 import type { GenModelEntry, GenModelKind, GenToolParams } from "../generation/gen-catalog.js";
 import { estimateCredits, formatCredits } from "../generation/cost-estimator.js";
@@ -28,6 +28,10 @@ async function submit(
   placeholder: MediaManifestEntry,
   estimate: number,
   startedLabel: string,
+  // Runs right after a successful startJob and, if given, REPLACES the default success message —
+  // generate_audio's span-source auto-place (M14C T3) hooks in here to place the timeline clip
+  // and report the placement in the same response.
+  afterStarted?: () => string,
 ): Promise<ToolResult> {
   generation.addPlaceholder(placeholder);
   const result = await generation.startJob({
@@ -38,9 +42,43 @@ async function submit(
     costCredits: estimate,
   });
   if ("error" in result) return errorResult(result.error);
+  if (afterStarted) return ok(afterStarted());
   return ok(
     `${startedLabel} Placeholder asset ID: ${placeholder.id}. It will appear in the media library when ready. Estimated cost: ${formatCredits(estimate)}.`,
   );
+}
+
+const AUDIO_CATEGORY_LABELS = { speech: "Speech", music: "Music", sfx: "Sound Effects" } as const;
+
+function audioCategoryLabel(entry: GenModelEntry): string {
+  const category = entry.caps.category ?? (entry.caps.supportsLyrics ? "music" : "speech");
+  return AUDIO_CATEGORY_LABELS[category];
+}
+
+// Places the generating placeholder as an audio clip at [startFrame, startFrame + frameCount) —
+// mirrors Swift's placeGeneratingAudioClip: resolve-or-create a free audio track, then place the
+// clip referencing the placeholder's mediaRef, as ONE undo step. There's no TS analogue yet to
+// Swift's finalizeGeneratingClip (which re-syncs the clip's duration once the real asset downloads)
+// — the clip keeps the span length it was placed with; see task-3-report.md.
+function placeGeneratingAudioClip(
+  store: EditorStore,
+  newId: () => string,
+  placeholder: MediaManifestEntry,
+  startFrame: number,
+  frameCount: number,
+  actionName: string,
+): void {
+  const fps = store.getSnapshot().timeline.fps;
+  let trackIndex = -1;
+  asUndoStep(store, actionName, [
+    (t: Timeline) => {
+      const resolved = resolveOrCreateAudioTrack(t, startFrame, frameCount, newId);
+      trackIndex = resolved.trackIndex;
+      return resolved.timeline;
+    },
+    (t: Timeline) =>
+      addClipCommand(placeholder, { kind: "existing", index: trackIndex }, startFrame, fps, undefined, newId, frameCount).apply(t),
+  ]);
 }
 
 export function generateVideoTool(): ToolSpec {
@@ -269,7 +307,7 @@ export function generateAudioTool(): ToolSpec {
   return {
     name: "generate_audio",
     description:
-      "Starts an async AI audio generation: text-to-speech or text-to-music. Returns a placeholder asset ID immediately; generation runs in the background and the asset becomes usable once ready. Video-to-audio / video-scoring generation (matching an audio track to a timeline span or video asset) is NOT available yet. Call list_models (kind='audio') first to see available models, their voices, and whether they support lyrics or instrumental tracks. Costs real money and is not undoable.",
+      "Starts an async AI audio generation: text-to-speech, text-to-music, or video-scored audio (matching a soundtrack to a timeline span or an existing video asset — pass videoSourceStartFrame + videoSourceEndFrame, or videoSourceMediaRef, mutually exclusive). Returns a placeholder asset ID immediately; generation runs in the background and the asset becomes usable once ready. A timeline-span source auto-places the result on the timeline as one undo step; a media-ref source stays library-only (place it with add_clips). Call list_models (kind='audio') first to see available models, their voices, and whether they support lyrics, instrumental tracks, or video input. Costs real money and is not undoable.",
     inputSchema: z.object({
       prompt: z.string().min(1),
       model: z.string().min(1),
@@ -278,6 +316,9 @@ export function generateAudioTool(): ToolSpec {
       styleInstructions: z.string().optional(),
       instrumental: z.boolean().optional(),
       duration: z.number().optional(),
+      videoSourceMediaRef: z.string().optional(),
+      videoSourceStartFrame: z.number().int().optional(),
+      videoSourceEndFrame: z.number().int().optional(),
       confirm: z.boolean().optional(),
     }),
     async run(args, ctx) {
@@ -289,6 +330,9 @@ export function generateAudioTool(): ToolSpec {
         styleInstructions?: string;
         instrumental?: boolean;
         duration?: number;
+        videoSourceMediaRef?: string;
+        videoSourceStartFrame?: number;
+        videoSourceEndFrame?: number;
         confirm?: boolean;
       };
 
@@ -298,10 +342,56 @@ export function generateAudioTool(): ToolSpec {
       const entry = genModel(a.model);
       if (!entry || entry.kind !== "audio") return unknownModelError(a.model, "audio");
 
-      // Swift's TTS/music placeholder-duration heuristic (Defaults.audio{TTS,Music}DurationSeconds):
-      // models that support lyrics are music (long-form), everything else is TTS (short-form).
+      const hasMediaRef = a.videoSourceMediaRef !== undefined;
+      const hasStart = a.videoSourceStartFrame !== undefined;
+      const hasEnd = a.videoSourceEndFrame !== undefined;
+      if (hasMediaRef && (hasStart || hasEnd)) {
+        return errorResult("videoSourceMediaRef is mutually exclusive with videoSourceStartFrame/videoSourceEndFrame.");
+      }
+      if (hasStart !== hasEnd) {
+        return errorResult("videoSourceStartFrame and videoSourceEndFrame must be provided together.");
+      }
+
+      const acceptsVideo = entry.caps.acceptsVideo === true;
+      let spanSeconds: number | undefined;
+      let placement: { startFrame: number; frameCount: number } | undefined;
+      let mediaRefSource: string | undefined;
+
+      if (hasMediaRef) {
+        if (!acceptsVideo) return errorResult(`Model '${entry.id}' does not accept a video input (see list_models 'inputs').`);
+        const videoAsset = ctx.getManifest().entries.find((e) => e.id === a.videoSourceMediaRef);
+        if (!videoAsset) return errorResult(`Video source not found: ${a.videoSourceMediaRef}`);
+        if (videoAsset.type !== "video") {
+          return errorResult(`videoSourceMediaRef must be a video asset (got ${videoAsset.type}).`);
+        }
+        spanSeconds = videoAsset.duration;
+        mediaRefSource = a.videoSourceMediaRef;
+      } else if (hasStart && hasEnd) {
+        if (!acceptsVideo) return errorResult(`Model '${entry.id}' does not accept a video input (see list_models 'inputs').`);
+        const start = a.videoSourceStartFrame!;
+        const end = a.videoSourceEndFrame!;
+        if (start < 0 || end <= start) {
+          return errorResult("videoSourceEndFrame must be greater than videoSourceStartFrame (>= 0).");
+        }
+        const tl = ctx.store.getSnapshot().timeline;
+        const totalFrames = timelineTotalFrames(tl);
+        if (end > totalFrames) {
+          return errorResult(`videoSourceEndFrame ${end} is beyond the timeline's end frame (${totalFrames}).`);
+        }
+        spanSeconds = (end - start) / Math.max(1, tl.fps);
+        placement = { startFrame: start, frameCount: end - start };
+      }
+
+      if (entry.caps.requiresVideo && spanSeconds === undefined) {
+        return errorResult(
+          `Model '${entry.id}' generates audio from video. Provide videoSourceStartFrame + videoSourceEndFrame (a timeline span) or videoSourceMediaRef.`,
+        );
+      }
+
+      // Swift's TTS/music placeholder-duration heuristic (Defaults.audio{TTS,Music}DurationSeconds),
+      // extended for a video source: the span/asset length drives it, like Swift's spanSeconds.
       // Resolved BEFORE the estimate so a future duration-priced audio model can't bypass the gate.
-      const duration = a.duration ?? (entry.caps.supportsLyrics ? 60 : 10);
+      const duration = a.duration ?? (spanSeconds !== undefined ? Math.max(1, Math.round(spanSeconds)) : entry.caps.supportsLyrics ? 60 : 10);
       const params: GenToolParams = {
         prompt: a.prompt,
         voice: a.voice,
@@ -315,6 +405,20 @@ export function generateAudioTool(): ToolSpec {
 
       const estimate = estimateCredits(entry, params);
       if (estimate > ctx.generation.confirmThreshold && !a.confirm) return confirmationResult(estimate);
+
+      // Resolve the video source — upload the media-ref file, or render+upload the timeline span —
+      // only AFTER the cost gate. A rejected (unconfirmed) estimate must not pay for that work.
+      if (mediaRefSource) {
+        if (!ctx.generation.entryUrl) return errorResult("media upload not available yet");
+        const url = await ctx.generation.entryUrl(mediaRefSource);
+        if (!url) return errorResult("Could not read the video source file.");
+        params.videoUrl = url;
+      } else if (placement) {
+        if (!ctx.generation.renderSpanToMp4) return errorResult("Timeline span rendering is not available in this context.");
+        if (!ctx.generation.uploadFile) return errorResult("Media upload is not available in this context.");
+        const bytes = await ctx.generation.renderSpanToMp4(placement.startFrame, placement.frameCount, 360);
+        params.videoUrl = await ctx.generation.uploadFile(bytes, "video/mp4", `span-${ctx.newId()}.mp4`);
+      }
 
       const input = entry.buildInput(params);
 
@@ -337,6 +441,14 @@ export function generateAudioTool(): ToolSpec {
         ext: "mp3",
         genInput,
       });
+
+      if (placement) {
+        const { startFrame, frameCount } = placement;
+        return submit(ctx.generation, entry, input, placeholder, estimate, "Generation started.", () => {
+          placeGeneratingAudioClip(ctx.store, ctx.newId, placeholder, startFrame, frameCount, `Add ${audioCategoryLabel(entry)}`);
+          return `Generation started and placed on the timeline at frame ${startFrame}. Placeholder asset ID: ${placeholder.id}. Model: ${entry.displayName}, ${audioCategoryLabel(entry)} (scored from video). Estimated cost: ${formatCredits(estimate)}.`;
+        });
+      }
 
       return submit(ctx.generation, entry, input, placeholder, estimate, "Generation started.");
     },

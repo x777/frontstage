@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline } from "@palmier/core";
-import type { MediaManifest, MediaManifestEntry } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
+import type { MediaManifest, MediaManifestEntry, Timeline, Track } from "@palmier/core";
 import { generateVideoTool, upscaleMediaTool, generateAudioTool, listModelsTool } from "../src/tools/generate-tools.js";
 import type { ToolContext } from "../src/index.js";
 import type { StartJobArgs } from "../src/generation/generation-service.js";
@@ -458,6 +458,307 @@ describe("generate_audio tool", () => {
 
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("aud-42");
+  });
+});
+
+// ── generate_audio: video-to-audio source (M14C T3, the M10 deferral) ───────
+
+// 10s @ 30fps of video content on one track — enough room for span tests within bounds.
+function makeVideoClip(): Track["clips"][number] {
+  return {
+    id: "vclip-1",
+    mediaRef: "src-video",
+    mediaType: "video",
+    sourceClipType: "video",
+    startFrame: 0,
+    durationFrames: 300,
+    trimStartFrame: 0,
+    trimEndFrame: 0,
+    speed: 1,
+    volume: 1,
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+    fadeInInterpolation: "linear",
+    fadeOutInterpolation: "linear",
+    opacity: 1,
+    transform: defaultTransform(),
+    crop: defaultCrop(),
+  };
+}
+
+function makeSpanTimeline(): Timeline {
+  return { ...defaultTimeline(), tracks: [{ id: "t1", type: "video", muted: false, hidden: false, syncLocked: false, clips: [makeVideoClip()] }] };
+}
+
+function makeSpanManifest(): MediaManifest {
+  return {
+    version: 2,
+    folders: [],
+    entries: [
+      { id: "src-video", name: "clip.mp4", type: "video", source: { kind: "project", relativePath: "media/src-video.mp4" }, duration: 10 },
+      { id: "src-image", name: "still.png", type: "image", source: { kind: "project", relativePath: "media/src-image.png" }, duration: 5 },
+    ],
+  };
+}
+
+function makeSpanCtx(overrides?: Partial<ToolContext>): ToolContext {
+  const store = new EditorStore(makeSpanTimeline());
+  return {
+    store,
+    getManifest: () => makeSpanManifest(),
+    newId: () => "new-id",
+    ...overrides,
+  };
+}
+
+describe("generate_audio: video-to-audio source (M14C T3)", () => {
+  test("videoSourceStartFrame without videoSourceEndFrame errors (both-or-neither)", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 0 }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("must be provided together");
+  });
+
+  test("videoSourceMediaRef together with videoSourceStartFrame/EndFrame errors (mutually exclusive)", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceMediaRef: "src-video", videoSourceStartFrame: 0, videoSourceEndFrame: 30 },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("mutually exclusive");
+  });
+
+  test("a non-video-accepting model rejects videoSourceMediaRef", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "hi", model: "elevenlabs-tts", videoSourceMediaRef: "src-video", confirm: true }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("does not accept a video input");
+  });
+
+  test("a non-video-accepting model rejects a videoSource span", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "hi", model: "elevenlabs-tts", videoSourceStartFrame: 0, videoSourceEndFrame: 30, confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("does not accept a video input");
+  });
+
+  test("videoSourceMediaRef pointing at an unknown asset errors", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "footsteps", model: "mmaudio-v2", videoSourceMediaRef: "does-not-exist", confirm: true }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Video source not found");
+  });
+
+  test("videoSourceMediaRef pointing at a non-video asset errors", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "footsteps", model: "mmaudio-v2", videoSourceMediaRef: "src-image", confirm: true }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("must be a video asset");
+  });
+
+  test("videoSourceEndFrame <= videoSourceStartFrame errors", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 30, videoSourceEndFrame: 30, confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("must be greater than videoSourceStartFrame");
+  });
+
+  test("a videoSourceEndFrame beyond the timeline's end frame errors", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 0, videoSourceEndFrame: 301, confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("beyond the timeline's end frame");
+  });
+
+  test("a video-requiring model with neither source given errors, naming both options", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade();
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run({ prompt: "footsteps", model: "mmaudio-v2", confirm: true }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("generates audio from video");
+    expect(textOf(result)).toContain("videoSourceMediaRef");
+  });
+
+  test("gate-before-render: over threshold without confirm does not render, upload, or start the job", async () => {
+    const tool = generateAudioTool();
+    const calls: string[] = [];
+    const { facade, addPlaceholderCalls, startJobCalls } = makeFacade({
+      renderSpanToMp4: async () => { calls.push("render"); return new Uint8Array([1]); },
+      uploadFile: async () => { calls.push("upload"); return "https://example.com/span.mp4"; },
+    });
+    const ctx = makeSpanCtx({ generation: facade });
+
+    // mmaudio-v2 @ 0.1 credits/s * 60s (2s span rounds duration... actually duration = round(span)):
+    // span = 60 frames / 30fps = 2s -> duration 2 -> 2*0.1 = 0.2 -> ceil 1 credit, UNDER 50.
+    // Force an over-threshold case by passing an explicit long duration instead.
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 0, videoSourceEndFrame: 60, duration: 600 },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("Confirmation required");
+    expect(calls).toEqual([]);
+    expect(addPlaceholderCalls).toHaveLength(0);
+    expect(startJobCalls).toHaveLength(0);
+  });
+
+  test("facade-absent renderSpanToMp4 errors cleanly, naming the capability", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade({ renderSpanToMp4: undefined, uploadFile: async () => "https://example.com/x.mp4" });
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 0, videoSourceEndFrame: 60, confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Timeline span rendering is not available");
+  });
+
+  test("facade-absent uploadFile errors cleanly, naming the capability", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade({
+      renderSpanToMp4: async () => new Uint8Array([1]),
+      uploadFile: undefined,
+    });
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 0, videoSourceEndFrame: 60, confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Media upload is not available");
+  });
+
+  test("span flow: render -> upload -> videoUrl in the built input, in that order", async () => {
+    const tool = generateAudioTool();
+    const calls: string[] = [];
+    const renderArgs: unknown[] = [];
+    const { facade, startJobCalls } = makeFacade({
+      renderSpanToMp4: async (startFrame, frameCount, shortSide) => {
+        calls.push("render");
+        renderArgs.push([startFrame, frameCount, shortSide]);
+        return new Uint8Array([9, 9]);
+      },
+      uploadFile: async (bytes, contentType) => {
+        calls.push("upload");
+        expect(bytes).toEqual(new Uint8Array([9, 9]));
+        expect(contentType).toBe("video/mp4");
+        return "https://example.com/span.mp4";
+      },
+    });
+    const ctx = makeSpanCtx({ generation: facade });
+
+    const result = await tool.run(
+      { prompt: "footsteps on gravel", model: "mmaudio-v2", videoSourceStartFrame: 30, videoSourceEndFrame: 90, confirm: true },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(calls).toEqual(["render", "upload"]);
+    expect(renderArgs).toEqual([[30, 60, 360]]);
+
+    expect(startJobCalls).toHaveLength(1);
+    expect(startJobCalls[0]!.input).toEqual({
+      video_url: "https://example.com/span.mp4",
+      prompt: "footsteps on gravel",
+      duration: 2, // (90-30)/30fps = 2s
+    });
+  });
+
+  test("span flow auto-places the audio clip as ONE undo step, and does not for a media-ref source", async () => {
+    const tool = generateAudioTool();
+    const { facade } = makeFacade({
+      renderSpanToMp4: async () => new Uint8Array([1]),
+      uploadFile: async () => "https://example.com/span.mp4",
+      entryUrl: async () => "https://example.com/src-video.mp4",
+    });
+
+    // Span source: auto-places.
+    const spanCtx = makeSpanCtx({ generation: facade, newId: () => "placeholder-span" });
+    const before = spanCtx.store.getSnapshot().timeline;
+    const result = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceStartFrame: 30, videoSourceEndFrame: 90, confirm: true },
+      spanCtx,
+    );
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("placed on the timeline at frame 30");
+    expect(textOf(result)).toContain("Sound Effects"); // the category label (undo action name is "Add Sound Effects")
+
+    const after = spanCtx.store.getSnapshot().timeline;
+    expect(after.tracks).toHaveLength(2); // the existing video track + a new audio track
+    const audioTrack = after.tracks[1]!;
+    expect(audioTrack.type).toBe("audio");
+    expect(audioTrack.clips).toHaveLength(1);
+    const placedClip = audioTrack.clips[0]!;
+    expect(placedClip.mediaRef).toBe("placeholder-span");
+    expect(placedClip.startFrame).toBe(30);
+    expect(placedClip.durationFrames).toBe(60);
+
+    expect(spanCtx.store.canUndo()).toBe(true);
+    spanCtx.store.undo();
+    expect(spanCtx.store.getSnapshot().timeline).toEqual(before); // exactly one undo step
+
+    // Media-ref source: library-only, no timeline change at all.
+    const refCtx = makeSpanCtx({ generation: facade, newId: () => "placeholder-ref" });
+    const refBefore = refCtx.store.getSnapshot().timeline;
+    const refResult = await tool.run(
+      { prompt: "footsteps", model: "mmaudio-v2", videoSourceMediaRef: "src-video", confirm: true },
+      refCtx,
+    );
+    expect(refResult.isError).toBe(false);
+    expect(textOf(refResult)).not.toContain("placed on the timeline");
+    expect(refCtx.store.getSnapshot().timeline).toEqual(refBefore);
+    expect(refCtx.store.canUndo()).toBe(false);
   });
 });
 

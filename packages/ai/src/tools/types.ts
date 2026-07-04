@@ -31,6 +31,14 @@ export interface ToolContext {
     // Resolves a library media ref to a URL fal can fetch (data URI or hosted). Optional in v1.
     entryUrl?(mediaRef: string): Promise<string | undefined>;
     confirmThreshold: number;
+    // generate_audio's video-to-audio span source (M14C T3, the M10 deferral) — a headless,
+    // silent (no audio), shortSide-downscaled render of [startFrame, startFrame+frameCount)
+    // reusing the SAME export pipeline the real export gateways drive (@palmier/engine's
+    // renderSpanToMp4). Absent -> the tool errors cleanly naming the capability.
+    renderSpanToMp4?(startFrame: number, frameCount: number, shortSide: number): Promise<Uint8Array>;
+    // Raw-bytes upload to the fal storage path (M11A's gateway.uploadFile) for renderSpanToMp4's
+    // output — entryUrl only resolves EXISTING library entries, not ephemeral rendered bytes.
+    uploadFile?(bytes: Uint8Array, contentType: string, fileName: string): Promise<string>;
   };
   transcription?: {
     transcribe(mediaRef: string, opts?: { language?: string }): Promise<TranscriptionResult>;
