@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { MediaManifestEntry, Timeline } from "@palmier/core";
+import type { FcpxmlTarget, FcpxmlVersion, MediaManifestEntry, Timeline } from "@palmier/core";
 import { cuesFromCaptionClips, exportFcpxml, exportXmeml, formatSrt, formatVtt, timelineMediaRefs } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
 import type { ToolContext } from "@palmier/ai";
@@ -7,6 +7,12 @@ import type { ExportGateway } from "./export-gateway.js";
 import type { RunProjectCommand } from "./Editor.js";
 
 export type ExportKind = "video" | "fcpxml" | "xmeml" | "srt" | "vtt";
+
+// #254's picker values (fcpxml mode only) — omitted fields fall back to exportFcpxml's own Swift-parity defaults.
+export interface FcpxmlExportOptions {
+  target?: FcpxmlTarget;
+  version?: FcpxmlVersion;
+}
 
 export interface ExportState {
   label: string;
@@ -23,7 +29,7 @@ export function useExportCommand(opts: {
   suggestedName: () => string;
   runProjectCommand: RunProjectCommand;
 }): {
-  exportProject: (kind?: ExportKind) => void;
+  exportProject: (kind?: ExportKind, fcpxmlOptions?: FcpxmlExportOptions) => void;
   exportState: ExportState | null;
   canExport: boolean;
   canExportXml: boolean;
@@ -55,7 +61,7 @@ export function useExportCommand(opts: {
     });
   }
 
-  function exportXml(kind: "fcpxml" | "xmeml") {
+  function exportXml(kind: "fcpxml" | "xmeml", fcpxmlOptions?: FcpxmlExportOptions) {
     if (!interopExport) return;
     runningRef.current = true;
     runProjectCommand(async () => {
@@ -68,7 +74,13 @@ export function useExportCommand(opts: {
         const xml =
           kind === "xmeml"
             ? exportXmeml(timeline, entries, { projectRoot, projectName, startTimecodes })
-            : exportFcpxml(timeline, entries, { projectRoot, projectName, startTimecodes });
+            : exportFcpxml(timeline, entries, {
+                projectRoot,
+                projectName,
+                startTimecodes,
+                target: fcpxmlOptions?.target,
+                version: fcpxmlOptions?.version,
+              });
         const ext = kind === "xmeml" ? "xml" : "fcpxml";
         await interopExport.saveText(`${projectName}.${ext}`, xml, kind, undefined, true);
       } finally {
@@ -97,10 +109,10 @@ export function useExportCommand(opts: {
     });
   }
 
-  function exportProject(kind: ExportKind = "video") {
+  function exportProject(kind: ExportKind = "video", fcpxmlOptions?: FcpxmlExportOptions) {
     if (runningRef.current) return;
     if (kind === "video") exportVideo();
-    else if (kind === "fcpxml" || kind === "xmeml") exportXml(kind);
+    else if (kind === "fcpxml" || kind === "xmeml") exportXml(kind, fcpxmlOptions);
     else exportCaptions(kind);
   }
 

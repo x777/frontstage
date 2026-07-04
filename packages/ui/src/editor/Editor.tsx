@@ -82,6 +82,8 @@ export interface EditorProps {
       imageModel: string;
       onAgentModelChange: (id: string) => void;
       onImageModelChange: (id: string) => void;
+      confirmThreshold: number;
+      onConfirmThresholdChange: (value: number) => void;
       mcp?: McpSettings;
     };
   };
@@ -513,6 +515,8 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
           imageModel={agent.settings.imageModel}
           onAgentModelChange={agent.settings.onAgentModelChange}
           onImageModelChange={agent.settings.onImageModelChange}
+          confirmThreshold={agent.settings.confirmThreshold}
+          onConfirmThresholdChange={agent.settings.onConfirmThresholdChange}
           onClose={() => setSettingsVisible(false)}
           mcp={agent.settings.mcp}
         />

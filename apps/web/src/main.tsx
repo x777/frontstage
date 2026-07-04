@@ -4,7 +4,7 @@ import { EditorStore, ProjectSession, SAMPLER_VERSION } from "@palmier/core";
 import type { GenerationLogEntry } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import "@palmier/ui/theme/tokens.css";
-import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG } from "@palmier/ui";
+import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
 import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
@@ -44,6 +44,7 @@ function PalmierApp({ store, session, library, exportGateway, interopExport, age
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
   const [falEnabled, setFalEnabled] = useState(false);
+  const [confirmThreshold, setConfirmThreshold] = useState(() => readConfirmThreshold());
 
   useEffect(() => {
     genGateway.hasKey().then(setFalEnabled).catch(() => setFalEnabled(false));
@@ -59,6 +60,11 @@ function PalmierApp({ store, session, library, exportGateway, interopExport, age
     setImageModel(id);
     imageGenerator.setModel(id);
     localStorage.setItem("palmier.image.model", id);
+  }
+
+  function onConfirmThresholdChange(value: number) {
+    setConfirmThreshold(value);
+    writeConfirmThreshold(value);
   }
 
   const keyConfig: KeyConfig = {
@@ -105,6 +111,8 @@ function PalmierApp({ store, session, library, exportGateway, interopExport, age
           imageModel,
           onAgentModelChange,
           onImageModelChange,
+          confirmThreshold,
+          onConfirmThresholdChange,
         },
       }}
     />
@@ -279,7 +287,11 @@ async function bootstrap() {
     addPlaceholder: (entry) => library.addPlaceholder(entry),
     startJob: (args) => generationServiceRef.current.startJob(args),
     entryUrl,
-    confirmThreshold: 50,
+    // Settings-driven (replaces the old hardcoded 50) — read live so a Settings change takes
+    // effect on the next call without recreating the facade.
+    get confirmThreshold() {
+      return readConfirmThreshold();
+    },
   };
 
   // Delegates through the ref (not a captured instance) so any future recreate is picked up.

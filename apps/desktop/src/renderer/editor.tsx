@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@palmier/core";
 import type { MediaManifestEntry } from "@palmier/core";
 import "@palmier/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG } from "@palmier/ui";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
 import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines } from "@palmier/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@palmier/ai";
@@ -181,7 +181,11 @@ const generationFacade = {
   addPlaceholder: (entry: MediaManifestEntry) => library.addPlaceholder(entry),
   startJob: (args: StartJobArgs) => generationServiceRef.current.startJob(args),
   entryUrl,
-  confirmThreshold: 50,
+  // Settings-driven (replaces the old hardcoded 50) — read live so a Settings change takes
+  // effect on the next call without recreating the facade.
+  get confirmThreshold() {
+    return readConfirmThreshold();
+  },
 };
 
 // Delegates through the ref (not a captured instance) so any future recreate is picked up.
@@ -357,6 +361,7 @@ function PalmierDesktopApp() {
   const [imageModelId, setImageModelId] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [hasKey, setHasKey] = useState(false);
   const [falHasKey, setFalHasKey] = useState(false);
+  const [confirmThreshold, setConfirmThreshold] = useState(() => readConfirmThreshold());
 
   useEffect(() => {
     window.desktopAI?.hasKey().then(setHasKey).catch(() => {});
@@ -373,6 +378,11 @@ function PalmierDesktopApp() {
     setImageModelId(id);
     imageGenerator.setModel(id);
     localStorage.setItem("palmier.image.model", id);
+  }
+
+  function onConfirmThresholdChange(value: number) {
+    setConfirmThreshold(value);
+    writeConfirmThreshold(value);
   }
 
   const keyConfig: KeyConfig = {
@@ -435,6 +445,8 @@ function PalmierDesktopApp() {
           imageModel: imageModelId,
           onAgentModelChange,
           onImageModelChange,
+          confirmThreshold,
+          onConfirmThresholdChange,
           mcp: window.desktopMcp ? {
             getStatus: () => window.desktopMcp!.getStatus(),
             setEnabled: (on) => window.desktopMcp!.setEnabled(on),

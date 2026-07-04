@@ -25,6 +25,8 @@ function makeKeychainProps(hasKey = false) {
     imageModel: "b/img-1",
     onAgentModelChange: vi.fn(),
     onImageModelChange: vi.fn(),
+    confirmThreshold: 50,
+    onConfirmThresholdChange: vi.fn(),
   };
 }
 
@@ -78,6 +80,8 @@ test("SettingsPanel proxy: Save calls onSave with url and token", () => {
       imageModel="b/img-1"
       onAgentModelChange={vi.fn()}
       onImageModelChange={vi.fn()}
+      confirmThreshold={50}
+      onConfirmThresholdChange={vi.fn()}
     />,
   );
   fireEvent.change(screen.getByTestId("settings-proxy-url"), { target: { value: "http://new-proxy.example.com" } });
@@ -219,4 +223,27 @@ test("SettingsPanel fal proxyInfo: disabled shows the hint to set FAL_KEY on the
 test("SettingsPanel: fal.ai section absent when falKeyConfig prop is not provided", () => {
   render(<SettingsPanel {...makeKeychainProps()} />);
   expect(screen.queryByTestId("settings-fal")).toBeNull();
+});
+
+// --- generation confirm threshold tests (M14C T1) ---
+
+test("SettingsPanel: confirm-threshold field renders the current value and hints '0 = always ask'", () => {
+  render(<SettingsPanel {...makeKeychainProps()} confirmThreshold={50} />);
+  const input = screen.getByTestId("settings-confirm-threshold") as HTMLInputElement;
+  expect(input.value).toBe("50");
+  expect(screen.getByTestId("settings-generation").textContent).toContain("0 = always ask");
+});
+
+test("SettingsPanel: editing the confirm-threshold field calls onConfirmThresholdChange with the number", () => {
+  const onConfirmThresholdChange = vi.fn();
+  render(<SettingsPanel {...makeKeychainProps()} confirmThreshold={50} onConfirmThresholdChange={onConfirmThresholdChange} />);
+  fireEvent.change(screen.getByTestId("settings-confirm-threshold"), { target: { value: "10" } });
+  expect(onConfirmThresholdChange).toHaveBeenCalledWith(10);
+});
+
+test("SettingsPanel: the confirm-threshold field accepts 0 (always ask)", () => {
+  const onConfirmThresholdChange = vi.fn();
+  render(<SettingsPanel {...makeKeychainProps()} confirmThreshold={50} onConfirmThresholdChange={onConfirmThresholdChange} />);
+  fireEvent.change(screen.getByTestId("settings-confirm-threshold"), { target: { value: "0" } });
+  expect(onConfirmThresholdChange).toHaveBeenCalledWith(0);
 });

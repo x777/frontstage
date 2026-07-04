@@ -56,7 +56,7 @@ export type { ProjectActivityViewProps, ProjectActivityButtonProps } from "./edi
 export { createEditorHost } from "./editor/editor-host.js";
 export type { EditorMediaHost, EditorHostResult } from "./editor/editor-host.js";
 export type { ExportGateway, ExportTarget, ExportProgressFn } from "./editor/export-gateway.js";
-export type { ExportState, ExportKind } from "./editor/use-export-command.js";
+export type { ExportState, ExportKind, FcpxmlExportOptions } from "./editor/use-export-command.js";
 export { AgentPanel } from "./agent/AgentPanel.js";
 export type { AgentPanelProps } from "./agent/AgentPanel.js";
 export { GenerationPanel } from "./agent/GenerationPanel.js";
@@ -67,6 +67,7 @@ export type { MentionItem } from "./agent/MentionInput.js";
 export { useAgentSession } from "./agent/use-agent-session.js";
 export { SettingsPanel } from "./agent/SettingsPanel.js";
 export type { SettingsPanelProps, KeyConfig, FalKeyConfig } from "./agent/SettingsPanel.js";
+export { CONFIRM_THRESHOLD_STORAGE_KEY, DEFAULT_CONFIRM_THRESHOLD, readConfirmThreshold, writeConfirmThreshold } from "./agent/generation-settings.js";
 export { ModelPicker } from "./agent/ModelPicker.js";
 export type { ModelPickerProps } from "./agent/ModelPicker.js";
 export { localProjectStore } from "./storage/local-project-store.js";

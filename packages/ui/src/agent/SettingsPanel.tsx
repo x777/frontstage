@@ -32,6 +32,8 @@ export interface SettingsPanelProps {
   imageModel: string;
   onAgentModelChange: (id: string) => void;
   onImageModelChange: (id: string) => void;
+  confirmThreshold: number;
+  onConfirmThresholdChange: (value: number) => void;
   onClose?: () => void;
   mcp?: McpSettings;
 }
@@ -321,6 +323,50 @@ function McpConfig({ cfg }: { cfg: McpSettings }) {
   );
 }
 
+function ConfirmThresholdField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <section
+      data-testid="settings-generation"
+      style={{
+        borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+        paddingTop: theme.spacing.sm,
+        display: "flex",
+        flexDirection: "column",
+        gap: theme.spacing.xxs,
+      }}
+    >
+      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
+        Generation confirm threshold (credits)
+      </span>
+      <input
+        type="number"
+        min={0}
+        data-testid="settings-confirm-threshold"
+        value={value}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          onChange(Number.isFinite(n) ? n : 0);
+        }}
+        style={{
+          background: theme.bg.surface,
+          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
+          borderRadius: theme.radius.xs,
+          color: theme.text.primary,
+          fontSize: theme.fontSize.sm,
+          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+          outline: "none",
+          fontFamily: "inherit",
+          width: "100%",
+          boxSizing: "border-box" as const,
+        }}
+      />
+      <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted }}>
+        Generations estimated above this many credits ask for confirmation first. 0 = always ask.
+      </span>
+    </section>
+  );
+}
+
 export function SettingsPanel({
   keyConfig,
   falKeyConfig,
@@ -330,6 +376,8 @@ export function SettingsPanel({
   imageModel,
   onAgentModelChange,
   onImageModelChange,
+  confirmThreshold,
+  onConfirmThresholdChange,
   onClose,
   mcp,
 }: SettingsPanelProps) {
@@ -435,6 +483,8 @@ export function SettingsPanel({
             onChange={onImageModelChange}
           />
         </div>
+
+        <ConfirmThresholdField value={confirmThreshold} onChange={onConfirmThresholdChange} />
 
         {mcp && (
           <section

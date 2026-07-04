@@ -59,7 +59,7 @@ test("all three format buttons show when canExportXml is true, and each invokes 
 
   openMenu();
   fireEvent.click(screen.getByTestId("file-export-fcpxml"));
-  expect(onExport).toHaveBeenLastCalledWith("fcpxml");
+  expect(onExport).toHaveBeenLastCalledWith("fcpxml", { target: "resolve", version: "1.10" });
 
   openMenu();
   fireEvent.click(screen.getByTestId("file-export-xmeml"));
@@ -133,4 +133,86 @@ test("clicking a caption format button closes the menu", () => {
   openMenu();
   fireEvent.click(screen.getByTestId("file-export-srt"));
   expect(screen.queryByTestId("file-export-srt")).not.toBeInTheDocument();
+});
+
+// --- FCPXML For/Version pickers (M14C T1, Swift ExportView.swift:216-249 parity) ---
+
+test("FCPXML pickers are absent when canExportXml is false", () => {
+  render(
+    <FileMenu
+      session={makeFakeSession()}
+      confirmDiscard={async () => true}
+      runProjectCommand={() => {}}
+      onExport={() => {}}
+    />,
+  );
+  openMenu();
+  expect(screen.queryByTestId("fcpxml-options")).not.toBeInTheDocument();
+});
+
+test("FCPXML pickers show only alongside the FCPXML export option, with Swift's defaults", () => {
+  render(
+    <FileMenu
+      session={makeFakeSession()}
+      confirmDiscard={async () => true}
+      runProjectCommand={() => {}}
+      onExport={() => {}}
+      canExportXml
+    />,
+  );
+  openMenu();
+  expect(screen.getByTestId("fcpxml-options")).toBeInTheDocument();
+  expect((screen.getByTestId("fcpxml-target") as HTMLSelectElement).value).toBe("resolve");
+  expect((screen.getByTestId("fcpxml-version") as HTMLSelectElement).value).toBe("1.10");
+  expect(screen.getByTestId("fcpxml-compat-note").textContent).toBe("DaVinci Resolve 18+, Final Cut Pro 10.6+");
+});
+
+test("changing the pickers updates the compatibility note copy verbatim", () => {
+  render(
+    <FileMenu
+      session={makeFakeSession()}
+      confirmDiscard={async () => true}
+      runProjectCommand={() => {}}
+      onExport={() => {}}
+      canExportXml
+    />,
+  );
+  openMenu();
+  fireEvent.change(screen.getByTestId("fcpxml-version"), { target: { value: "1.13" } });
+  expect(screen.getByTestId("fcpxml-compat-note").textContent).toBe("DaVinci Resolve 21+, Final Cut Pro 11+");
+});
+
+test("changing the For/Version pickers and exporting passes the chosen target/version to onExport", () => {
+  const onExport = vi.fn();
+  render(
+    <FileMenu
+      session={makeFakeSession()}
+      confirmDiscard={async () => true}
+      runProjectCommand={() => {}}
+      onExport={onExport}
+      canExportXml
+    />,
+  );
+  openMenu();
+  fireEvent.change(screen.getByTestId("fcpxml-target"), { target: { value: "fcp" } });
+  fireEvent.change(screen.getByTestId("fcpxml-version"), { target: { value: "1.12" } });
+  fireEvent.click(screen.getByTestId("file-export-fcpxml"));
+  expect(onExport).toHaveBeenLastCalledWith("fcpxml", { target: "fcp", version: "1.12" });
+});
+
+test("the XMEML export button is unaffected by the FCPXML pickers", () => {
+  const onExport = vi.fn();
+  render(
+    <FileMenu
+      session={makeFakeSession()}
+      confirmDiscard={async () => true}
+      runProjectCommand={() => {}}
+      onExport={onExport}
+      canExportXml
+    />,
+  );
+  openMenu();
+  fireEvent.change(screen.getByTestId("fcpxml-target"), { target: { value: "fcp" } });
+  fireEvent.click(screen.getByTestId("file-export-xmeml"));
+  expect(onExport).toHaveBeenLastCalledWith("xmeml");
 });

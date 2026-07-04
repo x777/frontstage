@@ -239,6 +239,23 @@ describe("add_captions tool", () => {
     expect(textOf(result)).toContain("Confirmation required");
   });
 
+  // M14C T1: confirmThreshold: 0 means "always ask" — even a 1-credit estimate must gate.
+  test("confirmThreshold: 0 always gates, even a 1-credit estimate", async () => {
+    const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
+    const manifest = manifestOf(mediaEntry("m1", { hasAudio: true, duration: 1 }));
+    const { facade } = makeFacade({ estimateCredits: () => 1 });
+    const ctx = makeCtx(tl, manifest, facade, {
+      generation: {
+        hasKey: async () => true,
+        addPlaceholder: () => {},
+        startJob: async () => ({ jobId: "x" }),
+        confirmThreshold: 0,
+      },
+    });
+    const result = await addCaptionsTool().run({}, ctx);
+    expect(textOf(result)).toContain("Confirmation required");
+  });
+
   test("all uncached transcriptions failing returns an error, nothing dispatched", async () => {
     const tl = timelineOf(track("t0", "video", [baseClip({ id: "v1", mediaRef: "m1" })]));
     const manifest = manifestOf(mediaEntry("m1", { hasAudio: true }));

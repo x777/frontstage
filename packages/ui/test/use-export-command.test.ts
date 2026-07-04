@@ -387,6 +387,38 @@ test("exportProject('fcpxml') with no getProjectRoot on the facade (web-like) ke
   expect(expectedXml).toContain('src="file:///MyProj/media/a.mp4"');
 });
 
+test("exportProject('fcpxml', {target, version}) passes them through to exportFcpxml (M14C T1 pickers)", async () => {
+  const facade = makeInteropFacade();
+  const runProjectCommand = makeRunProjectCommand();
+  const timeline = realTimeline();
+
+  const { result } = renderHook(() =>
+    useExportCommand({
+      interopExport: facade,
+      getTimeline: () => timeline,
+      getMediaEntries: () => [],
+      media: fakeMedia,
+      suggestedName: () => "MyProj",
+      runProjectCommand,
+    })
+  );
+
+  await act(async () => {
+    result.current.exportProject("fcpxml", { target: "fcp", version: "1.12" });
+  });
+
+  const expectedXml = exportFcpxml(timeline, [], {
+    projectName: "MyProj",
+    startTimecodes: new Map(),
+    target: "fcp",
+    version: "1.12",
+  });
+  expect(facade.saveText).toHaveBeenCalledWith("MyProj.fcpxml", expectedXml, "fcpxml", undefined, true);
+  // Sanity: the target/version actually change the output vs. the resolve/1.10 defaults.
+  const defaultXml = exportFcpxml(timeline, [], { projectName: "MyProj", startTimecodes: new Map() });
+  expect(expectedXml).not.toBe(defaultXml);
+});
+
 test("exportProject('xmeml') is a no-op when no interopExport facade", async () => {
   const runProjectCommand = makeRunProjectCommand();
   const { result } = renderHook(() =>
