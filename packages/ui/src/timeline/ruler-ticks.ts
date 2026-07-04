@@ -50,8 +50,8 @@ export function rulerTicks(args: {
   const framesPerMajor = tickInterval(pixelsPerFrame, fps);
   if (framesPerMajor <= 0) return empty;
 
-  const startFrame = Math.max(0, Math.floor(scrollOffsetX / pixelsPerFrame) - framesPerMajor);
-  const endFrame = Math.floor((scrollOffsetX + width) / pixelsPerFrame) + framesPerMajor;
+  const startFrame = Math.max(0, Math.trunc(scrollOffsetX / pixelsPerFrame) - framesPerMajor);
+  const endFrame = Math.trunc((scrollOffsetX + width) / pixelsPerFrame) + framesPerMajor;
 
   const minorCount = minorSubdivisions(framesPerMajor, pixelsPerFrame);
   const framesPerMinor = minorCount > 0 ? intDiv(framesPerMajor, minorCount) : 0;

@@ -129,7 +129,7 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
               <IconButton
-                frame="xxs"
+                frame="xs"
                 testid={`track-synclock-${track.id}`}
                 ariaPressed={track.syncLocked}
                 active={track.syncLocked}
@@ -138,7 +138,7 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
               >
                 <Icon name={track.syncLocked ? "lock" : "lock-open"} size={ROW_ICON_SIZE} />
               </IconButton>
-              <IconButton frame="xxs" testid={toggleBtn.testid} ariaPressed={toggleBtn.on} active={toggleBtn.active} title={toggleBtn.label} onClick={toggleBtn.cmd}>
+              <IconButton frame="xs" testid={toggleBtn.testid} ariaPressed={toggleBtn.on} active={toggleBtn.active} title={toggleBtn.label} onClick={toggleBtn.cmd}>
                 <Icon name={toggleBtn.icon} size={ROW_ICON_SIZE} />
               </IconButton>
             </div>
