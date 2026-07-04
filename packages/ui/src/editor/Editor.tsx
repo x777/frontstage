@@ -5,6 +5,7 @@ import type { AgentSession, ChatSessionStore, ModelEntry, ToolContext } from "@p
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
 import type { KeyConfig, FalKeyConfig, McpSettings } from "../agent/SettingsPanel.js";
+import type { SkillsPaneProps } from "../skills/SkillsPane.js";
 import { ProjectActivityButton } from "./ProjectActivityView.js";
 import {
   addClipCommand,
@@ -90,6 +91,7 @@ export interface EditorProps {
       confirmThreshold: number;
       onConfirmThresholdChange: (value: number) => void;
       mcp?: McpSettings;
+      skills?: SkillsPaneProps;
     };
   };
 }
@@ -497,7 +499,17 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
           ) : undefined
         }
         title={title}
-        agent={agent ? <AgentPanel session={agent.session} model={agent.model} sessionStore={agent.sessionStore} mentionItems={agent.mentionItems} llmModels={agent.settings?.llmModels} onModelChange={agent.settings?.onAgentModelChange} /> : undefined}
+        agent={agent ? (
+          <AgentPanel
+            session={agent.session}
+            model={agent.model}
+            sessionStore={agent.sessionStore}
+            mentionItems={agent.mentionItems}
+            llmModels={agent.settings?.llmModels}
+            onModelChange={agent.settings?.onAgentModelChange}
+            onOpenSkills={agent.settings?.skills ? () => setSettingsVisible(true) : undefined}
+          />
+        ) : undefined}
         agentVisible={agentVisible}
         media={
           <MediaPanel
@@ -543,6 +555,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
           onConfirmThresholdChange={agent.settings.onConfirmThresholdChange}
           onClose={() => setSettingsVisible(false)}
           mcp={agent.settings.mcp}
+          skills={agent.settings.skills}
         />
       )}
 

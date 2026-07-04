@@ -118,4 +118,36 @@ export class SkillStore {
   get skillIndex(): string {
     return this.skillsList.map((s) => `- ${s.id}: ${s.description}`).join("\n");
   }
+
+  // Raw full-text (frontmatter + body) for the editor's raw-file edit mode — bypasses the
+  // parsed/cached body since the editor writes the whole file back via save().
+  async readRaw(id: string): Promise<string | undefined> {
+    return (await this.storage.read(id)) ?? undefined;
+  }
+
+  // Capability flags + passthroughs for the desktop-only facade members (T3: the pane hides
+  // these affordances entirely when the host's storage doesn't implement them, e.g. web/OPFS).
+  get canReveal(): boolean {
+    return this.storage.revealSkill !== undefined;
+  }
+
+  async revealSkill(id: string): Promise<void> {
+    await this.storage.revealSkill?.(id);
+  }
+
+  get canOpenRoot(): boolean {
+    return this.storage.openRoot !== undefined;
+  }
+
+  async openRoot(): Promise<void> {
+    await this.storage.openRoot?.();
+  }
+
+  get canExportToAgent(): boolean {
+    return this.storage.exportToAgent !== undefined;
+  }
+
+  async exportToAgent(id: string, agent: "claude" | "codex" | "cursor"): Promise<{ path: string } | undefined> {
+    return this.storage.exportToAgent?.(id, agent);
+  }
 }

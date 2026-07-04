@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { SettingsPanel } from "../src/agent/SettingsPanel.js";
 import type { McpSettings } from "../src/agent/SettingsPanel.js";
-import type { ModelEntry } from "@palmier/ai";
+import type { ModelEntry, SkillStorage, SkillCatalogDeps } from "@palmier/ai";
+import { SkillStore, SkillCatalog } from "@palmier/ai";
 
 const LLM_MODELS: ModelEntry[] = [
   { id: "a/llm-1", label: "LLM One", kind: "llm" },
@@ -254,4 +255,35 @@ test("SettingsPanel: clearing the confirm-threshold field restores the default (
   render(<SettingsPanel {...makeKeychainProps()} confirmThreshold={10} onConfirmThresholdChange={onConfirmThresholdChange} />);
   fireEvent.change(screen.getByTestId("settings-confirm-threshold"), { target: { value: "" } });
   expect(onConfirmThresholdChange).toHaveBeenCalledWith(50);
+});
+
+// --- Skills section (M15 T3) ---
+
+class FakeSkillStorage implements SkillStorage {
+  async list() { return []; }
+  async read() { return null; }
+  async write() { /* no-op */ }
+  async remove() { /* no-op */ }
+  async readLedger() { return {}; }
+  async writeLedger() { /* no-op */ }
+}
+
+function makeSkillsProps() {
+  const deps: SkillCatalogDeps = {
+    fetchText: async (url: string) => (url.endsWith("catalog.json") ? "[]" : ""),
+    cacheRead: async () => null,
+    cacheWrite: async () => {},
+  };
+  return { store: new SkillStore(new FakeSkillStorage()), catalog: new SkillCatalog(deps) };
+}
+
+test("SettingsPanel: Skills section renders the SkillsPane when the skills prop is provided", async () => {
+  render(<SettingsPanel {...makeKeychainProps()} skills={makeSkillsProps()} />);
+  expect(await screen.findByTestId("settings-skills")).toBeTruthy();
+  expect(screen.getByTestId("skills-pane")).toBeTruthy();
+});
+
+test("SettingsPanel: Skills section absent when the skills prop is not provided", () => {
+  render(<SettingsPanel {...makeKeychainProps()} />);
+  expect(screen.queryByTestId("settings-skills")).toBeNull();
 });

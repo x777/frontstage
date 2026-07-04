@@ -3,6 +3,7 @@ import type { ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { DEFAULT_CONFIRM_THRESHOLD } from "./generation-settings.js";
+import { SkillsPane, type SkillsPaneProps } from "../skills/SkillsPane.js";
 
 export type KeyConfig =
   | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => Promise<void>; onClearKey: () => Promise<void> }
@@ -37,6 +38,7 @@ export interface SettingsPanelProps {
   onConfirmThresholdChange: (value: number) => void;
   onClose?: () => void;
   mcp?: McpSettings;
+  skills?: SkillsPaneProps;
 }
 
 function KeychainConfig({
@@ -387,6 +389,7 @@ export function SettingsPanel({
   onConfirmThresholdChange,
   onClose,
   mcp,
+  skills,
 }: SettingsPanelProps) {
   return (
     <div
@@ -508,6 +511,24 @@ export function SettingsPanel({
               MCP Server
             </span>
             <McpConfig cfg={mcp} />
+          </section>
+        )}
+
+        {skills && (
+          <section
+            data-testid="settings-skills"
+            style={{
+              borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+              paddingTop: theme.spacing.sm,
+              display: "flex",
+              flexDirection: "column",
+              gap: theme.spacing.sm,
+            }}
+          >
+            <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
+              Skills
+            </span>
+            <SkillsPane {...skills} />
           </section>
         )}
       </div>

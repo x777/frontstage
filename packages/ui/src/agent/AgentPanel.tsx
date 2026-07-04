@@ -14,6 +14,7 @@ export interface AgentPanelProps {
   mentionItems?: MentionItem[];
   llmModels?: ModelEntry[];
   onModelChange?: (id: string) => void;
+  onOpenSkills?: () => void;
 }
 
 function joinTextBlocks(content: AgentContentBlock[]): string {
@@ -118,7 +119,7 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   );
 }
 
-export function AgentPanel({ session, model, sessionStore, mentionItems, llmModels, onModelChange }: AgentPanelProps) {
+export function AgentPanel({ session, model, sessionStore, mentionItems, llmModels, onModelChange, onOpenSkills }: AgentPanelProps) {
   const state = useAgentSession(session);
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -154,25 +155,52 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
         fontSize: theme.fontSize.sm,
       }}
     >
-      {(llmModels && onModelChange) ? (
-        <div style={{ padding: `${theme.spacing.xxs} ${theme.spacing.sm}`, borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`, flexShrink: 0 }}>
-          <ModelPicker testid="agent-model-picker" models={llmModels} value={model ?? ""} onChange={onModelChange} />
-        </div>
-      ) : model != null ? (
+      {((llmModels && onModelChange) || model != null || onOpenSkills) && (
         <div
-          data-testid="agent-model"
+          data-testid="agent-panel-header"
           style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: theme.spacing.sm,
             padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-            fontSize: theme.fontSize.xxs,
-            color: theme.text.muted,
-            fontWeight: theme.fontWeight.regular,
             borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
             flexShrink: 0,
           }}
         >
-          {model}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {(llmModels && onModelChange) ? (
+              <ModelPicker testid="agent-model-picker" models={llmModels} value={model ?? ""} onChange={onModelChange} />
+            ) : model != null ? (
+              <span
+                data-testid="agent-model"
+                style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted, fontWeight: theme.fontWeight.regular }}
+              >
+                {model}
+              </span>
+            ) : null}
+          </div>
+          {onOpenSkills && (
+            <button
+              data-testid="agent-skills-button"
+              onClick={onOpenSkills}
+              title="View Skills"
+              style={{
+                background: "none",
+                border: "none",
+                color: theme.text.tertiary,
+                cursor: "pointer",
+                fontSize: theme.fontSize.sm,
+                fontWeight: theme.fontWeight.medium,
+                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                flexShrink: 0,
+              }}
+            >
+              Skills
+            </button>
+          )}
         </div>
-      ) : null}
+      )}
 
       {sessionStore && (
         <SessionSwitcher session={session} sessionStore={sessionStore} />

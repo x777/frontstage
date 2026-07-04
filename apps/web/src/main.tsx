@@ -39,9 +39,11 @@ interface PalmierAppProps {
   executor: { execute(name: string, args: unknown): Promise<ToolResult> };
   transcriptionFacade: NonNullable<ToolContext["transcription"]>;
   indexing: MediaIndexingFacade;
+  skillStore: SkillStore;
+  skillCatalog: SkillCatalog;
 }
 
-function PalmierApp({ store, session, library, exportGateway, interopExport, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade, indexing }: PalmierAppProps) {
+function PalmierApp({ store, session, library, exportGateway, interopExport, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade, indexing, skillStore, skillCatalog }: PalmierAppProps) {
   const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
   const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
@@ -115,6 +117,7 @@ function PalmierApp({ store, session, library, exportGateway, interopExport, age
           onImageModelChange,
           confirmThreshold,
           onConfirmThresholdChange,
+          skills: { store: skillStore, catalog: skillCatalog },
         },
       }}
     />
@@ -428,6 +431,8 @@ async function bootstrap() {
         executor={executor}
         transcriptionFacade={transcriptionFacade}
         indexing={indexingFacade}
+        skillStore={skillStore}
+        skillCatalog={skillCatalog}
       />
     </StrictMode>,
   );

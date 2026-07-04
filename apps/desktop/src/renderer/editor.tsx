@@ -476,6 +476,7 @@ function PalmierDesktopApp() {
             setEnabled: (on) => window.desktopMcp!.setEnabled(on),
             regenerateToken: () => window.desktopMcp!.regenerateToken(),
           } : undefined,
+          skills: { store: skillStore, catalog: skillCatalog },
         },
       }}
       onReady={(cmds) => {

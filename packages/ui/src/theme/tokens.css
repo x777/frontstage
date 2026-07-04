@@ -124,6 +124,12 @@
   --size-activity-max: 420px;
   --size-activity-cost: 56px;
 
+  /* Skills pane (M15 T3) */
+  --size-skills-pane-height: 420px;
+  --size-skills-list-width: 220px;
+  --size-skills-spinner: 12px;
+  --size-skills-toast-max: 320px;
+
   /* Z-index layers */
   --z-menu: 9000;
   --z-dialog: 10000;
@@ -286,5 +292,11 @@
 @media (prefers-reduced-motion: reduce) {
   [data-preset-anim] {
     animation: none !important;
+  }
+}
+
+@keyframes skills-spin {
+  to {
+    transform: rotate(360deg);
   }
 }

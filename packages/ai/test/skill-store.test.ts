@@ -8,6 +8,9 @@ function skillText(name: string, description: string, body: string): string {
 class FakeStorage implements SkillStorage {
   files = new Map<string, string>();
   ledger: Record<string, string> = {};
+  revealSkill?: (id: string) => Promise<void>;
+  openRoot?: () => Promise<void>;
+  exportToAgent?: (id: string, agent: "claude" | "codex" | "cursor") => Promise<{ path: string }>;
 
   async list(): Promise<{ id: string; text: string }[]> {
     return Array.from(this.files.entries()).map(([id, text]) => ({ id, text }));
@@ -216,5 +219,56 @@ describe("SkillStore — install + ledger + provenance shas", () => {
     storage.ledger = { s1: "deadbeef0000" };
     await store.reload();
     expect(store.installedSha("s1")).toBe("deadbeef0000");
+  });
+});
+
+describe("SkillStore — readRaw + desktop-only capability passthroughs (T3)", () => {
+  test("readRaw(id) returns the full raw text (frontmatter + body), not just the parsed body", async () => {
+    const storage = new FakeStorage();
+    const raw = skillText("A", "does a", "the body");
+    storage.files.set("s1", raw);
+    const store = new SkillStore(storage);
+    await store.reload();
+    expect(await store.readRaw("s1")).toBe(raw);
+  });
+
+  test("readRaw(id) returns undefined for a missing id", async () => {
+    const store = new SkillStore(new FakeStorage());
+    expect(await store.readRaw("missing")).toBeUndefined();
+  });
+
+  test("canReveal/canOpenRoot/canExportToAgent are false when the storage facade omits those members", () => {
+    const store = new SkillStore(new FakeStorage());
+    expect(store.canReveal).toBe(false);
+    expect(store.canOpenRoot).toBe(false);
+    expect(store.canExportToAgent).toBe(false);
+  });
+
+  test("canReveal/canOpenRoot/canExportToAgent are true and delegate when the facade implements them", async () => {
+    const storage = new FakeStorage();
+    const revealed: string[] = [];
+    let rootOpened = false;
+    const exported: { id: string; agent: string }[] = [];
+    storage.revealSkill = async (id: string) => { revealed.push(id); };
+    storage.openRoot = async () => { rootOpened = true; };
+    storage.exportToAgent = async (id: string, agent: "claude" | "codex" | "cursor") => {
+      exported.push({ id, agent });
+      return { path: `/home/.${agent}/skills/palmier-${id}` };
+    };
+    const store = new SkillStore(storage);
+
+    expect(store.canReveal).toBe(true);
+    expect(store.canOpenRoot).toBe(true);
+    expect(store.canExportToAgent).toBe(true);
+
+    await store.revealSkill("s1");
+    expect(revealed).toEqual(["s1"]);
+
+    await store.openRoot();
+    expect(rootOpened).toBe(true);
+
+    const result = await store.exportToAgent("s1", "claude");
+    expect(exported).toEqual([{ id: "s1", agent: "claude" }]);
+    expect(result).toEqual({ path: "/home/.claude/skills/palmier-s1" });
   });
 });
