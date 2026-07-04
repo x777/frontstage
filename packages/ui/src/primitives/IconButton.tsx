@@ -6,12 +6,13 @@ export function IconButton(props: {
   onClick?: () => void;
   frame?: "xxs" | "xs" | "sm" | "smMd" | "md" | "mdLg" | "lg" | "lgXl" | "xl";
   active?: boolean;
+  ariaPressed?: boolean;
   disabled?: boolean;
   title?: string;
   testid?: string;
   fontSize?: string;
 }) {
-  const { children, onClick, frame = "mdLg", active, disabled, title, testid, fontSize } = props;
+  const { children, onClick, frame = "mdLg", active, ariaPressed, disabled, title, testid, fontSize } = props;
   const { hovered, hoverProps } = useHover();
 
   const background =
@@ -31,6 +32,7 @@ export function IconButton(props: {
       type="button"
       title={title}
       data-testid={testid}
+      aria-pressed={ariaPressed}
       disabled={disabled}
       onClick={() => {
         if (disabled) return;

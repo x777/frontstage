@@ -1,6 +1,8 @@
 export { useHover } from "./use-hover.js";
 export { Button } from "./Button.js";
 export { IconButton } from "./IconButton.js";
+export { Icon } from "./Icon.js";
+export type { IconName } from "./Icon.js";
 export { PanelHeader } from "./PanelHeader.js";
 export { SegmentedTabs } from "./SegmentedTabs.js";
 export { TextInput } from "./TextInput.js";

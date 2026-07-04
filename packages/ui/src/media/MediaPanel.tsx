@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { EditorStore, MediaFolder, MediaManifestEntry } from "@palmier/core";
 import { buildFolderIndex, collectFolderCascade, folderPath, parseGenerationStatus } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { Icon, IconButton } from "../primitives/index.js";
+import type { IconName } from "../primitives/index.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionsTab } from "./CaptionsTab.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "./CaptionsTab.js";
@@ -66,6 +68,14 @@ export interface MediaPanelProps {
 
 type PanelTab = "media" | "captions";
 
+// Swift's PanelTab has a third case (.music) — deliberately unported here (recorded deviation).
+const MEDIA_PANEL_TABS: { id: PanelTab; label: string; icon: IconName }[] = [
+  { id: "media", label: "Media", icon: "folder" },
+  { id: "captions", label: "Captions", icon: "captions" },
+];
+// Mirrors --icon-size-sm (18px) — Icon's size prop sets raw SVG width/height, not a CSS var.
+const TAB_ICON_SIZE = 18;
+
 export function MediaPanel({ library, onItemPointerDown, store, executor, transcription, indexing, dragOverFolderId }: MediaPanelProps) {
   const indexStatus = useSyncExternalStore(
     indexing?.subscribe ?? noopSubscribe,
@@ -115,6 +125,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<PanelTab>("media");
+  const [hoveredTab, setHoveredTab] = useState<PanelTab | null>(null);
   const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
   const [renamingFolderId, setRenamingFolderId] = useState<string | undefined>(undefined);
@@ -269,7 +280,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
       onDrop={handleDrop}
       style={{
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
         height: "100%",
         background: theme.bg.surface,
         border: isDragOver
@@ -279,40 +290,90 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
         boxSizing: "border-box",
       }}
     >
-      {/* Tab bar */}
+      {/* Tab rail — vertical icon column (MediaPanelView.swift panelTabRail) */}
       <div
         style={{
+          position: "relative",
           display: "flex",
-          gap: theme.spacing.xxs,
-          padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-          borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+          flexDirection: "column",
+          gap: theme.spacing.xs,
+          width: theme.size.mediaTabRail,
           flexShrink: 0,
+          padding: theme.spacing.sm,
+          background: theme.bg.raised,
+          borderRight: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
+          boxSizing: "border-box",
         }}
       >
-        {(["media", "captions"] as const).map((t) => (
-          <button
-            key={t}
-            data-testid={`media-tab-${t}`}
-            aria-pressed={tab === t}
-            onClick={() => setTab(t)}
+        {MEDIA_PANEL_TABS.map((t) => {
+          const selected = tab === t.id;
+          return (
+            <div
+              key={t.id}
+              style={{ position: "relative" }}
+              onMouseEnter={() => setHoveredTab(t.id)}
+              onMouseLeave={() => setHoveredTab((h) => (h === t.id ? null : h))}
+            >
+              <IconButton
+                frame="lg"
+                active={selected}
+                ariaPressed={selected}
+                testid={`media-tab-${t.id}`}
+                title={t.label}
+                onClick={() => setTab(t.id)}
+              >
+                <Icon name={t.icon} size={TAB_ICON_SIZE} />
+              </IconButton>
+              {selected && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: theme.borderWidth.thick,
+                    height: theme.iconSize.sm,
+                    background: theme.border.primary,
+                    borderRadius: theme.radius.pill,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+        {MEDIA_PANEL_TABS.map((t, i) => (
+          <div
+            key={`hover-${t.id}`}
             style={{
-              flex: 1,
-              background: tab === t ? theme.accent.primary : theme.bg.raised,
-              color: tab === t ? theme.text.onAccent : theme.text.secondary,
-              border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-              borderRadius: theme.radius.xs,
-              padding: `${theme.spacing.xxs} 0`,
+              position: "absolute",
+              left: `calc(${theme.size.mediaTabRail} + ${theme.spacing.xs})`,
+              top: `calc(${theme.spacing.sm} + ${i} * (${theme.iconSize.lg} + ${theme.spacing.xs}))`,
+              display: "flex",
+              alignItems: "center",
+              height: theme.iconSize.lg,
+              padding: `0 ${theme.spacing.smMd}`,
               fontSize: theme.fontSize.xs,
-              fontWeight: theme.fontWeight.semibold,
-              cursor: "pointer",
-              textTransform: "capitalize",
+              fontWeight: theme.fontWeight.medium,
+              color: theme.text.primary,
+              whiteSpace: "nowrap",
+              background: theme.bg.prominent,
+              border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
+              borderRadius: theme.radius.pill,
+              boxShadow: theme.shadow.sm,
+              opacity: hoveredTab === t.id ? 1 : 0,
+              transform: hoveredTab === t.id ? "translateX(0)" : "translateX(-4px)",
+              transition: `opacity ${theme.anim.hover} ease-out, transform ${theme.anim.hover} ease-out`,
+              pointerEvents: "none",
             }}
           >
-            {t}
-          </button>
+            {t.label}
+          </div>
         ))}
       </div>
 
+      {/* Content column */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
       {tab === "media" ? (
         <>
           {/* Header */}
@@ -513,6 +574,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
           Captions needs the AI facade — not wired for this host.
         </div>
       )}
+      </div>
 
       {showMatteSheet && library.importBytes && (
         <MatteSheet

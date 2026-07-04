@@ -132,6 +132,7 @@ export const theme = {
     transportPlay: "var(--size-transport-play)",
     overlayHandle: "var(--size-overlay-handle)",
     mediaItemMin: "var(--size-media-item-min)",
+    mediaTabRail: "var(--size-media-tab-rail)",
     inspectorLabel: "var(--size-inspector-label)",
     inspectorValue: "var(--size-inspector-value)",
     kfLane: "var(--size-kf-lane)",

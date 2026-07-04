@@ -120,6 +120,7 @@
   --size-resize-handle: 4px;
   --size-transport-play: 36px;
   --size-media-item-min: 80px;
+  --size-media-tab-rail: 38px; /* icon-size-lg 26 + spacing-sm 6 x 2 — MediaPanelView.swift panelTabRail */
   --size-inspector-label: 60px;
   --size-inspector-value: 36px;
 
