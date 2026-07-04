@@ -7,6 +7,7 @@ export * from "./transform.js";
 export * from "./clip-type.js";
 export * from "./text-style.js";
 export * from "./media.js";
+export * from "./media/container-sniff.js";
 export * from "./media/generation-status.js";
 export * from "./media/generation-recovery.js";
 export * from "./media/transcript.js";

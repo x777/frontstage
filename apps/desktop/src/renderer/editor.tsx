@@ -64,7 +64,7 @@ const genGateway = new DesktopGenGateway();
 const generationHost: GenerationHost = {
   addPlaceholder: (entry) => library.addPlaceholder(entry),
   patchEntry: (id, patch) => library.patchEntry(id, patch),
-  finalizeGenerated: (id, bytes, patch) => library.finalizeGenerated(id, bytes, patch),
+  finalizeGenerated: (id, bytes) => library.finalizeGeneratedProbed(id, bytes),
   markGenerationFailed: (ids, message) => library.markGenerationFailed(ids, message),
   entries: () => library.getSnapshot().entries,
   appendGenerationLog,

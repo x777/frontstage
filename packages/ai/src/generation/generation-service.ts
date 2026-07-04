@@ -6,7 +6,9 @@ import { nextPollDelay } from "./poll-schedule.js";
 export interface GenerationHost {
   addPlaceholder(entry: MediaManifestEntry): void;
   patchEntry(id: string, patch: Partial<MediaManifestEntry>): void;
-  finalizeGenerated(id: string, bytes: Uint8Array, patch: Partial<MediaManifestEntry>): void;
+  // May probe the bytes (duration/dims/hasAudio/thumbnail — Swift's finalizeImportedAsset
+  // loadMetadata parity); the service awaits it so checkpoint/notify see the final entry.
+  finalizeGenerated(id: string, bytes: Uint8Array, patch: Partial<MediaManifestEntry>): void | Promise<void>;
   markGenerationFailed(ids: string[], message: string): void;
   entries(): MediaManifestEntry[];
   appendGenerationLog?(entry: GenerationLogEntry): void;
@@ -215,7 +217,7 @@ export class GenerationService {
   ): Promise<boolean> {
     try {
       const bytes = await this.gateway.downloadResult(url);
-      this.host.finalizeGenerated(entryId, bytes, {});
+      await this.host.finalizeGenerated(entryId, bytes, {});
       this.host.appendGenerationLog?.({ id: entryId, model, costCredits, createdAt: new Date().toISOString() });
       return true;
     } catch (err) {

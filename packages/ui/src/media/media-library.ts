@@ -1,4 +1,4 @@
-import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry } from "@palmier/core";
+import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry, sniffIsoBmff } from "@palmier/core";
 import type { ClipType, MediaFolder, MediaManifest, MediaManifestEntry } from "@palmier/core";
 import type { MediaGateway } from "@palmier/core";
 import type { MediaByteSource } from "@palmier/engine";
@@ -203,6 +203,43 @@ export class MediaLibrary {
       e.id === id ? { ...e, ...patch, generationStatus: undefined } : e
     );
     this.emit();
+  }
+
+  // Generation finalize with a metadata probe — the Swift parity path (finalizeImportedAsset:
+  // loadMetadata + updateManifestMetadata): actual duration/dims/hasAudio/thumbnail land in the
+  // manifest instead of the placeholder's requested values. A probe failure never fails a good
+  // download. Audio bytes that sniff as ISO-BMFF (mmaudio muxes its audio into an mp4) re-home
+  // to a .mp4 relativePath so the engine's mp4 demuxer can play them.
+  async finalizeGeneratedProbed(id: string, bytes: Uint8Array): Promise<void> {
+    const entry = this._entries.find((e) => e.id === id);
+    if (!entry) return;
+    if (entry.source.kind !== "project") throw new Error("finalizeGenerated requires a project source");
+
+    let source = entry.source;
+    if (entry.type === "audio" && sniffIsoBmff(bytes) && !source.relativePath.endsWith(".mp4")) {
+      source = { ...source, relativePath: source.relativePath.replace(/\.[^./]+$/, ".mp4") };
+    }
+
+    let patch: Partial<MediaManifestEntry> = { source };
+    let thumb: string | undefined;
+    try {
+      const probed = await probeMediaBlob(new Blob([bytes as BlobPart]), entry.type);
+      patch = {
+        source,
+        duration: probed.duration,
+        ...(probed.sourceWidth !== undefined ? { sourceWidth: probed.sourceWidth } : {}),
+        ...(probed.sourceHeight !== undefined ? { sourceHeight: probed.sourceHeight } : {}),
+        ...(probed.hasAudio !== undefined ? { hasAudio: probed.hasAudio } : {}),
+      };
+      thumb = probed.thumb;
+    } catch {
+      /* finalize with the placeholder's values */
+    }
+
+    this._bytes.set(source.relativePath, bytes);
+    this._entries = this._entries.map((e) => (e.id === id ? { ...e, ...patch, generationStatus: undefined } : e));
+    this.emit();
+    if (thumb && this.entry(id)) this.setThumbnail(id, thumb);
   }
 
   markGenerationFailed(ids: string[], message: string): void {

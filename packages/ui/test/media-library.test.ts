@@ -740,3 +740,112 @@ test("importFiles (delete-during-import race, M12A final review L1): deleting th
     canvas.restore();
   }
 });
+
+// ── finalizeGeneratedProbed (generation finalize probes like the import path) ─
+
+function ftypBytes(): Uint8Array {
+  const b = new Uint8Array(16);
+  b.set([0x00, 0x00, 0x00, 0x20], 0);
+  b.set([0x66, 0x74, 0x79, 0x70], 4); // "ftyp"
+  b.set([0x69, 0x73, 0x6f, 0x6d], 8); // "isom"
+  return b;
+}
+
+test("finalizeGeneratedProbed: image dims land in the manifest (Swift loadMetadata parity)", async () => {
+  vi.stubGlobal("createImageBitmap", async () => ({ width: 640, height: 480, close: () => {} }));
+  const lib = new MediaLibrary();
+  lib.addPlaceholder({
+    id: "g1",
+    name: "gen img",
+    type: "image",
+    source: { kind: "project", relativePath: "media/gen-g1.png" },
+    duration: 5,
+    generationStatus: "generating",
+  });
+
+  await lib.finalizeGeneratedProbed("g1", new Uint8Array([1, 2, 3]));
+
+  const entry = lib.entry("g1")!;
+  expect(entry.generationStatus).toBeUndefined();
+  expect(entry.sourceWidth).toBe(640);
+  expect(entry.sourceHeight).toBe(480);
+  expect(lib.bytesFor(entry)).toEqual(new Uint8Array([1, 2, 3]));
+});
+
+test("finalizeGeneratedProbed: a probe failure still finalizes (a good download must never fail)", async () => {
+  vi.stubGlobal("createImageBitmap", async () => {
+    throw new Error("undecodable");
+  });
+  const lib = new MediaLibrary();
+  lib.addPlaceholder({
+    id: "g2",
+    name: "gen img",
+    type: "image",
+    source: { kind: "project", relativePath: "media/gen-g2.png" },
+    duration: 5,
+    generationStatus: "generating",
+  });
+
+  await lib.finalizeGeneratedProbed("g2", new Uint8Array([9]));
+
+  const entry = lib.entry("g2")!;
+  expect(entry.generationStatus).toBeUndefined();
+  expect(lib.bytesFor(entry)).toEqual(new Uint8Array([9]));
+});
+
+test("finalizeGeneratedProbed: audio bytes that sniff as ISO-BMFF are re-homed to .mp4 (mmaudio mux)", async () => {
+  // jsdom has no URL.createObjectURL — the audio probe fails fast, which is fine: the rename must
+  // happen regardless of probe success.
+  const lib = new MediaLibrary();
+  lib.addPlaceholder({
+    id: "g3",
+    name: "sfx",
+    type: "audio",
+    source: { kind: "project", relativePath: "media/gen-g3.mp3" },
+    duration: 10,
+    generationStatus: "generating",
+  });
+
+  await lib.finalizeGeneratedProbed("g3", ftypBytes());
+
+  const entry = lib.entry("g3")!;
+  expect(entry.generationStatus).toBeUndefined();
+  expect((entry.source as { relativePath: string }).relativePath).toBe("media/gen-g3.mp4");
+  expect(lib.bytesFor(entry)).toEqual(ftypBytes());
+});
+
+test("finalizeGeneratedProbed: real mp3 audio bytes keep their .mp3 path", async () => {
+  const lib = new MediaLibrary();
+  lib.addPlaceholder({
+    id: "g4",
+    name: "speech",
+    type: "audio",
+    source: { kind: "project", relativePath: "media/gen-g4.mp3" },
+    duration: 10,
+    generationStatus: "generating",
+  });
+
+  const mp3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0, 0, 0, 0, 0, 0, 0, 0]);
+  await lib.finalizeGeneratedProbed("g4", mp3);
+
+  const entry = lib.entry("g4")!;
+  expect((entry.source as { relativePath: string }).relativePath).toBe("media/gen-g4.mp3");
+  expect(lib.bytesFor(entry)).toEqual(mp3);
+});
+
+test("finalizeGeneratedProbed: VIDEO bytes with ftyp are not renamed (only audio re-homes)", async () => {
+  const lib = new MediaLibrary();
+  lib.addPlaceholder({
+    id: "g5",
+    name: "gen vid",
+    type: "video",
+    source: { kind: "project", relativePath: "media/gen-g5.mp4" },
+    duration: 4,
+    generationStatus: "generating",
+  });
+
+  await lib.finalizeGeneratedProbed("g5", ftypBytes());
+
+  const entry = lib.entry("g5")!;
+  expect((entry.source as { relativePath: string }).relativePath).toBe("media/gen-g5.mp4");
+});
