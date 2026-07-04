@@ -72,7 +72,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   "chevron-right": <path d="M9 6l6 6-6 6" />,
   "chevron-down": <path d="M6 9l6 6 6-6" />,
-  play: <path d="M8 5.5l11 6.5-11 6.5z" />,
+  play: <path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor" stroke="none" />,
   pause: (
     <>
       <line x1="9" y1="5" x2="9" y2="19" />

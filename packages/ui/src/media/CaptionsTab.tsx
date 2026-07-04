@@ -371,14 +371,15 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex" }}>
           <Button
             testid="captions-generate"
             variant="accent"
-            gradient="ai"
+            shape="rect"
             size="regular"
             disabled={!canGenerate}
             onClick={handleGenerate}
+            style={{ width: "100%" }}
           >
             Generate
           </Button>

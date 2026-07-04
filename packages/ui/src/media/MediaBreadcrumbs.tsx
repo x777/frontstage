@@ -66,11 +66,6 @@ export function MediaBreadcrumbs({ folders, currentFolderId, onNavigate, onDropO
               <BreadcrumbChip
                 item={item}
                 isLeaf={isLeaf}
-                // The root "Library" crumb, when it's the current position (i.e. at root), reads
-                // as a heading rather than a link — matches Swift's grouped-section-header caption
-                // (MediaTab+Grids.swift groupedSectionTitle, single-segment case: sm/semibold/
-                // primary — not the xs/tertiary "Library" gets as a plain ancestor crumb).
-                isRootLeaf={idx === 0 && isLeaf}
                 onNavigate={onNavigate}
                 onDropOn={onDropOn}
                 dragOverActive={(item.id ?? FOLDER_DROP_ROOT) === dragOverFolderId}
@@ -99,14 +94,12 @@ export function MediaBreadcrumbs({ folders, currentFolderId, onNavigate, onDropO
 function BreadcrumbChip({
   item,
   isLeaf,
-  isRootLeaf,
   onNavigate,
   onDropOn,
   dragOverActive,
 }: {
   item: BreadcrumbItem;
   isLeaf: boolean;
-  isRootLeaf: boolean;
   onNavigate: (id: string | undefined) => void;
   onDropOn: (id: string | undefined, payload: MediaDragPayload) => void;
   // True while the custom pointer-drag (asset tile) hovers this chip.
@@ -144,7 +137,7 @@ function BreadcrumbChip({
         border: "none",
         borderRadius: theme.radius.xs,
         padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-        fontSize: isRootLeaf ? theme.fontSize.sm : theme.fontSize.xs,
+        fontSize: theme.fontSize.xs,
         fontWeight: isLeaf ? theme.fontWeight.semibold : theme.fontWeight.regular,
         cursor: isLeaf ? "default" : "pointer",
         whiteSpace: "nowrap",

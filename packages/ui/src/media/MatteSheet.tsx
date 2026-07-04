@@ -78,7 +78,7 @@ export function MatteSheet({ library, timelineWidth, timelineHeight, folderId, o
           <Button variant="default" onClick={onClose} testid="matte-sheet-cancel">
             Cancel
           </Button>
-          <Button variant="accent" disabled={isCreating} onClick={handleCreate} testid="matte-sheet-create">
+          <Button variant="accent" shape="rect" disabled={isCreating} onClick={handleCreate} testid="matte-sheet-create">
             {isCreating ? "Creating…" : "Create Matte"}
           </Button>
         </>

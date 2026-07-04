@@ -16,9 +16,10 @@ export function Button(props: {
   testid?: string;
   type?: "button" | "submit";
   size?: "small" | "regular";
+  shape?: "capsule" | "rect"; // rect = Swift's full-width CTA rectangles (MatteSheet Create, CaptionTab Generate)
   style?: React.CSSProperties;
 }) {
-  const { children, onClick, variant = "default", gradient, disabled, title, testid, type = "button", size = "small", style } = props;
+  const { children, onClick, variant = "default", gradient, disabled, title, testid, type = "button", size = "small", shape = "capsule", style } = props;
   const { hovered, hoverProps } = useHover();
   const [pressed, setPressed] = useState(false);
 
@@ -55,7 +56,7 @@ export function Button(props: {
         background,
         color,
         border: "none",
-        borderRadius: theme.radius.pill,
+        borderRadius: shape === "rect" ? theme.radius.sm : theme.radius.pill,
         fontSize: size === "small" ? theme.fontSize.xs : theme.fontSize.smMd,
         fontWeight: theme.fontWeight.medium,
         padding: size === "small" ? `${theme.spacing.xs} ${theme.spacing.smMd}` : `${theme.spacing.smMd} ${theme.spacing.lgXl}`,
