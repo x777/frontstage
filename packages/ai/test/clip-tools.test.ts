@@ -75,6 +75,14 @@ function makeManifest(): MediaManifest {
         source: { kind: "external", absolutePath: "/tmp/ocean.mp4" },
         duration: 3,
       },
+      {
+        id: "media-av",
+        name: "withaudio.mp4",
+        type: "video",
+        source: { kind: "external", absolutePath: "/tmp/withaudio.mp4" },
+        duration: 2,
+        hasAudio: true,
+      },
     ],
     folders: [],
   };
@@ -122,6 +130,30 @@ describe("add_clips", () => {
     expect(tl.width).toBe(3840);
     expect(tl.height).toBe(2160);
     expect(tl.settingsConfigured).toBe(true);
+  });
+
+  test("linked A/V add gives DISTINCT ids to video clip, its track, linked audio clip, and audio track", async () => {
+    // addClipCommand calls its newId() thunk once per entity (visual clip, linkGroupId, new
+    // video track, linked audio clip, new audio track). Passing a constant thunk collapses them
+    // all to one id, which desyncs split/move/remove on the linked pair (findClip hits the first
+    // match only). Every entity must get a unique id.
+    const store = new EditorStore({ ...makeTimeline(), tracks: [], settingsConfigured: true });
+    const ctx = makeCtx(store);
+    const result = await addClipsTool().run({ clips: [{ mediaId: "media-av", startFrame: 0 }] }, ctx);
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    const videoTrack = tl.tracks.find((t) => t.type === "video")!;
+    const audioTrack = tl.tracks.find((t) => t.type === "audio")!;
+    expect(videoTrack).toBeDefined();
+    expect(audioTrack).toBeDefined();
+    const vClip = videoTrack.clips[0]!;
+    const aClip = audioTrack.clips[0]!;
+    // The linked pair shares one linkGroupId…
+    expect(vClip.linkGroupId).toBeDefined();
+    expect(vClip.linkGroupId).toBe(aClip.linkGroupId);
+    // …but every other id is distinct.
+    const ids = [vClip.id, videoTrack.id, aClip.id, audioTrack.id, vClip.linkGroupId!];
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   test("adds to a new track when trackIndex omitted", async () => {

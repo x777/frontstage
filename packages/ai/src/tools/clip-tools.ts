@@ -50,7 +50,17 @@ export function addClipsTool(): ToolSpec {
             : ({ kind: "new" as const, index: 0 });
         const id = ctx.newId();
         newIds.push(id);
-        return addClipCommand(entry, target, startFrame, fps, undefined, () => id);
+        // addClipCommand calls newId() once per entity (visual clip, linkGroupId, new track,
+        // linked audio clip, audio track). The visual clip must carry the reported id; every
+        // other entity must get its own — a constant thunk collapses them, colliding the linked
+        // audio's id with the video's and desyncing later split/move/remove. (Snapshot-based
+        // undo applies once, so a stateful first-call thunk is safe.)
+        let firstCall = true;
+        const genId = () => {
+          if (firstCall) { firstCall = false; return id; }
+          return ctx.newId();
+        };
+        return addClipCommand(entry, target, startFrame, fps, undefined, genId);
       });
 
       asUndoStep(ctx.store, "Add Clips", commands.map((cmd) => cmd.apply.bind(cmd)));
