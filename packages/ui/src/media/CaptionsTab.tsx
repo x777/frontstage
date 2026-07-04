@@ -11,7 +11,7 @@ import type { ToolContext, ToolResult } from "@palmier/ai";
 import { canTranscribe, classifyRefsByCache, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
-import { Select } from "../inspector/adjust/Select.js";
+import { Select } from "../primitives/Select.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionPresetGallery, isHighlightPreset } from "./CaptionPresetGallery.js";
 

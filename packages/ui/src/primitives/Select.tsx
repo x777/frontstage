@@ -1,4 +1,4 @@
-import { theme } from "../../theme/theme.js";
+import { theme } from "../theme/theme.js";
 
 export interface SelectProps<T extends string> {
   value: T | null;
@@ -22,10 +22,10 @@ export function Select<T extends string>({ value, options, placeholder, onChange
       style={{
         background: theme.bg.raised,
         color: theme.text.primary,
-        border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-        borderRadius: theme.radius.xs,
-        fontSize: theme.fontSize.xs,
-        padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+        border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
+        borderRadius: theme.radius.xsSm,
+        fontSize: theme.fontSize.sm,
+        padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
         width: "100%",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? theme.opacity.disabled : theme.opacity.opaque,

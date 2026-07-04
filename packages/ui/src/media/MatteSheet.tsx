@@ -2,7 +2,7 @@ import { useState } from "react";
 import { matteName, matteSize } from "@palmier/core";
 import type { MatteAspect } from "@palmier/core";
 import { theme } from "../theme/theme.js";
-import { Select } from "../inspector/adjust/Select.js";
+import { Select } from "../primitives/Select.js";
 import { renderMattePng } from "./matte-render.js";
 
 const ASPECT_OPTIONS: readonly { value: MatteAspect; label: string }[] = [

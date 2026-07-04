@@ -4,7 +4,7 @@ import { createPlaceholderEntry } from "@palmier/core";
 import type { GenModelEntry, GenModelKind, GenToolParams, StartJobArgs } from "@palmier/ai";
 import { genModel, listGenModels, validateGenParams, estimateCredits, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
-import { Select } from "../inspector/adjust/Select.js";
+import { Select } from "../primitives/Select.js";
 import { isMediaDrag, readMediaDragPayload } from "../media/FolderTile.js";
 
 const IMAGE_DURATION_SECONDS = 5; // mirrors generate-image-tool.ts

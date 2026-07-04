@@ -2,7 +2,7 @@ import type { EditorStore } from "@palmier/core";
 import { findClip, BLEND_MODES, setClipBlendModeCommand } from "@palmier/core";
 import type { BlendMode } from "@palmier/core";
 import { useStore } from "../../store/use-store.js";
-import { Select } from "./Select.js";
+import { Select } from "../../primitives/Select.js";
 import { theme } from "../../theme/theme.js";
 
 const BLEND_LABELS: Record<BlendMode, string> = {
