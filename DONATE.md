@@ -9,7 +9,8 @@ https://ko-fi.com/frontstage
 
 ## Crypto
 
-<!-- TODO(x777): fill addresses -->
+ETH / USDT / USDC — any EVM chain (Ethereum, Arbitrum, Base, Polygon, BSC):
 
-- BTC: `TODO`
-- ETH: `TODO`
+```
+0x85cdC5B7365698bb1be73a5533A0502c3b009f82
+```
