@@ -922,7 +922,7 @@ ipcMain.handle("ai:generateImage", async (_e, body) => {
     headers: {
       Authorization: "Bearer " + key,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://frontstage.ai",
+      "HTTP-Referer": "https://frontstage.studio",
       "X-Title": "FrontstagePro",
     },
     body: JSON.stringify(body),
@@ -944,7 +944,7 @@ ipcMain.on("ai:streamChat", async (event, { id, body }) => {
       headers: {
         Authorization: "Bearer " + key,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://frontstage.ai",
+        "HTTP-Referer": "https://frontstage.studio",
         "X-Title": "FrontstagePro",
       },
       body: JSON.stringify(body),

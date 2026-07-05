@@ -9,7 +9,7 @@ search run free, on-device. No account required for editing. No telemetry.
 
 ## Run it
 
-- **Web**: https://frontstage.ai (editing works without any keys)
+- **Web**: https://frontstage.studio (editing works without any keys)
 - **Windows**: installer coming with the first release — for now, build from source
 - **Build from source**:
 

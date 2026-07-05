@@ -40,7 +40,7 @@
     "vitest": "^2.0.0"
   },
   "build": {
-    "appId": "ai.frontstage.app",
+    "appId": "studio.frontstage.app",
     "productName": "Frontstage",
     "directories": {
       "output": "release",
