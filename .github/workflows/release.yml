@@ -1,0 +1,73 @@
+name: Release
+
+"on":
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  # Keep in sync with the "packageManager" field in package.json.
+  PNPM_VERSION: "10.33.0"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build + package (NSIS)
+        run: pnpm -F @frontstage/desktop dist
+
+      - name: Attach installer to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+          draft: false
+          generate_release_notes: true
+
+  macos-experimental:
+    name: macOS (experimental, unsigned)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build + package (dmg)
+        run: pnpm -F @frontstage/desktop dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Attach dmg to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/*.dmg

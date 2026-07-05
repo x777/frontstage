@@ -1,7 +1,7 @@
 {
   "name": "@frontstage/desktop",
   "productName": "Frontstage",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "main": "src/main/index.cjs",
   "scripts": {
