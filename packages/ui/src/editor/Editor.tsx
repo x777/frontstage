@@ -24,6 +24,7 @@ import { Button, Dialog, IconButton } from "../primitives/index.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
 import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { TimelinePanel } from "../timeline/TimelinePanel.js";
+import { Toolbar } from "../toolbar/Toolbar.js";
 import { MediaPanel } from "../media/MediaPanel.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "../media/CaptionsTab.js";
 import type { MediaIndexingFacade } from "../media/MediaPanel.js";
@@ -462,7 +463,14 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
           />
         }
         preview={<PreviewPanel store={store} media={media} engineRef={engineRef} />}
-        timeline={<TimelinePanel store={store} dragController={dragController} library={library} />}
+        timeline={
+          <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+            <Toolbar store={store} />
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <TimelinePanel store={store} dragController={dragController} library={library} />
+            </div>
+          </div>
+        }
         inspector={<InspectorPanel store={store} library={library} engineRef={engineRef} lutReconciler={lutReconciler} />}
       />
 

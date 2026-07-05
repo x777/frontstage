@@ -97,6 +97,8 @@ export const theme = {
     title1: "var(--font-title1)",
     title2: "var(--font-title2)",
     display: "var(--font-display)",
+    toolbarBracket: "var(--font-toolbar-bracket)",
+    toolbarTextGlyph: "var(--font-toolbar-text-glyph)",
   },
   borderWidth: {
     hairline: "var(--border-width-hairline)",
@@ -132,6 +134,8 @@ export const theme = {
   },
   size: {
     topBar: "var(--size-topbar)",
+    toolbar: "var(--size-toolbar)",
+    zoomSliderW: "var(--size-zoom-slider-w)",
     resizeHandle: "var(--size-resize-handle)",
     transportPlay: "var(--size-transport-play)",
     overlayHandle: "var(--size-overlay-handle)",

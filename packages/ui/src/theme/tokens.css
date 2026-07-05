@@ -89,6 +89,10 @@
   --font-title2: 28px;
   --font-display: 36px;
 
+  /* Toolbar glyphs (ToolbarView.swift bracketButton/textGlyphButton hardcode 16/17) */
+  --font-toolbar-bracket: 16px;
+  --font-toolbar-text-glyph: 17px;
+
   /* Border widths (px) */
   --border-width-hairline: 0.5px;
   --border-width-thin: 1px;
@@ -123,6 +127,10 @@
 
   /* UI chrome sizes */
   --size-topbar: 36px;
+  /* ToolbarView.swift is mounted via `.frame(height: Layout.toolbarHeight)` in EditorView.swift —
+     Layout.toolbarHeight is an explicit 38px, not the 32px (24px buttons + xs padding x2) guess. */
+  --size-toolbar: 38px;
+  --size-zoom-slider-w: 100px; /* ToolbarView.swift:60 `.frame(width: 100)` */
   --size-resize-handle: 4px;
   /* PreviewContainerView.transportButton() is 32x28 (hardcoded, not tokenized in Swift) and
      uniform across all 5 transport buttons — no distinct larger play button. Kit IconButton is
