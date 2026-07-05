@@ -1,5 +1,6 @@
 import type { ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { Select } from "../primitives/index.js";
 
 export interface ModelPickerProps {
   models: ModelEntry[];
@@ -17,26 +18,12 @@ export function ModelPicker({ models, value, onChange, testid, label }: ModelPic
           {label}
         </span>
       )}
-      <select
-        data-testid={testid ?? "model-picker"}
+      <Select
+        testid={testid ?? "model-picker"}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          background: theme.bg.raised,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xsSm,
-          color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
-          fontWeight: theme.fontWeight.regular,
-          padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-          cursor: "pointer",
-          width: "100%",
-        }}
-      >
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>{m.label}</option>
-        ))}
-      </select>
+        options={models.map((m) => ({ value: m.id, label: m.label }))}
+        onChange={onChange}
+      />
     </div>
   );
 }

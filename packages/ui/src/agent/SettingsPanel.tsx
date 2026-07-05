@@ -1,9 +1,32 @@
 import { useState, useEffect } from "react";
 import type { ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { Button, IconButton, TextInput, Checkbox, Icon } from "../primitives/index.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { DEFAULT_CONFIRM_THRESHOLD } from "./generation-settings.js";
 import { SkillsPane, type SkillsPaneProps } from "../skills/SkillsPane.js";
+
+// Icon-in-capsule sizing — same family as GenerationPanel's close/submit glyphs (M16E T2).
+const CLOSE_ICON_SIZE = 14;
+const REMOVE_ICON_SIZE = 14;
+
+// Canonical row language (M16D InspectorView.sectionTitleLabel / fields.tsx Section; reused by
+// M16E T2's GenerationPanel): eyebrow section headers xxs/semibold/wide-tracking/muted/uppercase,
+// field labels sm/medium/primary. Applied here to fal.ai / MCP Server / Skills section headers
+// and the confirm-threshold field label — the single row authority for this pane too.
+const sectionHeaderStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.xxs,
+  fontWeight: theme.fontWeight.semibold,
+  color: theme.text.muted,
+  letterSpacing: theme.letterSpacing.wide,
+  textTransform: "uppercase",
+};
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.sm,
+  fontWeight: theme.fontWeight.medium,
+  color: theme.text.primary,
+};
+const fullWidthInput: React.CSSProperties = { width: "100%", boxSizing: "border-box" };
 
 export type KeyConfig =
   | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => Promise<void>; onClearKey: () => Promise<void> }
@@ -73,61 +96,34 @@ function KeychainConfig({
       >
         {cfg.hasKey ? "Key configured" : "No key set"}
       </span>
-      <input
+      <TextInput
         type="password"
-        data-testid={testidPrefix}
+        testid={testidPrefix}
         value={keyInput}
-        onChange={(e) => setKeyInput(e.target.value)}
+        onChange={setKeyInput}
         placeholder={placeholder}
-        style={{
-          background: theme.bg.surface,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xs,
-          color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          outline: "none",
-          fontFamily: "inherit",
-          width: "100%",
-          boxSizing: "border-box" as const,
-        }}
+        style={fullWidthInput}
       />
       <div style={{ display: "flex", gap: theme.spacing.xs }}>
-        <button
-          data-testid={`${testidPrefix}-save`}
-          disabled={!keyInput.trim() || busy}
-          onClick={handleSave}
-          style={{
-            background: theme.accent.primary,
-            border: "none",
-            borderRadius: theme.radius.xs,
-            color: theme.text.onAccent,
-            cursor: !keyInput.trim() || busy ? "not-allowed" : "pointer",
-            fontSize: theme.fontSize.sm,
-            fontWeight: theme.fontWeight.medium,
-            padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-            opacity: !keyInput.trim() || busy ? theme.opacity.disabled : theme.opacity.opaque,
-          }}
-        >
+        {/* AgentPane.trailingControl: Save = .capsule(.prominent, size: .regular). */}
+        <Button testid={`${testidPrefix}-save`} variant="accent" size="regular" disabled={!keyInput.trim() || busy} onClick={handleSave}>
           Save
-        </button>
+        </Button>
         {cfg.hasKey && (
-          <button
-            data-testid={`${testidPrefix}-remove`}
+          // AgentPane.trailingControl: Remove = trash icon in a .capsule(.secondary, size: .regular);
+          // styled destructive here since it's an irreversible action and this kit has no neutral
+          // icon-capsule variant distinct from Save's accent one.
+          <Button
+            testid={`${testidPrefix}-remove`}
+            variant="destructive"
+            size="regular"
             disabled={busy}
             onClick={handleRemove}
-            style={{
-              background: "none",
-              border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-              borderRadius: theme.radius.xs,
-              color: theme.text.secondary,
-              cursor: busy ? "not-allowed" : "pointer",
-              fontSize: theme.fontSize.sm,
-              padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-            }}
+            title="Remove key"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            Remove
-          </button>
+            <Icon name="trash" size={REMOVE_ICON_SIZE} />
+          </Button>
         )}
       </div>
     </div>
@@ -154,60 +150,11 @@ function ProxyConfig({ cfg }: { cfg: Extract<KeyConfig, { kind: "proxy" }> }) {
       >
         {saved ? "Saved (takes effect on reload)" : "Proxy endpoint"}
       </span>
-      <input
-        data-testid="settings-proxy-url"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://…"
-        style={{
-          background: theme.bg.surface,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xs,
-          color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          outline: "none",
-          fontFamily: "inherit",
-          width: "100%",
-          boxSizing: "border-box" as const,
-        }}
-      />
-      <input
-        type="password"
-        data-testid="settings-proxy-token"
-        value={token}
-        onChange={(e) => setToken(e.target.value)}
-        placeholder="Token (optional)"
-        style={{
-          background: theme.bg.surface,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xs,
-          color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          outline: "none",
-          fontFamily: "inherit",
-          width: "100%",
-          boxSizing: "border-box" as const,
-        }}
-      />
-      <button
-        data-testid="settings-proxy-save"
-        onClick={handleSave}
-        style={{
-          background: theme.accent.primary,
-          border: "none",
-          borderRadius: theme.radius.xs,
-          color: theme.text.onAccent,
-          cursor: "pointer",
-          fontSize: theme.fontSize.sm,
-          fontWeight: theme.fontWeight.medium,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          alignSelf: "flex-start",
-        }}
-      >
+      <TextInput testid="settings-proxy-url" value={url} onChange={setUrl} placeholder="https://…" style={fullWidthInput} />
+      <TextInput type="password" testid="settings-proxy-token" value={token} onChange={setToken} placeholder="Token (optional)" style={fullWidthInput} />
+      <Button testid="settings-proxy-save" variant="accent" onClick={handleSave} style={{ alignSelf: "flex-start" }}>
         Save
-      </button>
+      </Button>
     </div>
   );
 }
@@ -261,14 +208,7 @@ function McpConfig({ cfg }: { cfg: McpSettings }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
       <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
-        <input
-          type="checkbox"
-          data-testid="settings-mcp-enable"
-          checked={enabled}
-          disabled={busy}
-          onChange={handleToggle}
-          style={{ cursor: busy ? "not-allowed" : "pointer" }}
-        />
+        <Checkbox testid="settings-mcp-enable" checked={enabled} disabled={busy} onChange={handleToggle} />
         <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary }}>
           {enabled ? "Enabled" : "Disabled"}
         </span>
@@ -288,37 +228,8 @@ function McpConfig({ cfg }: { cfg: McpSettings }) {
             {token}
           </span>
           <div style={{ display: "flex", gap: theme.spacing.xs }}>
-            <button
-              data-testid="settings-mcp-copy"
-              onClick={handleCopy}
-              style={{
-                background: "none",
-                border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-                borderRadius: theme.radius.xs,
-                color: theme.text.secondary,
-                cursor: "pointer",
-                fontSize: theme.fontSize.sm,
-                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-              }}
-            >
-              Copy
-            </button>
-            <button
-              data-testid="settings-mcp-regenerate"
-              disabled={busy}
-              onClick={handleRegenerate}
-              style={{
-                background: "none",
-                border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-                borderRadius: theme.radius.xs,
-                color: theme.text.secondary,
-                cursor: busy ? "not-allowed" : "pointer",
-                fontSize: theme.fontSize.sm,
-                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-              }}
-            >
-              Regenerate
-            </button>
+            <Button testid="settings-mcp-copy" onClick={handleCopy}>Copy</Button>
+            <Button testid="settings-mcp-regenerate" disabled={busy} onClick={handleRegenerate}>Regenerate</Button>
           </div>
         </>
       )}
@@ -338,16 +249,13 @@ function ConfirmThresholdField({ value, onChange }: { value: number; onChange: (
         gap: theme.spacing.xxs,
       }}
     >
-      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
-        Generation confirm threshold (credits)
-      </span>
-      <input
+      <span style={fieldLabelStyle}>Generation confirm threshold (credits)</span>
+      <TextInput
         type="number"
         min={0}
-        data-testid="settings-confirm-threshold"
-        value={value}
-        onChange={(e) => {
-          const raw = e.target.value;
+        testid="settings-confirm-threshold"
+        value={String(value)}
+        onChange={(raw) => {
           if (raw.trim() === "") {
             // Number("") is 0, not NaN — an emptied field means "cleared", not "always ask".
             onChange(DEFAULT_CONFIRM_THRESHOLD);
@@ -356,18 +264,7 @@ function ConfirmThresholdField({ value, onChange }: { value: number; onChange: (
           const n = Number(raw);
           onChange(Number.isFinite(n) ? n : DEFAULT_CONFIRM_THRESHOLD);
         }}
-        style={{
-          background: theme.bg.surface,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xs,
-          color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          outline: "none",
-          fontFamily: "inherit",
-          width: "100%",
-          boxSizing: "border-box" as const,
-        }}
+        style={fullWidthInput}
       />
       <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted }}>
         Generations estimated above this many credits ask for confirmation first. 0 = always ask.
@@ -422,22 +319,9 @@ export function SettingsPanel({
             Settings
           </span>
           {onClose && (
-            <button
-              data-testid="settings-close"
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                color: theme.text.muted,
-                cursor: "pointer",
-                fontSize: theme.fontSize.md,
-                padding: 0,
-                lineHeight: 1,
-              }}
-              aria-label="Close"
-            >
-              ×
-            </button>
+            <IconButton testid="settings-close" onClick={onClose} title="Close" frame="smMd">
+              <Icon name="x" size={CLOSE_ICON_SIZE} />
+            </IconButton>
           )}
         </div>
 
@@ -458,9 +342,7 @@ export function SettingsPanel({
               gap: theme.spacing.sm,
             }}
           >
-            <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
-              fal.ai
-            </span>
+            <span style={sectionHeaderStyle}>fal.ai</span>
             {falKeyConfig.kind === "keychain" ? (
               <KeychainConfig cfg={falKeyConfig} testidPrefix="settings-fal-key" placeholder="Paste fal.ai key…" />
             ) : (
@@ -507,9 +389,7 @@ export function SettingsPanel({
               gap: theme.spacing.sm,
             }}
           >
-            <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
-              MCP Server
-            </span>
+            <span style={sectionHeaderStyle}>MCP Server</span>
             <McpConfig cfg={mcp} />
           </section>
         )}
@@ -525,9 +405,7 @@ export function SettingsPanel({
               gap: theme.spacing.sm,
             }}
           >
-            <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
-              Skills
-            </span>
+            <span style={sectionHeaderStyle}>Skills</span>
             <SkillsPane {...skills} />
           </section>
         )}

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Skill, SkillCatalogEntry } from "@palmier/ai";
 import { SkillStore, SkillCatalog } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { Button, IconButton, Icon, SearchField, SegmentedTabs, MenuList, useHover } from "../primitives/index.js";
+import type { MenuListItem } from "../primitives/index.js";
 
 export interface SkillsPaneProps {
   store: SkillStore;
@@ -15,6 +17,29 @@ const EXTERNAL_AGENTS: { id: "claude" | "codex" | "cursor"; label: string }[] = 
   { id: "codex", label: "Codex" },
   { id: "cursor", label: "Cursor" },
 ];
+
+// Row-scale icon glyphs (doc.text leading icon, header icon-buttons, toolbar affordances) — same
+// family as GenerationPanel's *_ICON_SIZE constants (M16E T2).
+const ROW_ICON_SIZE = 14;
+const HEADER_ICON_SIZE = 14;
+const DELETE_ICON_SIZE = 14;
+const CHEVRON_ICON_SIZE = 10;
+
+// Canonical row language (M16D InspectorView.sectionTitleLabel / fields.tsx Section, reused by
+// M16E T2's GenerationPanel and T3's SettingsPanel): eyebrow section headers
+// xxs/semibold/wide-tracking/muted/uppercase, row labels sm/medium/primary.
+const sectionHeaderStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.xxs,
+  fontWeight: theme.fontWeight.semibold,
+  color: theme.text.muted,
+  letterSpacing: theme.letterSpacing.wide,
+  textTransform: "uppercase",
+};
+const rowLabelStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.sm,
+  fontWeight: theme.fontWeight.medium,
+  color: theme.text.primary,
+};
 
 type CommunityState = "upToDate" | "update" | "modified";
 
@@ -235,17 +260,6 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
     toastTimer.current = setTimeout(() => setToast(null), 5000);
   }
 
-  const inputStyle: React.CSSProperties = {
-    background: theme.bg.surface,
-    border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-    borderRadius: theme.radius.xs,
-    color: theme.text.primary,
-    fontSize: theme.fontSize.sm,
-    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-    outline: "none",
-    fontFamily: "inherit",
-  };
-
   const iconBtnStyle: React.CSSProperties = {
     background: "none",
     border: "none",
@@ -259,7 +273,7 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
   return (
     <div data-testid="skills-pane" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.xxs }}>
-        <span data-testid="skills-header-copy" style={{ fontSize: theme.fontSize.xs, color: theme.text.tertiary }}>
+        <span data-testid="skills-header-copy" style={{ fontSize: theme.fontSize.sm, color: theme.text.tertiary }}>
           These skills are available to the in-app agent once installed. For Claude/Codex/Cursor, add them to their respective directories.
         </span>
         <a
@@ -267,7 +281,7 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
           href={COMMUNITY_URL}
           target="_blank"
           rel="noreferrer"
-          style={{ fontSize: theme.fontSize.xs, color: theme.accent.primary }}
+          style={{ fontSize: theme.fontSize.sm, color: theme.accent.primary }}
         >
           Check out community skills ↗
         </a>
@@ -276,6 +290,7 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
       <div
         style={{
           display: "flex",
+          background: `rgba(255, 255, 255, ${theme.opacity.subtle})`,
           border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
           borderRadius: theme.radius.md,
           height: theme.size.skillsPaneHeight,
@@ -293,7 +308,7 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
               display: "flex",
               alignItems: "center",
               gap: theme.spacing.sm,
-              background: theme.bg.raised,
+              background: theme.bg.prominent,
               border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
               borderRadius: theme.radius.md,
               boxShadow: theme.shadow.lg,
@@ -337,45 +352,49 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
             flexDirection: "column",
             width: theme.size.skillsListWidth,
             flexShrink: 0,
-            borderRight: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
+            borderRight: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs, padding: theme.spacing.sm }}>
-            <input
-              data-testid="skills-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search skills"
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <button data-testid="skills-new" title="New skill" onClick={handleNew} style={iconBtnStyle}>+</button>
+          <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, padding: `${theme.spacing.smMd} ${theme.spacing.md}` }}>
+            <SearchField testid="skills-search" value={query} onChange={setQuery} placeholder="Search skills" style={{ flex: 1 }} />
+            <IconButton testid="skills-new" title="New skill" onClick={() => void handleNew()} frame="sm">
+              <Icon name="plus" size={HEADER_ICON_SIZE} />
+            </IconButton>
             {store.canOpenRoot && (
-              <button data-testid="skills-open-folder" title="Open skills folder" onClick={() => void store.openRoot()} style={iconBtnStyle}>
-                Folder
-              </button>
+              <IconButton testid="skills-open-folder" title="Open skills folder" onClick={() => void store.openRoot()} frame="sm">
+                <Icon name="folder" size={HEADER_ICON_SIZE} />
+              </IconButton>
             )}
-            <button data-testid="skills-refresh-catalog" title="Refresh catalog" onClick={() => void refreshCatalog()} style={iconBtnStyle}>
-              ⟳
-            </button>
+            <IconButton testid="skills-refresh-catalog" title="Refresh catalog" onClick={() => void refreshCatalog()} frame="sm">
+              <Icon name="refresh" size={HEADER_ICON_SIZE} />
+            </IconButton>
           </div>
 
+          <div style={{ borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}` }} />
+
           <div style={{ overflowY: "auto", flex: 1, padding: `0 ${theme.spacing.xs}` }}>
-            <div data-testid="skills-section-my" style={{ fontSize: theme.fontSize.xxs, fontWeight: theme.fontWeight.semibold, color: theme.text.muted, padding: `${theme.spacing.xs} ${theme.spacing.xs} ${theme.spacing.xxs}` }}>
+            <div
+              data-testid="skills-section-my"
+              style={{ ...sectionHeaderStyle, padding: `${theme.spacing.xs} ${theme.spacing.xs} ${theme.spacing.xxs}` }}
+            >
               MY SKILLS · {mySkills.length}
             </div>
             {mySkills.length === 0 ? (
-              <div style={{ fontSize: theme.fontSize.sm, color: theme.text.muted, padding: `${theme.spacing.xxs} ${theme.spacing.sm}` }}>None</div>
+              <div style={{ fontSize: theme.fontSize.sm, color: theme.text.muted, padding: `${theme.spacing.xs} ${theme.spacing.sm}` }}>None</div>
             ) : (
               mySkills.map((s) => (
                 <SkillRow key={s.id} skill={s} isSelected={selected?.id === s.id} onClick={() => void handleSelectRow(s.id)} />
               ))
             )}
 
-            <div data-testid="skills-section-community" style={{ fontSize: theme.fontSize.xxs, fontWeight: theme.fontWeight.semibold, color: theme.text.muted, padding: `${theme.spacing.sm} ${theme.spacing.xs} ${theme.spacing.xxs}` }}>
+            <div
+              data-testid="skills-section-community"
+              style={{ ...sectionHeaderStyle, padding: `${theme.spacing.sm} ${theme.spacing.xs} ${theme.spacing.xxs}` }}
+            >
               COMMUNITY · {communityItems.length}
             </div>
             {communityItems.length === 0 ? (
-              <div style={{ fontSize: theme.fontSize.sm, color: theme.text.muted, padding: `${theme.spacing.xxs} ${theme.spacing.sm}` }}>None</div>
+              <div style={{ fontSize: theme.fontSize.sm, color: theme.text.muted, padding: `${theme.spacing.xs} ${theme.spacing.sm}` }}>None</div>
             ) : (
               communityItems.map((item) =>
                 item.kind === "installed" ? (
@@ -393,6 +412,9 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
                     title={item.entry.description}
                     style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, padding: `${theme.spacing.smMd} ${theme.spacing.sm}` }}
                   >
+                    <span style={{ color: theme.text.muted, display: "flex", flexShrink: 0 }}>
+                      <Icon name="file" size={ROW_ICON_SIZE} />
+                    </span>
                     <span style={{ flex: 1, fontSize: theme.fontSize.sm, color: theme.text.secondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {item.entry.name}
                     </span>
@@ -402,7 +424,7 @@ export function SkillsPane({ store, catalog }: SkillsPaneProps) {
                       <button
                         data-testid={`skills-install-${item.id}`}
                         onClick={() => void handleInstall(item.entry)}
-                        style={{ ...iconBtnStyle, fontWeight: theme.fontWeight.semibold, color: theme.accent.primary }}
+                        style={{ ...iconBtnStyle, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.accent.primary }}
                       >
                         Install
                       </button>
@@ -476,16 +498,18 @@ function SkillRow({
   badge?: CommunityState;
   onClick: () => void;
 }) {
+  const { hovered, hoverProps } = useHover();
   return (
     <button
       data-testid={`skills-row-${skill.id}`}
       onClick={onClick}
+      {...hoverProps}
       style={{
         display: "flex",
         alignItems: "center",
         width: "100%",
         gap: theme.spacing.sm,
-        background: isSelected ? theme.bg.surface : "none",
+        background: isSelected ? theme.bg.surface : hovered ? `rgba(255, 255, 255, ${theme.opacity.faint})` : "none",
         border: "none",
         borderRadius: theme.radius.sm,
         color: theme.text.primary,
@@ -495,9 +519,12 @@ function SkillRow({
         textAlign: "left",
       }}
     >
-      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{skill.name}</span>
+      <span style={{ color: isSelected ? theme.accent.primary : theme.text.muted, display: "flex", flexShrink: 0 }}>
+        <Icon name="file" size={ROW_ICON_SIZE} />
+      </span>
+      <span style={{ ...rowLabelStyle, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{skill.name}</span>
       {badge === "update" && (
-        <span data-testid={`skills-badge-update-${skill.id}`} style={{ color: theme.accent.primary, fontSize: theme.fontSize.xs }}>↓</span>
+        <span data-testid={`skills-badge-update-${skill.id}`} style={{ color: theme.accent.primary, fontSize: theme.fontSize.sm, display: "flex" }}>↓</span>
       )}
       {badge === "modified" && (
         <span data-testid={`skills-badge-modified-${skill.id}`} style={{ color: theme.text.muted, fontSize: theme.fontSize.xxs }}>Modified</span>
@@ -543,15 +570,6 @@ function SkillDetail(props: SkillDetailProps) {
   } = props;
 
   const dirty = editing && editingThisSkill && draft !== originalDraft;
-  const segBtnStyle = (active: boolean): React.CSSProperties => ({
-    background: active ? theme.bg.surface : "none",
-    border: "none",
-    borderRadius: theme.radius.xs,
-    color: active ? theme.text.primary : theme.text.muted,
-    cursor: "pointer",
-    fontSize: theme.fontSize.sm,
-    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-  });
 
   return (
     <>
@@ -570,7 +588,7 @@ function SkillDetail(props: SkillDetailProps) {
               border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
               borderRadius: theme.radius.xs,
               color: theme.text.primary,
-              fontSize: theme.fontSize.lg,
+              fontSize: theme.fontSize.xl,
               fontWeight: theme.fontWeight.semibold,
               padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
               outline: "none",
@@ -582,7 +600,7 @@ function SkillDetail(props: SkillDetailProps) {
             data-testid="skills-title"
             title="Double-click to rename"
             onDoubleClick={onRenameStart}
-            style={{ flex: 1, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.semibold, color: theme.text.primary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            style={{ flex: 1, fontSize: theme.fontSize.xl, fontWeight: theme.fontWeight.semibold, color: theme.text.primary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
             {skill.name}
           </span>
@@ -615,71 +633,58 @@ function SkillDetail(props: SkillDetailProps) {
 
         {store.canExportToAgent && (
           <div style={{ position: "relative" }}>
-            <button
-              data-testid="skills-copy-toggle"
+            {/* SkillCopyMenu's tinted capsule (accent-tinted fill isn't a themed token yet — this
+                keeps the accent border + text and drops the translucent fill; see T3 report). */}
+            <Button
+              testid="skills-copy-toggle"
               onClick={onCopyMenuToggle}
               style={{
                 background: "none",
-                border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-                borderRadius: theme.radius.xl,
+                border: `${theme.borderWidth.thin} solid ${theme.accent.primary}`,
+                borderRadius: theme.radius.pill,
                 color: theme.accent.primary,
-                cursor: "pointer",
                 fontSize: theme.fontSize.sm,
                 fontWeight: theme.fontWeight.semibold,
-                padding: `${theme.spacing.xxs} ${theme.spacing.md}`,
+                padding: `${theme.spacing.xs} ${theme.spacing.mdLg}`,
+                display: "flex",
+                alignItems: "center",
+                gap: theme.spacing.xxs,
               }}
             >
-              Add to Claude ▾
-            </button>
+              Add to Claude
+              <Icon name="chevron-down" size={CHEVRON_ICON_SIZE} />
+            </Button>
             {copyMenuOpen && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  right: 0,
-                  marginTop: theme.spacing.xxs,
-                  background: theme.bg.raised,
-                  border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-                  borderRadius: theme.radius.sm,
-                  boxShadow: theme.shadow.lg,
-                  zIndex: theme.z.menu,
-                  minWidth: theme.size.menuMin,
-                }}
-              >
-                {EXTERNAL_AGENTS.map((a) => (
-                  <button
-                    key={a.id}
-                    data-testid={`skills-copy-${a.id}`}
-                    onClick={() => onCopyToAgent(a.id, a.label)}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      background: "none",
-                      border: "none",
-                      color: theme.text.primary,
-                      cursor: "pointer",
-                      fontSize: theme.fontSize.sm,
-                      padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                      textAlign: "left",
-                    }}
-                  >
-                    Add to {a.label}
-                  </button>
-                ))}
+              <div style={{ position: "absolute", top: "100%", right: 0, marginTop: theme.spacing.xxs, zIndex: theme.z.menu }}>
+                <MenuList
+                  items={EXTERNAL_AGENTS.map((a): MenuListItem => ({ id: a.id, label: `Add to ${a.label}`, testid: `skills-copy-${a.id}` }))}
+                  onSelect={(id) => {
+                    const agent = EXTERNAL_AGENTS.find((a) => a.id === id);
+                    if (agent) onCopyToAgent(agent.id, agent.label);
+                  }}
+                />
               </div>
             )}
           </div>
         )}
 
-        <div style={{ display: "flex", gap: theme.borderWidth.hairline, background: theme.bg.surface, borderRadius: theme.radius.sm, padding: theme.borderWidth.thin }}>
-          <button data-testid="skills-view-toggle" onClick={onEnterView} style={segBtnStyle(!editing)}>View</button>
-          <button data-testid="skills-edit-toggle" onClick={onEnterEdit} style={segBtnStyle(editing)}>Edit</button>
-        </div>
+        {/* View/Edit — Swift's segmented viewEditToggle; ids carry the "-toggle" suffix so the
+            kit's derived `${testid}-${id}` lands exactly on skills-view-toggle/skills-edit-toggle. */}
+        <SegmentedTabs
+          testid="skills"
+          segments={[{ id: "view-toggle", label: "View" }, { id: "edit-toggle", label: "Edit" }]}
+          active={editing ? "edit-toggle" : "view-toggle"}
+          onSelect={(id) => (id === "edit-toggle" ? onEnterEdit() : onEnterView())}
+        />
 
         {store.canReveal && (
           <button data-testid="skills-reveal" title="Reveal" onClick={onReveal} style={{ background: "none", border: "none", color: theme.accent.primary, cursor: "pointer", fontSize: theme.fontSize.sm }}>⤴</button>
         )}
-        <button data-testid="skills-delete" title="Delete skill" onClick={onDelete} style={{ background: "none", border: "none", color: theme.text.secondary, cursor: "pointer", fontSize: theme.fontSize.sm }}>Delete</button>
+        {/* SkillIconButton(trash) — styled destructive since it's an irreversible action (matches
+            Settings' Remove-key trash button, the kit's other destructive-icon affordance). */}
+        <Button testid="skills-delete" variant="destructive" title="Delete skill" onClick={onDelete} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="trash" size={DELETE_ICON_SIZE} />
+        </Button>
       </div>
 
       {editing ? (
@@ -703,7 +708,7 @@ function SkillDetail(props: SkillDetailProps) {
         <div style={{ flex: 1, overflowY: "auto", padding: theme.spacing.md, display: "flex", flexDirection: "column", gap: theme.spacing.md }}>
           <span data-testid="skills-provenance" style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted }}>{provenance}</span>
           <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.xs }}>
-            <span data-testid="skills-description-label" style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.tertiary }}>DESCRIPTION</span>
+            <span data-testid="skills-description-label" style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.tertiary, letterSpacing: theme.letterSpacing.tight }}>DESCRIPTION</span>
             <span data-testid="skills-description" style={{ fontSize: theme.fontSize.smMd, color: theme.text.secondary }}>{skill.description}</span>
           </div>
           <div style={{ borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}` }} />

@@ -27,7 +27,10 @@ export type IconName =
   | "diamond-filled"
   | "book"
   | "send"
-  | "image";
+  | "image"
+  | "trash"
+  | "file"
+  | "refresh";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -204,6 +207,34 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <circle cx="8.5" cy="9.5" r="1.5" />
       <path d="M21 15l-5-5-4 4-3-3-6 6" />
+    </>
+  ),
+  // "trash" — SkillIconButton(delete)/AgentPane's remove-key trash button.
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+      <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </>
+  ),
+  // "doc.text" — SkillRow's leading document glyph (Settings/SkillsPane.swift).
+  file: (
+    <>
+      <path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+      <path d="M14 3v4h4" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+      <line x1="8" y1="16" x2="13" y2="16" />
+    </>
+  ),
+  // "arrow.clockwise" — SkillIconButton(refresh catalog).
+  refresh: (
+    <>
+      <path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.6" />
+      <path d="M4 4v4.6h4.6" />
+      <path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.4" />
+      <path d="M20 20v-4.6h-4.6" />
     </>
   ),
 };
