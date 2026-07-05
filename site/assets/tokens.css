@@ -1,0 +1,393 @@
+:root {
+  /* Background */
+  --bg-base: rgb(10, 10, 10);
+  --bg-surface: rgb(22, 22, 22);
+  --bg-raised: rgb(30, 30, 30);
+  --bg-prominent: rgb(44, 44, 44);
+
+  /* Border */
+  --border-primary: rgba(255, 255, 255, 0.16);
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --border-divider: rgba(255, 255, 255, 0.44);
+  /* Focused-panel ring (EditorView.swift PanelFocusRing: Accent.primary stroke, opacity 0.6 —
+     not one of the named AppTheme.Opacity steps, a literal on the Swift side too) */
+  --border-focus-ring: rgba(245, 239, 228, 0.6);
+
+  /* Text */
+  --text-primary: rgba(255, 255, 255, 1);
+  --text-secondary: rgba(255, 255, 255, 0.80);
+  --text-tertiary: rgba(255, 255, 255, 0.62);
+  --text-muted: rgba(255, 255, 255, 0.34);
+
+  /* Accent */
+  --accent-timecode: rgb(242, 153, 51);
+  --accent-primary: rgb(245, 239, 228);
+  /* Accent @ Opacity.subtle/medium (SkillsPane.swift SkillCopyMenu fill/border, 576-581) */
+  --accent-primary-subtle: rgba(245, 239, 228, 0.04);
+  --accent-primary-muted: rgba(245, 239, 228, 0.35);
+
+  /* Status */
+  --status-error: rgb(229, 79, 79);
+  --status-success: rgb(79, 184, 95);
+
+  /* Track colors */
+  --track-video: #0091C2;
+  --track-audio: #58A822;
+  --track-image: #B72DD2;
+  --track-text: #B72DD2;
+  --track-lottie: #E0A800;
+
+  /* Opacity */
+  --opacity-subtle: 0.04;
+  --opacity-hint: 0.06;
+  --opacity-faint: 0.08;
+  --opacity-soft: 0.10;
+  --opacity-muted: 0.15;
+  --opacity-moderate: 0.25;
+  --opacity-medium: 0.35;
+  --opacity-disabled: 0.40;
+  --opacity-strong: 0.55;
+  --opacity-prominent: 0.80;
+  --opacity-high: 0.9;
+  --opacity-opaque: 1;
+  --opacity-mix-fill: 0.3;
+
+  /* Radius (px) */
+  --radius-xs: 3px;
+  --radius-xs-sm: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-md-lg: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px; /* CSS pill idiom — Swift's Capsule() is a shape, not a numeric radius */
+
+  /* Spacing (px) */
+  --spacing-xxs: 2px;
+  --spacing-xs: 4px;
+  --spacing-sm: 6px;
+  --spacing-sm-md: 8px;
+  --spacing-md: 10px;
+  --spacing-md-lg: 12px;
+  --spacing-lg: 14px;
+  --spacing-lg-xl: 16px;
+  --spacing-xl: 20px;
+  --spacing-xl-xxl: 24px;
+  --spacing-xxl: 28px;
+
+  /* Font sizes (px) */
+  --font-micro: 8px;
+  --font-xxs: 9px;
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-sm-md: 12px;
+  --font-md: 13px;
+  --font-md-lg: 14px;
+  --font-lg: 15px;
+  --font-xl: 18px;
+  --font-title1: 22px;
+  --font-title2: 28px;
+  --font-display: 36px;
+
+  /* Toolbar glyphs (ToolbarView.swift bracketButton/textGlyphButton hardcode 16/17) */
+  --font-toolbar-bracket: 16px;
+  --font-toolbar-text-glyph: 17px;
+
+  /* Border widths (px) */
+  --border-width-hairline: 0.5px;
+  --border-width-thin: 1px;
+  --border-width-medium: 1.5px;
+  --border-width-thick: 2px;
+
+  /* Font weights */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Icon sizes (px) */
+  --icon-size-xxs: 12px;
+  --icon-size-xs: 14px;
+  --icon-size-sm: 18px;
+  --icon-size-sm-md: 20px;
+  --icon-size-md: 22px;
+  --icon-size-md-lg: 24px;
+  --icon-size-lg: 26px;
+  --icon-size-lg-xl: 28px;
+  --icon-size-xl: 30px;
+
+  /* Animation durations (AppTheme.Anim) */
+  --anim-hover: 0.15s;
+  --anim-transition: 0.2s;
+
+  /* Letter spacing (AppTheme.Tracking, points -> px) */
+  --letter-spacing-tight: -0.5px;
+  --letter-spacing-wide: 1.5px;
+
+  /* UI chrome sizes */
+  --size-topbar: 36px;
+  /* ToolbarView.swift is mounted via `.frame(height: Layout.toolbarHeight)` in EditorView.swift —
+     Layout.toolbarHeight is an explicit 38px, not the 32px (24px buttons + xs padding x2) guess. */
+  --size-toolbar: 38px;
+  --size-zoom-slider-w: 100px; /* ToolbarView.swift:60 `.frame(width: 100)` */
+  --size-resize-handle: 4px;
+  /* PreviewContainerView.transportButton() is 32x28 (hardcoded, not tokenized in Swift) and
+     uniform across all 5 transport buttons — no distinct larger play button. Kit IconButton is
+     square, so the transport row uses frame="lgXl" (--icon-size-lg-xl, 28px) directly; this token
+     is retained/retokened to 28px for parity documentation (was 36px, implying an oversized play
+     button that doesn't exist in Swift). */
+  --size-transport-play: 28px;
+  --size-media-item-min: 80px;
+  --size-media-tab-rail: 38px; /* icon-size-lg 26 + spacing-sm 6 x 2 — MediaPanelView.swift panelTabRail */
+  --size-inspector-label: 60px;
+  --size-inspector-value: 36px;
+
+  /* Scrim / dialog overlay */
+  --color-scrim: rgba(0, 0, 0, 0.5);
+
+  /* Text on accent backgrounds — the accent is a warm off-white, so text on it is the dark
+     base (Swift pairs Background.baseColor over Accent.primary, e.g. MatteSheet.swift). */
+  --color-text-on-accent: rgb(10, 10, 10);
+
+  /* Component min-widths */
+  --size-menu-min: 160px;
+  --size-dialog-min: 280px;
+  --size-toast-max: 480px;
+  --size-mention-picker-max: 160px;
+  --size-session-list-max: 120px;
+
+  /* Agent chat composer (M16E T1, AgentInputBox.swift textField frame verbatim) */
+  --size-composer-input-min-h: 32px;
+  --size-composer-input-max-h: 64px;
+  --size-generation-panel-min: 320px;
+  --size-settings-panel-min: 320px;
+  --size-settings-panel-w: 640px;
+  --size-settings-sidebar: 176px;
+  --size-activity-max: 420px;
+  --size-activity-cost: 68px; /* Editor/ProjectActivityView.swift row's Text(cost).frame(width: 68) verbatim — was wrongly 56px */
+  --size-activity-w: 340px; /* Editor/ProjectActivityView.swift .frame(width: 340) verbatim */
+
+  /* Skills pane (M15 T3) */
+  --size-skills-pane-height: 420px;
+  --size-skills-list-width: 220px;
+  --size-skills-spinner: 12px;
+  --size-skills-toast-max: 320px;
+
+  /* Z-index layers */
+  --z-raised: 2;
+  --z-menu: 9000;
+  --z-dialog: 10000;
+  --z-drag-ghost: 9999;
+  --z-toast: 10500;
+
+  /* Preview */
+  --color-preview-letterbox: #000000;
+  /* Media tile thumbless/generating/failed fallback body — AssetThumbnailView's Rectangle().fill(Color.black) base */
+  --color-tile-empty: #000000;
+
+  /* Timeline (M16C T3, ClipRenderer.swift/PlayheadOverlay.swift/SnapIndicatorOverlay.swift verbatim) */
+  --color-timeline-trim-handle: rgba(255, 255, 255, 0.34); /* AppTheme.Text.muted — was wrongly rgba(0,0,0,0.25), corrected */
+  --color-timeline-clip-label: rgba(255, 255, 255, 1); /* AppTheme.Text.primary — was wrongly 0.85 alpha, corrected */
+  --color-timeline-generating-scrim: rgba(10, 10, 10, 0.72);
+  --color-timeline-failed-scrim: rgba(229, 79, 79, 0.55);
+  --color-timeline-playhead: rgb(255, 69, 58); /* NSColor.systemRed, dark appearance — PlayheadOverlay.Playhead.color */
+  --color-timeline-snap: rgb(255, 214, 10); /* NSColor.systemYellow, dark appearance — SnapIndicatorOverlay */
+  --color-timeline-razor: rgba(255, 159, 10, 0.8); /* NSColor.systemOrange @ 0.8, dark appearance — TimelineView.swift:252 */
+
+  /* Shadows (CSS blur = 2 x SwiftUI shadow radius; offsets/colors verbatim from AppTheme.Shadow) */
+  --shadow-sm: 0 0.5px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.25);
+
+  /* Keyframe lane tokens (M16D T3, KeyframesLane.swift's KeyframesMetrics verbatim where an
+     analog exists) */
+  --size-kf-lane: 22px; /* KeyframesMetrics.rowHeight — was wrongly 28px (no boxed-lane analog in Swift; this is the closest one: Swift's whole per-property row height) */
+  --size-kf-diamond: 8px; /* KeyframesMetrics.diamondSize — was wrongly 10px, corrected */
+  --size-kf-toggle: 18px; /* keyframeControls stamp button height (InspectorView.swift) — verified match */
+  --size-kf-label: 52px; /* no Swift analog (Swift's lanes carry no label at all); kept as the pre-existing fixed alignment column */
+
+  /* Adjust inspector slider */
+  --size-adjust-track: 4px;
+  --size-adjust-thumb: 10px;
+  --size-adjust-label-col: 106px;
+
+  /* Color wheel pad */
+  --size-color-wheel-pad: 96px;
+  --size-color-wheel-puck: 10px;
+  --color-adjust-wheel-ring: rgba(255,255,255,0.50);
+  --color-adjust-wheel-crosshair: rgba(255, 255, 255, 0.08);
+  --color-adjust-wheel-puck-fill: #ffffff;
+  --color-adjust-wheel-puck-stroke: rgba(0,0,0,0.50);
+
+  /* Adjust gradient endpoints (Slider.tempGradient/tintGradient/lumaGradient verbatim) */
+  --color-adjust-temp-cool: rgb(82, 140, 235);
+  --color-adjust-temp-warm: rgb(242, 184, 82);
+  --color-adjust-tint-green: rgb(107, 199, 115);
+  --color-adjust-tint-magenta: rgb(209, 97, 184);
+  --color-adjust-luma-dark: rgb(13, 13, 13);
+  --color-adjust-luma-light: rgb(242, 242, 242);
+
+  /* Caption preset gallery */
+  --size-preset-card-min: 84px;
+  --size-preset-preview-height: 40px;
+  --size-color-swatch: 16px;
+  --anim-preset-preview-duration: 2.4s;
+  --anim-preset-preview-solo-duration: 1.5s;
+
+  /* Curve editor */
+  --size-curve-canvas: 180px;
+  --size-curve-dot: 9px;
+  --color-adjust-curve-grid: rgba(255,255,255,0.12);
+  --color-adjust-curve-border: rgba(255,255,255,0.16);
+  --color-adjust-curve-identity: rgba(255,255,255,0.20);
+  --color-adjust-curve-y: #ffffff;
+  --color-adjust-curve-r: #FF382E;
+  --color-adjust-curve-g: #52D15C;
+  --color-adjust-curve-b: #528FFF;
+  --color-adjust-huecurve-neutral: rgba(255,255,255,0.28);
+  --color-adjust-huecurve-hue: #ffffff;
+  --color-adjust-huecurve-sat: #88ff88;
+  --color-adjust-huecurve-lum: #8899ff;
+
+  /* Overlay tokens */
+  --size-overlay-handle: 10px;
+  --color-overlay-transform-border: rgba(255, 255, 255, 0.9);
+  --color-overlay-handle-fill: #ffffff;
+  --color-overlay-handle-stroke: #333333;
+  --color-overlay-crop-border: var(--accent-timecode);
+  --color-overlay-crop-handle: var(--accent-timecode);
+
+  /* Generating overlay (media tiles) — UI/GeneratingOverlay.swift .thumbnail size verbatim */
+  --color-generating-overlay-bg: rgba(10, 10, 10, 0.92);
+  --color-generating-track: rgba(255, 255, 255, 0.15);
+  --color-generating-fill: rgba(255, 255, 255, 0.55);
+  --size-generating-bar-w: 60px; /* Size.thumbnail.barWidth */
+  --size-generating-bar-h: 3px; /* Size.thumbnail.barHeight — was wrongly borderWidth.thick (2px) */
+  --anim-shimmer-duration: 1.35s;
+  --anim-progress-duration: 45s; /* matches Swift GeneratingOverlay.progressDuration=45s */
+
+  /* Track header row (M16C T2, TimelineHeaderView.swift stripWidth) */
+  --size-track-strip: 3px;
+
+  /* Media folder tile (M12A T4) */
+  --color-folder-tile-bg: rgba(255, 255, 255, 0.04);
+  --color-folder-icon: rgba(245, 239, 228, 0.85);
+  --color-folder-badge-bg: rgba(10, 10, 10, 0.72);
+  --color-folder-badge-text: #ffffff;
+
+  /* AI gradients (aiGradient 4 stops white 1.0/0.78/0.60/1.0 topLeading->bottomTrailing;
+     aiGradientDark white 0.11->0.06 vertical; Glass.primaryTint = accent @ 0.05) */
+  --gradient-ai: linear-gradient(135deg, rgb(255, 255, 255) 0%, rgb(199, 199, 199) 45%, rgb(153, 153, 153) 55%, rgb(255, 255, 255) 100%);
+  --gradient-ai-dark: linear-gradient(180deg, rgb(28, 28, 28) 0%, rgb(15, 15, 15) 100%);
+  --color-glass-tint: rgba(245, 239, 228, 0.05);
+
+  /* Panel header (Constants.Layout.panelHeaderHeight) */
+  --size-panel-header: 28px;
+
+  /* ComponentSize / Export / Matte / GenerationPanel */
+  --size-project-card-w: 150px;
+  --size-project-card-h: 120px;
+  --size-clip-detail-min: 32px;
+  --size-clip-label-min: 56px;
+  --size-caption-preview-max-h: 150px;
+  --size-tool-image-preview-max-h: 50px;
+  --size-gen-media-area-min-h: 120px;
+  --size-gen-loading-h: 180px;
+  --size-gen-prompt-min-h: 40px;
+  --size-gen-ref-tile-w: 80px;
+  --size-gen-ref-tile-h: 56px;
+  --size-export-sheet-w: 560px;
+  --size-export-sheet-h: 520px;
+  --size-matte-sheet-w: 280px;
+  --size-matte-control-w: 116px;
+}
+
+@keyframes generating-progress-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 90%;
+  }
+}
+
+/* Caption preset gallery preview — CSS approximations of the 4 preset families (clip-level
+   entrance, word-reveal, solo cycle, highlight sweep). The engine's timeline render is the truth. */
+@keyframes preset-clip-fade {
+  0%, 10% { opacity: 0; }
+  30%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes preset-clip-pop {
+  0%, 10% { opacity: 0; transform: scale(0.6); }
+  26% { opacity: 1; transform: scale(1.1); }
+  34%, 80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.6); }
+}
+
+@keyframes preset-clip-slide {
+  0%, 10% { opacity: 0; transform: translateY(6px); }
+  30%, 80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes preset-word-fade {
+  0%, 15% { opacity: 0; }
+  30%, 100% { opacity: 1; }
+}
+
+@keyframes preset-word-slide {
+  0%, 15% { opacity: 0; transform: translateY(6px); }
+  30%, 100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes preset-word-pop {
+  0%, 15% { opacity: 0; transform: scale(0.4); }
+  24% { opacity: 1; transform: scale(1.2); }
+  32%, 100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes preset-word-instant {
+  0%, 20% { opacity: 0; }
+  21%, 100% { opacity: 1; }
+}
+
+@keyframes preset-solo-window {
+  0%, 33% { opacity: 1; }
+  34%, 100% { opacity: 0; }
+}
+
+@keyframes preset-solo-scale {
+  0%, 33% { transform: scale(1.15); }
+  34%, 100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-preset-anim] {
+    animation: none !important;
+  }
+}
+
+@keyframes skills-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Agent chat "generating" indicator (M16E T1) — CSS analog of GeneratingOverlay.swift's
+   aiGradient + ShimmerModifier: a moving highlight swept across text clipped to --gradient-ai,
+   reusing the M10D --anim-shimmer-duration. */
+@keyframes gradient-text-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: -200% 50%;
+  }
+}
+
+textarea[data-testid="agent-input"]::placeholder {
+  color: var(--text-muted);
+}
