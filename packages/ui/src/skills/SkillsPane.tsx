@@ -633,14 +633,14 @@ function SkillDetail(props: SkillDetailProps) {
 
         {store.canExportToAgent && (
           <div style={{ position: "relative" }}>
-            {/* SkillCopyMenu's tinted capsule (accent-tinted fill isn't a themed token yet — this
-                keeps the accent border + text and drops the translucent fill; see T3 report). */}
+            {/* SkillCopyMenu's tinted capsule — accent@subtle fill + accent@medium border,
+                verbatim from SkillsPane.swift:576-581 (M16F T3, was full-opacity border/no fill). */}
             <Button
               testid="skills-copy-toggle"
               onClick={onCopyMenuToggle}
               style={{
-                background: "none",
-                border: `${theme.borderWidth.thin} solid ${theme.accent.primary}`,
+                background: theme.accent.primarySubtle,
+                border: `${theme.borderWidth.thin} solid ${theme.accent.primaryMuted}`,
                 borderRadius: theme.radius.pill,
                 color: theme.accent.primary,
                 fontSize: theme.fontSize.sm,

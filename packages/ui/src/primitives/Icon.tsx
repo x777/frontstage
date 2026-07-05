@@ -32,7 +32,10 @@ export type IconName =
   | "file"
   | "refresh"
   | "alert-triangle"
-  | "history";
+  | "history"
+  | "paintpalette"
+  | "aspectratio"
+  | "ruler";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -254,6 +257,34 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 4a8 8 0 1 0 8 8" />
       <path d="M20 3v5h-5" />
       <path d="M12 8v4l3 2" />
+    </>
+  ),
+  // "paintpalette" — MatteSheet.swift row(icon:) Color row. Thumb-holed palette blob + 3 paint dabs.
+  paintpalette: (
+    <>
+      <path d="M12 3C6.5 3 2 6.9 2 12c0 3.3 2.2 5 4.6 5H9a1.6 1.6 0 0 1 1.6 1.6c0 .8-.4 1.2-.4 1.9 0 .9.8 1.5 1.8 1.5 5.5 0 9-4.5 9-10S17.5 3 12 3z" />
+      <circle cx="7.5" cy="10.8" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="8.2" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="16.5" cy="10.8" r="1.2" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // "aspectratio" — MatteSheet.swift row(icon:) Aspect row. Frame corners around a rectangle.
+  aspectratio: (
+    <>
+      <path d="M3 8V5a2 2 0 0 1 2-2h3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+      <rect x="7" y="7" width="10" height="10" rx="1" />
+    </>
+  ),
+  // "ruler" — MatteSheet.swift row(icon:) Size row. Diagonal ruler band with cross ticks.
+  ruler: (
+    <>
+      <path d="M4.6 15.4L15.4 4.6a1.5 1.5 0 0 1 2.1 0l1.9 1.9a1.5 1.5 0 0 1 0 2.1L8.6 19.4a1.5 1.5 0 0 1-2.1 0l-1.9-1.9a1.5 1.5 0 0 1 0-2.1z" />
+      <line x1="7.5" y1="12.5" x2="9.3" y2="14.3" />
+      <line x1="10.6" y1="9.4" x2="12" y2="10.8" />
+      <line x1="13.7" y1="6.3" x2="15.5" y2="8.1" />
     </>
   ),
 };

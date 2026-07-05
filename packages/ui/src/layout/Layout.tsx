@@ -110,10 +110,13 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
     return true;
   };
 
+  // Focused-panel ring: EditorView.swift's PanelFocusRing overlay — an accent-colored stroke at
+  // BorderWidth.medium, opacity 0.6 when focused / 0 when not, eased over Anim.transition.
   const panelStyle = (p: FocusedPanel): React.CSSProperties => ({
     ...panelSectionStyle,
     display: panelVisible(p) ? "flex" : "none",
-    border: `${theme.borderWidth.thin} solid ${layout.focused === p ? theme.border.primary : "transparent"}`,
+    border: `${theme.borderWidth.medium} solid ${layout.focused === p ? theme.border.focusRing : "transparent"}`,
+    transition: `border-color ${theme.anim.transition} ease-out`,
   });
 
   // In maximized mode the whole content area is a single flex column; otherwise use the resizable grid.

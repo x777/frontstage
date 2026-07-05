@@ -63,7 +63,7 @@ export function BlendControl({ store, clipIds }: BlendControlProps) {
         style={{
           fontSize: theme.fontSize.xs,
           color: theme.text.secondary,
-          minWidth: theme.size.inspectorLabel,
+          minWidth: theme.size.adjustLabelCol,
           flexShrink: 0,
         }}
       >

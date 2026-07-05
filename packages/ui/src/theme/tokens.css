@@ -9,6 +9,9 @@
   --border-primary: rgba(255, 255, 255, 0.16);
   --border-subtle: rgba(255, 255, 255, 0.12);
   --border-divider: rgba(255, 255, 255, 0.44);
+  /* Focused-panel ring (EditorView.swift PanelFocusRing: Accent.primary stroke, opacity 0.6 —
+     not one of the named AppTheme.Opacity steps, a literal on the Swift side too) */
+  --border-focus-ring: rgba(245, 239, 228, 0.6);
 
   /* Text */
   --text-primary: rgba(255, 255, 255, 1);
@@ -19,6 +22,9 @@
   /* Accent */
   --accent-timecode: rgb(242, 153, 51);
   --accent-primary: rgb(245, 239, 228);
+  /* Accent @ Opacity.subtle/medium (SkillsPane.swift SkillCopyMenu fill/border, 576-581) */
+  --accent-primary-subtle: rgba(245, 239, 228, 0.04);
+  --accent-primary-muted: rgba(245, 239, 228, 0.35);
 
   /* Status */
   --status-error: rgb(229, 79, 79);

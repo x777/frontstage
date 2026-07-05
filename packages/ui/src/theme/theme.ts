@@ -11,6 +11,7 @@ export const theme = {
     primary: "var(--border-primary)",
     subtle: "var(--border-subtle)",
     divider: "var(--border-divider)",
+    focusRing: "var(--border-focus-ring)",
   },
   text: {
     primary: "var(--text-primary)",
@@ -22,6 +23,8 @@ export const theme = {
   accent: {
     timecode: "var(--accent-timecode)",
     primary: "var(--accent-primary)",
+    primarySubtle: "var(--accent-primary-subtle)",
+    primaryMuted: "var(--accent-primary-muted)",
     glassTint: "var(--color-glass-tint)",
   },
   status: {

@@ -45,7 +45,7 @@ function ToolCallChip({ id, name }: { id: string; name: string }) {
         background: theme.bg.raised,
         borderRadius: theme.radius.xs,
         fontFamily: "ui-monospace, monospace",
-        fontSize: theme.fontSize.xs,
+        fontSize: theme.fontSize.sm,
         fontWeight: theme.fontWeight.medium,
         color: theme.text.tertiary,
         border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,

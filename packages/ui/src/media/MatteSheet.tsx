@@ -6,6 +6,7 @@ import { Dialog } from "../primitives/Dialog.js";
 import { Button } from "../primitives/Button.js";
 import { Select } from "../primitives/Select.js";
 import { TextInput } from "../primitives/TextInput.js";
+import { Icon } from "../primitives/Icon.js";
 import { renderMattePng } from "./matte-render.js";
 
 const ASPECT_OPTIONS: readonly { value: MatteAspect; label: string }[] = [
@@ -33,9 +34,11 @@ export interface MatteSheetProps {
   onCreated?: (assetId: string) => void;
 }
 
-// Row language mirrors MatteSheet.swift's `row(icon:label:control:)`: label left, control pinned
-// to the fixed control column (matteControlW, trailing-aligned in Swift).
+// Row language mirrors MatteSheet.swift's `row(icon:label:control:)`: leading SF-Symbol-style
+// icon, label, control pinned to the fixed control column (matteControlW, trailing-aligned in Swift).
+const ROW_ICON_SIZE = theme.iconSize.sm;
 const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: theme.spacing.smMd };
+const rowIconStyle: React.CSSProperties = { color: theme.text.secondary, display: "flex", flexShrink: 0 };
 const labelStyle: React.CSSProperties = {
   fontSize: theme.fontSize.sm,
   fontWeight: theme.fontWeight.medium,
@@ -101,6 +104,7 @@ export function MatteSheet({ library, timelineWidth, timelineHeight, folderId, o
         </div>
 
         <div style={rowStyle}>
+          <span style={rowIconStyle}><Icon name="paintpalette" size={ROW_ICON_SIZE} /></span>
           <span style={labelStyle}>Color</span>
           <div style={{ ...controlStyle, display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
             <span
@@ -119,6 +123,7 @@ export function MatteSheet({ library, timelineWidth, timelineHeight, folderId, o
         </div>
 
         <div style={rowStyle}>
+          <span style={rowIconStyle}><Icon name="aspectratio" size={ROW_ICON_SIZE} /></span>
           <span style={labelStyle}>Aspect</span>
           <div style={controlStyle}>
             <Select testid="matte-aspect-select" value={aspect} options={ASPECT_OPTIONS} onChange={setAspect} />
@@ -126,6 +131,7 @@ export function MatteSheet({ library, timelineWidth, timelineHeight, folderId, o
         </div>
 
         <div style={rowStyle}>
+          <span style={rowIconStyle}><Icon name="ruler" size={ROW_ICON_SIZE} /></span>
           <span style={labelStyle}>Size</span>
           <span
             data-testid="matte-size-readout"

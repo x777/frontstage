@@ -12,7 +12,7 @@ import {
   type EditorStore,
 } from "@palmier/core";
 
-export const TRACK_HEADER_WIDTH = 160;
+export const TRACK_HEADER_WIDTH = 100;
 
 // Row icons per TimelineHeaderView.swift (iconSize 14pt there; xxs frame here is the kit's
 // smallest button, per the M16C T2 brief).
