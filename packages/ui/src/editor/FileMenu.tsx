@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import type { ProjectSession, ConfirmDiscard, ProjectRef, FcpxmlTarget, FcpxmlVersion } from "@palmier/core";
 import { theme } from "../theme/theme.js";
-import { Button } from "../primitives/index.js";
+import { Button, MenuList } from "../primitives/index.js";
+import type { MenuListItem } from "../primitives/index.js";
 import type { RunProjectCommand } from "./Editor.js";
 import type { ExportKind, FcpxmlExportOptions } from "./use-export-command.js";
 
@@ -85,37 +86,97 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
     runProjectCommand(() => session.saveAs());
   }
 
-  const menuStyle: React.CSSProperties = {
-    position: "absolute",
-    top: `calc(100% + ${theme.spacing.xxs})`,
-    left: 0,
-    background: theme.bg.raised,
-    border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-    borderRadius: theme.radius.sm,
-    boxShadow: theme.shadow.lg,
-    minWidth: theme.size.menuMin,
-    zIndex: theme.z.menu,
-    display: "flex",
-    flexDirection: "column",
-    padding: `${theme.spacing.xxs} 0`,
+  const selectStyle: React.CSSProperties = {
+    background: theme.bg.surface,
+    border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
+    borderRadius: theme.radius.xs,
+    color: theme.text.secondary,
+    fontSize: theme.fontSize.xxs,
+    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
   };
 
-  const itemStyle: React.CSSProperties = {
-    background: "none",
-    border: "none",
-    color: theme.text.primary,
-    cursor: "pointer",
-    fontSize: theme.fontSize.sm,
-    padding: `${theme.spacing.xs} ${theme.spacing.md}`,
-    textAlign: "left",
-    width: "100%",
-  };
+  // Swift's real File menu is a native NSMenu (MainMenu.swift) — no icons on any item, so none are
+  // added here. Recent list + per-format export rows have no NSMenu analog (that command surface is
+  // this port's own; kept verbatim) — only the MenuList chrome + separator placement is restyled.
+  const items: MenuListItem[] = [
+    { id: "new", label: "New", testid: "file-new" },
+    { id: "open", label: "Open…", testid: "file-open" },
+  ];
+  if (recentRefs.length > 0) {
+    items.push({ id: "recent-header", label: "Open Recent", header: true, separatorBefore: true });
+    recentRefs.forEach((ref, i) => {
+      items.push({ id: `recent-${i}`, label: ref.name, testid: `file-recent-${i}` });
+    });
+  }
+  items.push(
+    { id: "save", label: "Save", testid: "file-save", separatorBefore: true },
+    { id: "save-as", label: "Save As…", testid: "file-save-as" },
+  );
+  if (onExport) {
+    items.push({ id: "export-video", label: "Export Video (MP4)…", testid: "file-export-video", separatorBefore: true });
+    if (canExportXml) {
+      items.push({ id: "export-fcpxml", label: "Export FCPXML (Resolve/FCP)…", testid: "file-export-fcpxml" });
+      items.push({
+        id: "fcpxml-options",
+        label: "",
+        content: (
+          <div
+            data-testid="fcpxml-options"
+            style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs, padding: `${theme.spacing.xxs} ${theme.spacing.sm}` }}
+          >
+            <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.tertiary }}>For</span>
+            <select
+              data-testid="fcpxml-target"
+              value={fcpxmlTarget}
+              onChange={(e) => setFcpxmlTarget(e.target.value as FcpxmlTarget)}
+              style={selectStyle}
+            >
+              {FCPXML_TARGETS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.tertiary }}>Version</span>
+            <select
+              data-testid="fcpxml-version"
+              value={fcpxmlVersion}
+              onChange={(e) => setFcpxmlVersion(e.target.value as FcpxmlVersion)}
+              style={selectStyle}
+            >
+              {FCPXML_VERSIONS.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+            <span data-testid="fcpxml-compat-note" style={{ fontSize: theme.fontSize.xxs, color: theme.text.tertiary, whiteSpace: "nowrap" }}>
+              {FCPXML_COMPATIBILITY_NOTES[fcpxmlVersion]}
+            </span>
+          </div>
+        ),
+      });
+      items.push({ id: "export-xmeml", label: "Export XMEML (Premiere)…", testid: "file-export-xmeml" });
+    }
+    if (canExportCaptions) {
+      items.push({ id: "export-srt", label: "Captions (SRT)…", testid: "file-export-srt" });
+      items.push({ id: "export-vtt", label: "Captions (VTT)…", testid: "file-export-vtt" });
+    }
+  }
 
-  const sepStyle: React.CSSProperties = {
-    height: theme.borderWidth.thin,
-    background: theme.border.divider,
-    margin: `${theme.spacing.xxs} 0`,
-  };
+  function handleSelect(id: string) {
+    if (id === "new") return handleNew();
+    if (id === "open") return handleOpen();
+    if (id.startsWith("recent-")) {
+      const i = Number(id.slice("recent-".length));
+      const ref = recentRefs[i];
+      if (ref) handleOpenRecent(ref);
+      return;
+    }
+    if (id === "save") return handleSave();
+    if (id === "save-as") return handleSaveAs();
+    if (id === "export-video") { setMenuOpen(false); onExport?.("video"); return; }
+    if (id === "export-fcpxml") { setMenuOpen(false); onExport?.("fcpxml", { target: fcpxmlTarget, version: fcpxmlVersion }); return; }
+    if (id === "export-xmeml") { setMenuOpen(false); onExport?.("xmeml"); return; }
+    if (id === "export-srt") { setMenuOpen(false); onExport?.("srt"); return; }
+    if (id === "export-vtt") { setMenuOpen(false); onExport?.("vtt"); return; }
+  }
 
   return (
     <div style={{ position: "relative" }} ref={menuRef}>
@@ -126,148 +187,8 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
         File
       </Button>
       {menuOpen && (
-        <div style={menuStyle}>
-          <button data-testid="file-new" style={itemStyle} onClick={handleNew}>
-            New
-          </button>
-          <button data-testid="file-open" style={itemStyle} onClick={handleOpen}>
-            Open…
-          </button>
-          {recentRefs.length > 0 && (
-            <>
-              <div style={sepStyle} />
-              <span
-                style={{
-                  ...itemStyle,
-                  color: theme.text.tertiary,
-                  cursor: "default",
-                  fontSize: theme.fontSize.xs,
-                }}
-              >
-                Open Recent
-              </span>
-              {recentRefs.map((ref, i) => (
-                <button
-                  key={ref.id}
-                  data-testid={`file-recent-${i}`}
-                  style={itemStyle}
-                  onClick={() => handleOpenRecent(ref)}
-                >
-                  {ref.name}
-                </button>
-              ))}
-            </>
-          )}
-          <div style={sepStyle} />
-          <button data-testid="file-save" style={itemStyle} onClick={handleSave}>
-            Save
-          </button>
-          <button data-testid="file-save-as" style={itemStyle} onClick={handleSaveAs}>
-            Save As…
-          </button>
-          {onExport && (
-            <>
-              <div style={sepStyle} />
-              <button
-                data-testid="file-export-video"
-                style={itemStyle}
-                onClick={() => { setMenuOpen(false); onExport("video"); }}
-              >
-                Export Video (MP4)…
-              </button>
-              {canExportXml && (
-                <>
-                  <button
-                    data-testid="file-export-fcpxml"
-                    style={itemStyle}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onExport("fcpxml", { target: fcpxmlTarget, version: fcpxmlVersion });
-                    }}
-                  >
-                    Export FCPXML (Resolve/FCP)…
-                  </button>
-                  <div
-                    data-testid="fcpxml-options"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: theme.spacing.xs,
-                      padding: `${theme.spacing.xxs} ${theme.spacing.md}`,
-                    }}
-                  >
-                    <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.tertiary }}>For</span>
-                    <select
-                      data-testid="fcpxml-target"
-                      value={fcpxmlTarget}
-                      onChange={(e) => setFcpxmlTarget(e.target.value as FcpxmlTarget)}
-                      style={{
-                        background: theme.bg.surface,
-                        border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-                        borderRadius: theme.radius.xs,
-                        color: theme.text.secondary,
-                        fontSize: theme.fontSize.xxs,
-                        padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                      }}
-                    >
-                      {FCPXML_TARGETS.map((t) => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
-                    <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.tertiary }}>Version</span>
-                    <select
-                      data-testid="fcpxml-version"
-                      value={fcpxmlVersion}
-                      onChange={(e) => setFcpxmlVersion(e.target.value as FcpxmlVersion)}
-                      style={{
-                        background: theme.bg.surface,
-                        border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-                        borderRadius: theme.radius.xs,
-                        color: theme.text.secondary,
-                        fontSize: theme.fontSize.xxs,
-                        padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                      }}
-                    >
-                      {FCPXML_VERSIONS.map((v) => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
-                    <span
-                      data-testid="fcpxml-compat-note"
-                      style={{ fontSize: theme.fontSize.xxs, color: theme.text.tertiary, whiteSpace: "nowrap" }}
-                    >
-                      {FCPXML_COMPATIBILITY_NOTES[fcpxmlVersion]}
-                    </span>
-                  </div>
-                  <button
-                    data-testid="file-export-xmeml"
-                    style={itemStyle}
-                    onClick={() => { setMenuOpen(false); onExport("xmeml"); }}
-                  >
-                    Export XMEML (Premiere)…
-                  </button>
-                </>
-              )}
-              {canExportCaptions && (
-                <>
-                  <button
-                    data-testid="file-export-srt"
-                    style={itemStyle}
-                    onClick={() => { setMenuOpen(false); onExport("srt"); }}
-                  >
-                    Captions (SRT)…
-                  </button>
-                  <button
-                    data-testid="file-export-vtt"
-                    style={itemStyle}
-                    onClick={() => { setMenuOpen(false); onExport("vtt"); }}
-                  >
-                    Captions (VTT)…
-                  </button>
-                </>
-              )}
-            </>
-          )}
+        <div style={{ position: "absolute", top: `calc(100% + ${theme.spacing.xxs})`, left: 0, zIndex: theme.z.menu }}>
+          <MenuList items={items} onSelect={handleSelect} />
         </div>
       )}
     </div>

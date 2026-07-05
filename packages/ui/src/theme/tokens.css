@@ -148,7 +148,8 @@
   --size-generation-panel-min: 320px;
   --size-settings-panel-min: 320px;
   --size-activity-max: 420px;
-  --size-activity-cost: 56px;
+  --size-activity-cost: 68px; /* Editor/ProjectActivityView.swift row's Text(cost).frame(width: 68) verbatim — was wrongly 56px */
+  --size-activity-w: 340px; /* Editor/ProjectActivityView.swift .frame(width: 340) verbatim */
 
   /* Skills pane (M15 T3) */
   --size-skills-pane-height: 420px;
@@ -236,10 +237,12 @@
   --color-overlay-crop-border: rgba(255, 200, 0, 0.9);
   --color-overlay-crop-handle: #ffcc00;
 
-  /* Generating overlay (media tiles) */
+  /* Generating overlay (media tiles) — UI/GeneratingOverlay.swift .thumbnail size verbatim */
   --color-generating-overlay-bg: rgba(10, 10, 10, 0.92);
   --color-generating-track: rgba(255, 255, 255, 0.15);
   --color-generating-fill: rgba(255, 255, 255, 0.55);
+  --size-generating-bar-w: 60px; /* Size.thumbnail.barWidth */
+  --size-generating-bar-h: 3px; /* Size.thumbnail.barHeight — was wrongly borderWidth.thick (2px) */
   --anim-shimmer-duration: 1.35s;
   --anim-progress-duration: 45s; /* matches Swift GeneratingOverlay.progressDuration=45s */
 
@@ -277,16 +280,6 @@
   --size-export-sheet-h: 520px;
   --size-matte-sheet-w: 280px;
   --size-matte-control-w: 116px;
-}
-
-@keyframes generating-shimmer {
-  0%,
-  100% {
-    opacity: var(--opacity-strong);
-  }
-  50% {
-    opacity: var(--opacity-opaque);
-  }
 }
 
 @keyframes generating-progress-fill {

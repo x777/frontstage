@@ -28,7 +28,8 @@ export function GeneratingOverlay({ label }: { label: string }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: theme.spacing.xs,
+        // UI/GeneratingOverlay.swift Size.thumbnail.spacing (VStack spacing)
+        gap: theme.spacing.smMd,
         background: theme.generating.overlayBg,
       }}
     >
@@ -36,17 +37,26 @@ export function GeneratingOverlay({ label }: { label: string }) {
         style={{
           fontSize: theme.fontSize.xs,
           fontWeight: theme.fontWeight.semibold,
-          color: theme.text.primary,
-          animation: `generating-shimmer ${theme.anim.shimmerDuration} ease-in-out infinite`,
+          // Swift's .foregroundStyle(AppTheme.aiGradient) + ShimmerModifier — gradient-fill the text
+          // and sweep a moving highlight across it, reusing the same recipe as AgentPanel's
+          // streaming-indicator shimmer (M16E T1), not a plain opacity pulse.
+          background: theme.gradients.ai,
+          backgroundSize: "200% 100%",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          color: "transparent",
+          animation: `gradient-text-shimmer ${theme.anim.shimmerDuration} linear infinite`,
         }}
       >
         {label}
       </span>
       <div
         style={{
-          width: "60%",
-          height: theme.borderWidth.thick,
-          borderRadius: theme.radius.xs,
+          // Size.thumbnail.barWidth/barHeight — Swift hardcodes an absolute bar size regardless of
+          // the tile's own width, not a percentage of it.
+          width: theme.generating.barW,
+          height: theme.generating.barH,
+          borderRadius: theme.radius.pill,
           background: theme.generating.track,
           overflow: "hidden",
         }}
@@ -55,7 +65,7 @@ export function GeneratingOverlay({ label }: { label: string }) {
           style={{
             height: "100%",
             width: 0,
-            borderRadius: theme.radius.xs,
+            borderRadius: theme.radius.pill,
             background: theme.generating.fill,
             // --anim-progress-duration matches Swift GeneratingOverlay.progressDuration=45s — cosmetic easing, not real progress
             animation: `generating-progress-fill ${theme.anim.progressDuration} ease-out forwards`,

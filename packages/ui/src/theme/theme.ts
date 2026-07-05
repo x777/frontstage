@@ -149,6 +149,7 @@ export const theme = {
     settingsPanelMin: "var(--size-settings-panel-min)",
     activityMax: "var(--size-activity-max)",
     activityCost: "var(--size-activity-cost)",
+    activityW: "var(--size-activity-w)",
     skillsPaneHeight: "var(--size-skills-pane-height)",
     skillsListWidth: "var(--size-skills-list-width)",
     skillsSpinner: "var(--size-skills-spinner)",
@@ -229,6 +230,8 @@ export const theme = {
     overlayBg: "var(--color-generating-overlay-bg)",
     track: "var(--color-generating-track)",
     fill: "var(--color-generating-fill)",
+    barW: "var(--size-generating-bar-w)",
+    barH: "var(--size-generating-bar-h)",
   },
   folder: {
     tileBg: "var(--color-folder-tile-bg)",

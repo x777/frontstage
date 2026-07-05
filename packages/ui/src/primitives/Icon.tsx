@@ -30,7 +30,9 @@ export type IconName =
   | "image"
   | "trash"
   | "file"
-  | "refresh";
+  | "refresh"
+  | "alert-triangle"
+  | "history";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -235,6 +237,23 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M4 4v4.6h4.6" />
       <path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.4" />
       <path d="M20 20v-4.6h-4.6" />
+    </>
+  ),
+  // "exclamationmark.triangle.fill" — AssetThumbnailView.failedThumbnail's error glyph. Swift's is
+  // filled; kept as a stroked outline to match this set's line-glyph house style.
+  "alert-triangle": (
+    <>
+      <path d="M12 3.5l9.5 16.5H2.5z" />
+      <line x1="12" y1="9.5" x2="12" y2="14" />
+      <circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // "clock.arrow.circlepath" — ProjectActivityButton's toggle icon.
+  history: (
+    <>
+      <path d="M12 4a8 8 0 1 0 8 8" />
+      <path d="M20 3v5h-5" />
+      <path d="M12 8v4l3 2" />
     </>
   ),
 };

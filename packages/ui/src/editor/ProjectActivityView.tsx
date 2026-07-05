@@ -3,6 +3,12 @@ import type { GenerationLogEntry } from "@palmier/core";
 import type { GenModelKind } from "@palmier/ai";
 import { genModel, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { Icon, IconButton } from "../primitives/index.js";
+
+// Mirrors --font-sm (11px) — Editor/ProjectActivityView.swift sizes the toggle glyph via the
+// ambient .font(), not IconSize; Icon's size prop sets raw SVG width/height, not a CSS var.
+const TOGGLE_ICON_SIZE = 11;
+const CLOSE_ICON_SIZE = 14;
 
 const MINUTE_S = 60;
 const HOUR_S = 60 * MINUTE_S;
@@ -59,7 +65,7 @@ export function ProjectActivityView({ entries, now = new Date(), onClose }: Proj
         display: "flex",
         flexDirection: "column",
         gap: theme.spacing.sm,
-        minWidth: theme.size.settingsPanelMin,
+        width: theme.size.activityW,
         padding: theme.spacing.md,
       }}
     >
@@ -71,20 +77,20 @@ export function ProjectActivityView({ entries, now = new Date(), onClose }: Proj
           {entries.length > 0 && (
             <span
               data-testid="activity-total"
-              style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.medium, color: theme.text.tertiary }}
+              style={{
+                fontSize: theme.fontSize.xs,
+                fontWeight: theme.fontWeight.medium,
+                color: theme.text.tertiary,
+                fontVariantNumeric: "tabular-nums",
+              }}
             >
               {formatCredits(total)}
             </span>
           )}
           {onClose && (
-            <button
-              data-testid="activity-close"
-              onClick={onClose}
-              aria-label="Close"
-              style={{ background: "none", border: "none", color: theme.text.muted, cursor: "pointer", fontSize: theme.fontSize.md, padding: 0, lineHeight: 1 }}
-            >
-              ×
-            </button>
+            <IconButton testid="activity-close" onClick={onClose} title="Close" frame="smMd">
+              <Icon name="x" size={CLOSE_ICON_SIZE} />
+            </IconButton>
           )}
         </div>
       </div>
@@ -102,12 +108,20 @@ export function ProjectActivityView({ entries, now = new Date(), onClose }: Proj
             <div
               key={entry.id}
               data-testid="activity-row"
-              style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, padding: `${theme.spacing.xs} 0` }}
+              style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, padding: `${theme.spacing.xs} ${theme.spacing.xxs}` }}
             >
-              <span style={{ fontSize: theme.fontSize.xs, color: theme.text.tertiary, width: theme.spacing.md, textAlign: "center" }}>
+              <span style={{ fontSize: theme.fontSize.xs, color: theme.text.tertiary, width: theme.iconSize.xs, textAlign: "center" }}>
                 {kindGlyph(entry.model)}
               </span>
-              <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.medium, color: theme.text.secondary, width: theme.size.activityCost }}>
+              <span
+                style={{
+                  fontSize: theme.fontSize.xs,
+                  fontWeight: theme.fontWeight.medium,
+                  color: theme.text.secondary,
+                  width: theme.size.activityCost,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {entry.costCredits === null ? "—" : formatCredits(entry.costCredits)}
               </span>
               <span
@@ -154,23 +168,16 @@ export function ProjectActivityButton({ getGenerationLog }: ProjectActivityButto
 
   return (
     <div style={{ position: "relative" }} ref={rootRef}>
-      <button
-        data-testid="project-activity-toggle"
-        onClick={() => setOpen((v) => !v)}
+      {/* Swift's ProjectActivityButton is a plain .hoverHighlight() icon button — no filled/active
+          look while the popover is open (isActive is never passed true there). */}
+      <IconButton
+        frame="lg"
+        testid="project-activity-toggle"
         title={`Project Activity · ${formatCredits(total)} used`}
-        style={{
-          background: open ? theme.accent.primary : "none",
-          border: `${theme.borderWidth.thin} solid ${open ? theme.accent.primary : theme.border.subtle}`,
-          borderRadius: theme.radius.xs,
-          color: open ? theme.text.onAccent : theme.text.secondary,
-          cursor: "pointer",
-          fontSize: theme.fontSize.xs,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-          lineHeight: 1,
-        }}
+        onClick={() => setOpen((v) => !v)}
       >
-        ⏱
-      </button>
+        <Icon name="history" size={TOGGLE_ICON_SIZE} />
+      </IconButton>
       {open && (
         <div
           style={{

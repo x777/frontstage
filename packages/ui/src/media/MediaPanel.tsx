@@ -743,6 +743,10 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
   );
 }
 
+// Mirrors --font-md-lg (14px) — AssetThumbnailView.failedThumbnail sizes its glyph via the ambient
+// .font(), not IconSize; Icon's size prop sets raw SVG width/height, not a CSS var.
+const FAILED_ICON_SIZE = 14;
+
 function FailedTile({ message }: { message: string }) {
   return (
     <div
@@ -756,11 +760,12 @@ function FailedTile({ message }: { message: string }) {
         alignItems: "center",
         justifyContent: "center",
         gap: theme.spacing.xxs,
-        padding: theme.spacing.xs,
         textAlign: "center",
       }}
     >
-      <span style={{ fontSize: theme.fontSize.mdLg, color: theme.status.error }}>{"⚠"}</span>
+      <span style={{ color: theme.status.error, opacity: theme.opacity.prominent, lineHeight: 0 }}>
+        <Icon name="alert-triangle" size={FAILED_ICON_SIZE} />
+      </span>
       <span style={{ fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.semibold, color: theme.text.secondary }}>
         Failed
       </span>
@@ -768,6 +773,7 @@ function FailedTile({ message }: { message: string }) {
         style={{
           fontSize: theme.fontSize.xxs,
           color: theme.text.tertiary,
+          padding: `0 ${theme.spacing.xs}`,
           display: "-webkit-box",
           WebkitLineClamp: 3,
           WebkitBoxOrient: "vertical",

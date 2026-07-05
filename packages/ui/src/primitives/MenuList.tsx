@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { theme } from "../theme/theme.js";
 import { useHover } from "./use-hover.js";
 
@@ -9,6 +10,14 @@ export interface MenuListItem {
   // Overrides the auto-derived `${testid}-${id}` row testid — needed when a row must carry a
   // pre-existing testid verbatim (e.g. moving a standalone button's testid onto a menu row).
   testid?: string;
+  // Renders a thin divider above this row — the NSMenu .separator() analog (Swift MainMenu.swift).
+  separatorBefore?: boolean;
+  // Renders `label` as an inert section caption (canonical xxs/semibold/wide/muted/uppercase, same
+  // language as inspector Section headers) instead of a clickable row — e.g. FileMenu's "Open Recent".
+  header?: boolean;
+  // Escape hatch for a row that isn't a plain label+onSelect button — e.g. FileMenu's FCPXML
+  // target/version pickers. `label`/`onSelect` are ignored for this entry when set.
+  content?: React.ReactNode;
 }
 
 function MenuRow(props: {
@@ -53,6 +62,19 @@ function MenuRow(props: {
   );
 }
 
+function MenuSeparator() {
+  return <div style={{ height: theme.borderWidth.thin, background: theme.border.divider, margin: `${theme.spacing.xxs} 0` }} />;
+}
+
+const headerStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.xxs,
+  fontWeight: theme.fontWeight.semibold,
+  color: theme.text.muted,
+  letterSpacing: theme.letterSpacing.wide,
+  textTransform: "uppercase",
+  padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+};
+
 export function MenuList(props: {
   items: readonly MenuListItem[];
   onSelect: (id: string) => void;
@@ -72,15 +94,23 @@ export function MenuList(props: {
       }}
     >
       {items.map((item) => (
-        <MenuRow
-          key={item.id}
-          id={item.id}
-          label={item.label}
-          disabled={item.disabled}
-          destructive={item.destructive}
-          onSelect={onSelect}
-          testid={item.testid ?? (testid ? `${testid}-${item.id}` : undefined)}
-        />
+        <Fragment key={item.id}>
+          {item.separatorBefore && <MenuSeparator />}
+          {item.content ? (
+            item.content
+          ) : item.header ? (
+            <div style={headerStyle}>{item.label}</div>
+          ) : (
+            <MenuRow
+              id={item.id}
+              label={item.label}
+              disabled={item.disabled}
+              destructive={item.destructive}
+              onSelect={onSelect}
+              testid={item.testid ?? (testid ? `${testid}-${item.id}` : undefined)}
+            />
+          )}
+        </Fragment>
       ))}
     </div>
   );
