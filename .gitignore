@@ -2,6 +2,9 @@ node_modules/
 dist/
 .turbo/
 *.tsbuildinfo
+# Pages deploy dir composed by scripts/build-site.mjs (site/ + apps/web build) — build artifact,
+# not source
+deploy/
 # Cloudflare Workers (apps/relay) — local secrets and wrangler's local dev state
 .dev.vars
 .wrangler/
