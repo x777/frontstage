@@ -42,32 +42,3 @@ jobs:
           draft: false
           generate_release_notes: true
 
-  macos-experimental:
-    name: macOS (experimental, unsigned)
-    runs-on: macos-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build + package (dmg)
-        run: pnpm -F @frontstage/desktop dist
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
-      - name: Attach dmg to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: apps/desktop/release/*.dmg
