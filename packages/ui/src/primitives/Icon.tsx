@@ -26,7 +26,8 @@ export type IconName =
   | "diamond"
   | "diamond-filled"
   | "book"
-  | "send";
+  | "send"
+  | "image";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -195,6 +196,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <line x1="12" y1="19" x2="12" y2="5" />
       <path d="M6 11l6-6 6 6" />
+    </>
+  ),
+  // "photo" — GenerationView's refCard thumbnail fallback (Rectangle().fill(.quaternary) + sfSymbol).
+  image: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="M21 15l-5-5-4 4-3-3-6 6" />
     </>
   ),
 };

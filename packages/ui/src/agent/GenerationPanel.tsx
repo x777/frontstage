@@ -4,7 +4,7 @@ import { createPlaceholderEntry } from "@palmier/core";
 import type { GenModelEntry, GenModelKind, GenToolParams, StartJobArgs } from "@palmier/ai";
 import { genModel, listGenModels, validateGenParams, estimateCredits, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
-import { Select } from "../primitives/Select.js";
+import { Select, Button, IconButton, Icon, SegmentedTabs, TextInput, Checkbox } from "../primitives/index.js";
 import { isMediaDrag, readMediaDragPayload } from "../media/FolderTile.js";
 
 const IMAGE_DURATION_SECONDS = 5; // mirrors generate-image-tool.ts
@@ -19,6 +19,19 @@ const KIND_TABS: { kind: GenModelKind; label: string }[] = [
   { kind: "audio", label: "Audio" },
   { kind: "upscale", label: "Upscale" },
 ];
+
+// SegmentedTabs takes generic {id, label} segments — same 4 kinds, same testids (kit derives
+// `${testid}-${id}`), just the shared segmented-control chrome instead of a bespoke tab row.
+const KIND_SEGMENTS = KIND_TABS.map(({ kind, label }) => ({ id: kind, label }));
+
+// GenerationView's submitButton and AgentInputBox.sendStopButton (M16E T1) are the SAME Swift
+// affordance — a circular, solid-accent "arrow.up" button. Reusing T1's exact icon-in-capsule
+// pattern here rather than a rect CTA (see m16e-task-2-report.md for the Swift citation).
+const SUBMIT_ICON_SIZE = 14;
+const CLOSE_ICON_SIZE = 14;
+const TILE_ICON_SIZE = 20;
+const TILE_REMOVE_ICON_SIZE = 10;
+const EMPTY_TILE_ICON_SIZE = 16;
 
 const PROMPT_PLACEHOLDER: Record<GenModelKind, string> = {
   video: "Describe the video…",
@@ -131,6 +144,9 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
   const [references, setReferences] = useState<MediaManifestEntry[]>([]);
   const [referencesTargeted, setReferencesTargeted] = useState(false);
   const [referencesNote, setReferencesNote] = useState<string | null>(null);
+  // Style-only: mirrors promptArea's isPromptFocused border highlight (GenerationView.swift).
+  const [promptFocused, setPromptFocused] = useState(false);
+  const [lyricsFocused, setLyricsFocused] = useState(false);
 
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -285,9 +301,10 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
     }
   }
 
-  const labelStyle = { fontSize: theme.fontSize.xxs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium };
-  const mutedStyle = { fontSize: theme.fontSize.xxs, color: theme.text.muted, fontWeight: theme.fontWeight.regular };
-  const fieldGap = { display: "flex", flexDirection: "column" as const, gap: theme.spacing.xxs };
+  // Canonical row language (M16D, inspector/fields.tsx labelStyle / GenerationView's row labels): sm/medium/primary.
+  const labelStyle = { fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.medium, color: theme.text.primary };
+  const mutedStyle = { fontSize: theme.fontSize.xs, color: theme.text.muted, fontWeight: theme.fontWeight.regular };
+  const fieldGap = { display: "flex", flexDirection: "column" as const, gap: theme.spacing.xs };
 
   return (
     <div
@@ -304,9 +321,11 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
     >
       <div
         style={{
-          background: theme.bg.raised,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.md,
+          // GenerationView's bodyContent: aiGradientDark fill AND stroke (the same gradient on
+          // both layers) — the CSS padding-box/border-box trick reproduces that double-use.
+          background: `${theme.gradients.aiDark} padding-box, ${theme.gradients.aiDark} border-box`,
+          border: `${theme.borderWidth.medium} solid transparent`,
+          borderRadius: theme.radius.lg,
           padding: theme.spacing.lg,
           minWidth: theme.size.generationPanelMin,
           boxShadow: theme.shadow.lg,
@@ -315,39 +334,17 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
           gap: theme.spacing.sm,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", gap: theme.spacing.xxs, flex: 1 }}>
-            {KIND_TABS.map(({ kind: k, label }) => (
-              <button
-                key={k}
-                data-testid={`gen-kind-tab-${k}`}
-                aria-pressed={kind === k}
-                onClick={() => handleKindChange(k)}
-                style={{
-                  flex: 1,
-                  background: kind === k ? theme.accent.primary : theme.bg.surface,
-                  color: kind === k ? theme.text.onAccent : theme.text.secondary,
-                  border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-                  borderRadius: theme.radius.xs,
-                  padding: `${theme.spacing.xxs} 0`,
-                  fontSize: theme.fontSize.xxs,
-                  fontWeight: theme.fontWeight.semibold,
-                  cursor: "pointer",
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.spacing.sm }}>
+          <SegmentedTabs
+            testid="gen-kind-tab"
+            segments={KIND_SEGMENTS}
+            active={kind}
+            onSelect={(id) => handleKindChange(id as GenModelKind)}
+          />
           {onClose && (
-            <button
-              data-testid="gen-close"
-              onClick={onClose}
-              aria-label="Close"
-              style={{ background: "none", border: "none", color: theme.text.muted, cursor: "pointer", fontSize: theme.fontSize.md, padding: 0, lineHeight: 1, marginLeft: theme.spacing.sm }}
-            >
-              ×
-            </button>
+            <IconButton testid="gen-close" onClick={onClose} title="Close" frame="smMd">
+              <Icon name="x" size={CLOSE_ICON_SIZE} />
+            </IconButton>
           )}
         </div>
 
@@ -440,22 +437,13 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
             {entry && entry.caps.numImagesMax !== undefined && (
               <div style={fieldGap}>
                 <span style={labelStyle}>Images</span>
-                <input
-                  data-testid="gen-num-images"
+                <TextInput
+                  testid="gen-num-images"
                   type="number"
                   min={1}
                   max={entry.caps.numImagesMax}
-                  value={numImages}
-                  onChange={(e) => setNumImages(Math.max(1, Math.min(entry?.caps.numImagesMax ?? 4, Number(e.target.value) || 1)))}
-                  style={{
-                    background: theme.bg.surface,
-                    border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                    borderRadius: theme.radius.xs,
-                    color: theme.text.primary,
-                    fontSize: theme.fontSize.xs,
-                    padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                    width: "100%",
-                  }}
+                  value={String(numImages)}
+                  onChange={(v) => setNumImages(Math.max(1, Math.min(entry?.caps.numImagesMax ?? 4, Number(v) || 1)))}
                 />
               </div>
             )}
@@ -464,20 +452,26 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
               data-testid="gen-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onFocus={() => setPromptFocused(true)}
+              onBlur={() => setPromptFocused(false)}
               disabled={busy}
               placeholder={PROMPT_PLACEHOLDER[kind]}
               rows={3}
               style={{
                 resize: "vertical",
-                background: theme.bg.surface,
-                border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                borderRadius: theme.radius.sm,
+                background: theme.bg.raised,
+                borderWidth: theme.borderWidth.thin,
+                borderStyle: "solid",
+                borderColor: promptFocused ? theme.accent.primary : theme.border.primary,
+                borderRadius: theme.radius.xsSm,
                 color: theme.text.primary,
                 fontSize: theme.fontSize.sm,
                 fontWeight: theme.fontWeight.regular,
                 padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                minHeight: theme.size.genPromptMinH,
                 outline: "none",
                 fontFamily: "inherit",
+                transition: `border-color ${theme.anim.hover} ease-out`,
               }}
             />
 
@@ -487,31 +481,33 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
                   data-testid="gen-lyrics"
                   value={lyrics}
                   onChange={(e) => setLyrics(e.target.value)}
+                  onFocus={() => setLyricsFocused(true)}
+                  onBlur={() => setLyricsFocused(false)}
                   disabled={busy}
                   placeholder="Lyrics (optional)…"
                   rows={3}
                   style={{
                     resize: "vertical",
-                    background: theme.bg.surface,
-                    border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                    borderRadius: theme.radius.sm,
+                    background: theme.bg.raised,
+                    borderWidth: theme.borderWidth.thin,
+                    borderStyle: "solid",
+                    borderColor: lyricsFocused ? theme.accent.primary : theme.border.primary,
+                    borderRadius: theme.radius.xsSm,
                     color: theme.text.primary,
                     fontSize: theme.fontSize.sm,
                     fontWeight: theme.fontWeight.regular,
                     padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
                     outline: "none",
                     fontFamily: "inherit",
+                    transition: `border-color ${theme.anim.hover} ease-out`,
                   }}
                 />
-                <label style={{ display: "flex", alignItems: "center", gap: theme.spacing.xxs, fontSize: theme.fontSize.xs, color: theme.text.secondary }}>
-                  <input
-                    data-testid="gen-instrumental"
-                    type="checkbox"
-                    checked={instrumental}
-                    onChange={(e) => setInstrumental(e.target.checked)}
-                  />
-                  Instrumental
-                </label>
+                <Checkbox
+                  testid="gen-instrumental"
+                  checked={instrumental}
+                  onChange={setInstrumental}
+                  label="Instrumental"
+                />
               </>
             )}
 
@@ -535,32 +531,69 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
                   }}
                 >
                   {references.length === 0 && (
-                    <span data-testid="gen-references-empty" style={mutedStyle}>Drop image references here</span>
+                    // Swift's dropZone add-tile: an icon centered in a fixed-size (referenceTileWidth
+                    // × referenceTileHeight) placeholder, no caption text.
+                    <div
+                      data-testid="gen-references-empty"
+                      title="Drop image references here"
+                      style={{
+                        width: theme.size.genRefTileW,
+                        height: theme.size.genRefTileH,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: theme.text.muted,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon name="plus" size={EMPTY_TILE_ICON_SIZE} />
+                    </div>
                   )}
                   {references.map((ref) => (
                     <div
                       key={ref.id}
                       data-testid={`gen-reference-${ref.id}`}
+                      title={ref.name}
                       style={{
+                        position: "relative",
+                        width: theme.size.genRefTileW,
+                        height: theme.size.genRefTileH,
                         display: "flex",
                         alignItems: "center",
-                        gap: theme.spacing.xxs,
-                        background: theme.bg.surface,
-                        border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                        borderRadius: theme.radius.xs,
-                        padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+                        justifyContent: "center",
+                        background: theme.bg.raised,
+                        border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
+                        borderRadius: theme.radius.sm,
+                        overflow: "hidden",
+                        flexShrink: 0,
                       }}
                     >
-                      <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.secondary, maxWidth: "8rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {ref.name}
+                      <span style={{ color: theme.text.muted, display: "flex" }}>
+                        <Icon name="image" size={TILE_ICON_SIZE} />
                       </span>
                       <button
+                        type="button"
                         data-testid={`gen-reference-remove-${ref.id}`}
                         aria-label={`Remove ${ref.name}`}
                         onClick={() => setReferences((prev) => prev.filter((r) => r.id !== ref.id))}
-                        style={{ background: "none", border: "none", color: theme.text.muted, cursor: "pointer", fontSize: theme.fontSize.xs, padding: 0, lineHeight: 1 }}
+                        style={{
+                          position: "absolute",
+                          top: theme.spacing.xxs,
+                          right: theme.spacing.xxs,
+                          width: theme.iconSize.xs,
+                          height: theme.iconSize.xs,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: `rgba(0, 0, 0, ${theme.opacity.strong})`,
+                          border: "none",
+                          borderRadius: theme.radius.pill,
+                          color: theme.text.primary,
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
                       >
-                        ×
+                        <Icon name="x" size={TILE_REMOVE_ICON_SIZE} />
                       </button>
                     </div>
                   ))}
@@ -584,7 +617,11 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
         )}
 
         {entry && (
-          <div data-testid="gen-cost" style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
+          <div
+            data-testid="gen-cost"
+            title="Estimated cost. Actual billing may differ slightly."
+            style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}
+          >
             Estimated cost: {formatCredits(estimate)}
           </div>
         )}
@@ -619,24 +656,28 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            data-testid="gen-submit"
+          {/* Solid accent, circular — GenerationView.submitButton (.tint(Accent.primary)), NOT
+              the aiGradient (that belongs to the agent composer's shimmer text, not this CTA).
+              Same family as MentionInput's "agent-send" (M16E T1). */}
+          <Button
+            testid="gen-submit"
+            variant="accent"
+            shape="capsule"
             disabled={!canSubmit}
             onClick={handleGenerate}
+            title="Generate"
             style={{
-              background: theme.accent.primary,
-              border: "none",
-              borderRadius: theme.radius.xs,
-              color: theme.text.onAccent,
-              cursor: !canSubmit ? "not-allowed" : "pointer",
-              fontSize: theme.fontSize.sm,
-              fontWeight: theme.fontWeight.medium,
-              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-              opacity: !canSubmit ? theme.opacity.disabled : theme.opacity.opaque,
+              width: theme.iconSize.xl,
+              height: theme.iconSize.xl,
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
             }}
           >
-            Generate
-          </button>
+            <Icon name="send" size={SUBMIT_ICON_SIZE} />
+          </Button>
         </div>
       </div>
     </div>
