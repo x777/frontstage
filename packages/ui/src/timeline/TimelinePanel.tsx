@@ -64,6 +64,13 @@ export function generationStatusByRef(entries: MediaManifestEntry[]): Map<string
   return map;
 }
 
+/** mediaRef (= entry.id) → display name, for the timeline clip label. */
+export function mediaNameByRef(entries: MediaManifestEntry[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const entry of entries) map.set(entry.id, entry.name);
+  return map;
+}
+
 /** Read concrete color strings from CSS vars once. */
 function resolvePalette(el: Element): TimelinePalette {
   const s = getComputedStyle(el);
@@ -159,9 +166,11 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
         overlays.ghostInsert = ghostPreviewRef.current;
       }
 
-      const statusByRef = library ? generationStatusByRef(library.getSnapshot().entries) : undefined;
+      const libraryEntries = library?.getSnapshot().entries;
+      const statusByRef = libraryEntries ? generationStatusByRef(libraryEntries) : undefined;
+      const nameByRef = libraryEntries ? mediaNameByRef(libraryEntries) : undefined;
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef);
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef);
     }
 
     function scheduleDraw() {

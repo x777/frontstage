@@ -62,7 +62,7 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
         bottom: 0,
         background: theme.bg.surface,
         borderRight: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
-        zIndex: 2,
+        zIndex: theme.z.raised,
         overflow: "hidden",
       }}
     >

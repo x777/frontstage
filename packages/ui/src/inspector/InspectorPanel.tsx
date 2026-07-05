@@ -17,6 +17,7 @@ import type { Clip, Transform, Crop, TextStyle } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
+import { SegmentedTabs } from "../primitives/index.js";
 import { NumberField, SliderField, ToggleField, TextField, Section, rowStyle, labelStyle } from "./fields.js";
 import { KeyframeLanes } from "./KeyframeLanes.js";
 import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
@@ -471,32 +472,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 type TextAlignment = "left" | "center" | "right";
 
+const alignmentSegments: readonly { id: TextAlignment; label: string }[] = [
+  { id: "left", label: "left" },
+  { id: "center", label: "center" },
+  { id: "right", label: "right" },
+];
+
 function AlignmentField({ value, onChange }: { value: TextAlignment; onChange: (v: TextAlignment) => void }) {
-  const options: TextAlignment[] = ["left", "center", "right"];
   return (
     <div data-testid="inspector-alignment" style={rowStyle}>
       <span style={labelStyle}>Align</span>
       <span style={{ flex: 1 }} />
-      <div style={{ display: "flex", gap: theme.spacing.xxs }}>
-        {options.map((opt) => (
-          <button
-            key={opt}
-            data-testid={`inspector-align-${opt}`}
-            onClick={() => onChange(opt)}
-            style={{
-              background: value === opt ? theme.accent.primary : theme.bg.raised,
-              color: value === opt ? theme.bg.base : theme.text.primary,
-              border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-              borderRadius: theme.radius.xs,
-              padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-              fontSize: theme.fontSize.xs,
-              cursor: "pointer",
-            }}
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs segments={alignmentSegments} active={value} onSelect={(id) => onChange(id as TextAlignment)} testid="inspector-align" />
     </div>
   );
 }

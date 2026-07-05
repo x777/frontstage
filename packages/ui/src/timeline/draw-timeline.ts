@@ -99,6 +99,16 @@ function basename(path: string): string {
   return path.split("/").pop()?.split("\\").pop() ?? path;
 }
 
+/** Port of EditorViewModel+MediaLibrary.swift's clipDisplayLabel (:346-359). */
+function clipDisplayLabel(clip: Clip, nameByRef: Map<string, string> | undefined): string {
+  if (clip.mediaType === "text") {
+    const content = clip.textContent ?? "";
+    if (content === "") return "Text";
+    return content.replace(/\n/g, " ").replace(/\r/g, " ");
+  }
+  return nameByRef?.get(clip.mediaRef) ?? basename(clip.mediaRef);
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -238,6 +248,8 @@ export interface TimelineOverlays {
  * dropIndicator: optional media-drag drop indicator.
  * overlays: optional marquee rect + ruler range band.
  * statusByRef: optional mediaRef → serialized GenerationStatus map for the generating/failed clip scrim.
+ * nameByRef: optional mediaRef → media entry display name, for the clip label (falls back to the
+ * mediaRef's basename when absent, so existing callers/tests without a library keep their old label).
  */
 export function drawTimeline(
   ctx: CanvasRenderingContext2D,
@@ -248,7 +260,8 @@ export function drawTimeline(
   snapLineX: number | null = null,
   dropIndicator: DropIndicator | null = null,
   overlays?: TimelineOverlays,
-  statusByRef?: Map<string, string>
+  statusByRef?: Map<string, string>,
+  nameByRef?: Map<string, string>
 ): void {
   const { width, height, dpr } = size;
 
@@ -382,7 +395,7 @@ export function drawTimeline(
         const contentX = rect.x + CLIP_STRIP_WIDTH + 1;
         const contentWidth = rect.width - CLIP_STRIP_WIDTH - 1 - TRIM_HANDLE_WIDTH;
         const labelY = rect.y;
-        const name = basename(clip.mediaRef);
+        const name = clipDisplayLabel(clip, nameByRef);
         const text = `${name}  ${formatTimecode(clip.durationFrames, fps)}`;
 
         ctx.save();

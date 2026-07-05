@@ -130,7 +130,7 @@ export function SliderField({ label, value, onChange, onCommit, min = 0, max = 1
         step={step ?? (max - min) / 100}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={(e) => onCommit?.((e.target as HTMLInputElement).valueAsNumber)}
-        style={{ flex: 1 }}
+        style={{ flex: 1, accentColor: theme.accent.primary }}
         data-testid={testId + "-input"}
       />
       <span style={valueStyle}>

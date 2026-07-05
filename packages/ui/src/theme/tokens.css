@@ -145,6 +145,7 @@
   /* Component min-widths */
   --size-menu-min: 160px;
   --size-dialog-min: 280px;
+  --size-toast-max: 480px;
   --size-mention-picker-max: 160px;
   --size-session-list-max: 120px;
 
@@ -166,6 +167,7 @@
   --size-skills-toast-max: 320px;
 
   /* Z-index layers */
+  --z-raised: 2;
   --z-menu: 9000;
   --z-dialog: 10000;
   --z-drag-ghost: 9999;
@@ -173,6 +175,8 @@
 
   /* Preview */
   --color-preview-letterbox: #000000;
+  /* Media tile thumbless/generating/failed fallback body — AssetThumbnailView's Rectangle().fill(Color.black) base */
+  --color-tile-empty: #000000;
 
   /* Timeline (M16C T3, ClipRenderer.swift/PlayheadOverlay.swift/SnapIndicatorOverlay.swift verbatim) */
   --color-timeline-trim-handle: rgba(255, 255, 255, 0.34); /* AppTheme.Text.muted — was wrongly rgba(0,0,0,0.25), corrected */
@@ -242,8 +246,8 @@
   --color-overlay-transform-border: rgba(255, 255, 255, 0.9);
   --color-overlay-handle-fill: #ffffff;
   --color-overlay-handle-stroke: #333333;
-  --color-overlay-crop-border: rgba(255, 200, 0, 0.9);
-  --color-overlay-crop-handle: #ffcc00;
+  --color-overlay-crop-border: var(--accent-timecode);
+  --color-overlay-crop-handle: var(--accent-timecode);
 
   /* Generating overlay (media tiles) — UI/GeneratingOverlay.swift .thumbnail size verbatim */
   --color-generating-overlay-bg: rgba(10, 10, 10, 0.92);

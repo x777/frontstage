@@ -655,7 +655,7 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
           width: "100%",
           aspectRatio: "16/9",
           boxSizing: "border-box",
-          background: thumbnail && !isGenerating && !isFailed ? "transparent" : trackColor,
+          background: thumbnail && !isGenerating && !isFailed ? "transparent" : theme.bg.tileEmpty,
           borderRadius: theme.radius.sm,
           overflow: "hidden",
           border: `${theme.borderWidth.thin} solid ${hovered ? theme.border.primary : theme.border.subtle}`,

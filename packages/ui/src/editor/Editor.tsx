@@ -20,7 +20,7 @@ import { TRACK_HEADER_WIDTH } from "../timeline/TrackHeaders.js";
 import type { RippleInsertSpec } from "@palmier/core";
 import type { MediaByteSource, PlaybackEngine } from "@palmier/engine";
 import { theme } from "../theme/theme.js";
-import { Button, IconButton } from "../primitives/index.js";
+import { Button, Dialog, IconButton } from "../primitives/index.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
 import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { TimelinePanel } from "../timeline/TimelinePanel.js";
@@ -386,44 +386,6 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
     };
   }, [dragController, store, library]);
 
-  const overlayStyle: React.CSSProperties = {
-    position: "fixed",
-    inset: 0,
-    background: theme.bg.scrim,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: theme.z.dialog,
-  };
-
-  const dialogStyle: React.CSSProperties = {
-    background: theme.bg.raised,
-    border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.lg,
-    minWidth: theme.size.dialogMin,
-    boxShadow: theme.shadow.lg,
-    display: "flex",
-    flexDirection: "column",
-    gap: theme.spacing.md,
-  };
-
-  const btnRowStyle: React.CSSProperties = {
-    display: "flex",
-    gap: theme.spacing.xs,
-    justifyContent: "flex-end",
-  };
-
-  const dialogBtnStyle: React.CSSProperties = {
-    background: "none",
-    border: `${theme.borderWidth.thin} solid ${theme.border.subtle}`,
-    borderRadius: theme.radius.xs,
-    color: theme.text.primary,
-    cursor: "pointer",
-    fontSize: theme.fontSize.sm,
-    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-  };
-
   return (
     <>
       <Layout
@@ -560,35 +522,22 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
       )}
 
       {dialog && (
-        <div data-testid="discard-dialog" style={overlayStyle}>
-          <div style={dialogStyle}>
+        // Wrapper keeps the stable "discard-dialog" testid — Dialog's own scrim/panel are suffixed.
+        <div data-testid="discard-dialog" style={{ position: "fixed", inset: 0, zIndex: theme.z.dialog }}>
+          <Dialog
+            testid="discard"
+            footer={
+              <>
+                <Button testid="discard-cancel" onClick={() => closeDialog(false)}>Cancel</Button>
+                <Button testid="discard-dont-save" variant="destructive" onClick={() => closeDialog(true)}>Don&apos;t Save</Button>
+                <Button testid="discard-save" variant="accent" onClick={handleDiscardSave}>Save</Button>
+              </>
+            }
+          >
             <span style={{ fontSize: theme.fontSize.sm, color: theme.text.primary }}>
               You have unsaved changes. Discard them?
             </span>
-            <div style={btnRowStyle}>
-              <button
-                data-testid="discard-cancel"
-                style={dialogBtnStyle}
-                onClick={() => closeDialog(false)}
-              >
-                Cancel
-              </button>
-              <button
-                data-testid="discard-dont-save"
-                style={dialogBtnStyle}
-                onClick={() => closeDialog(true)}
-              >
-                Don&apos;t Save
-              </button>
-              <button
-                data-testid="discard-save"
-                style={{ ...dialogBtnStyle, background: theme.accent.primary, border: "none", color: theme.text.onAccent }}
-                onClick={handleDiscardSave}
-              >
-                Save
-              </button>
-            </div>
-          </div>
+          </Dialog>
         </div>
       )}
 
@@ -611,7 +560,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             alignItems: "center",
             gap: theme.spacing.sm,
             boxShadow: theme.shadow.lg,
-            maxWidth: "480px",
+            maxWidth: theme.size.toastMax,
           }}
         >
           <span style={{ flex: 1 }}>{error}</span>

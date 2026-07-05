@@ -1,4 +1,5 @@
 import { theme } from "../../theme/theme.js";
+import { Checkbox } from "../../primitives/index.js";
 
 export interface AdjustSectionProps {
   title: string;
@@ -56,11 +57,11 @@ export function AdjustSection({
         <span
           style={{
             flex: 1,
-            fontSize: theme.fontSize.micro,
+            fontSize: theme.fontSize.xxs,
             fontWeight: theme.fontWeight.semibold,
             letterSpacing: theme.letterSpacing.wide,
             textTransform: "uppercase",
-            color: theme.text.tertiary,
+            color: theme.text.muted,
           }}
         >
           {title}
@@ -72,8 +73,8 @@ export function AdjustSection({
               background: "none",
               border: "none",
               padding: `0 ${theme.spacing.xxs}`,
-              color: theme.text.secondary,
-              fontSize: theme.fontSize.xs,
+              color: theme.text.tertiary,
+              fontSize: theme.fontSize.sm,
               cursor: "pointer",
               flexShrink: 0,
             }}
@@ -82,15 +83,14 @@ export function AdjustSection({
             ↺
           </button>
         )}
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={!canEnable}
-          onClick={(e) => e.stopPropagation()}
-          onChange={() => onToggleEnabled()}
-          style={{ flexShrink: 0 }}
-          data-testid={`adjust-section-enable-${title}`}
-        />
+        <span onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexShrink: 0 }}>
+          <Checkbox
+            checked={enabled}
+            disabled={!canEnable}
+            onChange={() => onToggleEnabled()}
+            testid={`adjust-section-enable-${title}`}
+          />
+        </span>
       </div>
       {expanded && (
         <div

@@ -5,6 +5,7 @@ export const theme = {
     raised: "var(--bg-raised)",
     prominent: "var(--bg-prominent)",
     previewLetterbox: "var(--color-preview-letterbox)",
+    tileEmpty: "var(--color-tile-empty)",
     scrim: "var(--color-scrim)",
   },
   border: {
@@ -144,6 +145,7 @@ export const theme = {
     kfLabel: "var(--size-kf-label)",
     menuMin: "var(--size-menu-min)",
     dialogMin: "var(--size-dialog-min)",
+    toastMax: "var(--size-toast-max)",
     mentionPickerMax: "var(--size-mention-picker-max)",
     sessionListMax: "var(--size-session-list-max)",
     composerInputMinH: "var(--size-composer-input-min-h)",
@@ -211,6 +213,7 @@ export const theme = {
     hueCurveLum: "var(--color-adjust-huecurve-lum)",
   },
   z: {
+    raised: "var(--z-raised)",
     menu: "var(--z-menu)",
     dialog: "var(--z-dialog)",
     dragGhost: "var(--z-drag-ghost)",

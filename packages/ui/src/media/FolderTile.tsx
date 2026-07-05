@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MediaFolder } from "@palmier/core";
 import { theme } from "../theme/theme.js";
-import { Icon } from "../primitives/index.js";
+import { Icon, MenuList } from "../primitives/index.js";
 
 // Mirrors --icon-size-xl (30px) — Icon's size prop sets raw SVG width/height, not a CSS var.
 const FOLDER_ICON_SIZE = 30;
@@ -227,47 +227,23 @@ export function FolderTile({
           data-testid="folder-context-menu"
           role="menu"
           onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "absolute",
-            top: theme.spacing.xs,
-            right: theme.spacing.xs,
-            zIndex: theme.z.menu,
-            background: theme.bg.raised,
-            border: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
-            borderRadius: theme.radius.sm,
-            padding: theme.spacing.xxs,
-            minWidth: theme.size.menuMin,
-            boxShadow: theme.shadow.lg,
-          }}
+          style={{ position: "absolute", top: theme.spacing.xs, right: theme.spacing.xs, zIndex: theme.z.menu }}
         >
-          <MenuItem testid="folder-menu-open" label="Open" onClick={() => { setMenuOpen(false); onOpen(); }} />
-          <MenuItem testid="folder-menu-rename" label="Rename" onClick={() => { setMenuOpen(false); onRenameStart(); }} />
-          <div style={{ borderTop: `${theme.borderWidth.hairline} solid ${theme.border.divider}`, margin: `${theme.spacing.xxs} 0` }} />
-          <MenuItem testid="folder-menu-delete" label="Delete" danger onClick={() => { setMenuOpen(false); onDelete(); }} />
+          <MenuList
+            items={[
+              { id: "open", label: "Open", testid: "folder-menu-open" },
+              { id: "rename", label: "Rename", testid: "folder-menu-rename" },
+              { id: "delete", label: "Delete", destructive: true, separatorBefore: true, testid: "folder-menu-delete" },
+            ]}
+            onSelect={(id) => {
+              setMenuOpen(false);
+              if (id === "open") onOpen();
+              else if (id === "rename") onRenameStart();
+              else if (id === "delete") onDelete();
+            }}
+          />
         </div>
       )}
     </div>
-  );
-}
-
-function MenuItem({ testid, label, onClick, danger }: { testid: string; label: string; onClick: () => void; danger?: boolean }) {
-  return (
-    <button
-      data-testid={testid}
-      onClick={onClick}
-      style={{
-        display: "block",
-        width: "100%",
-        textAlign: "left",
-        border: "none",
-        background: "transparent",
-        color: danger ? theme.status.error : theme.text.primary,
-        cursor: "pointer",
-        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-        fontSize: theme.fontSize.sm,
-      }}
-    >
-      {label}
-    </button>
   );
 }
