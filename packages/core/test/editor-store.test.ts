@@ -3,7 +3,7 @@ import type { Clip } from "../src/clip.js";
 import { defaultCrop, defaultTransform } from "../src/transform.js";
 import { defaultTimeline } from "../src/timeline.js";
 import type { Track } from "../src/timeline.js";
-import { EditorStore, removeClipCommand, setClipPropertyCommand } from "../src/index.js";
+import { EditorStore, removeClipCommand, setClipPropertyCommand, ZOOM_MIN, ZOOM_MAX, ZOOM_TOOLBAR_STEP } from "../src/index.js";
 
 function makeClip(id: string): Clip {
   return {
@@ -258,5 +258,29 @@ describe("editor-store", () => {
     expect(snap.playhead).toBe(0);
     expect(snap.view).toEqual({ zoom: 1, scrollX: 0 });
     expect(snap.layout.maximized).toBe("timeline"); // layout preserved
+  });
+
+  test("toolMode defaults to pointer and setToolMode switches + emits", () => {
+    const store = new EditorStore(defaultTimeline());
+    expect(store.getSnapshot().toolMode).toBe("pointer");
+    let emits = 0;
+    store.subscribe(() => emits++);
+    store.setToolMode("razor");
+    expect(store.getSnapshot().toolMode).toBe("razor");
+    expect(emits).toBe(1);
+    store.setToolMode("razor"); // same value → no emit
+    expect(emits).toBe(1);
+  });
+
+  test("setToolMode does not touch the undo stack", () => {
+    const store = new EditorStore(defaultTimeline());
+    store.setToolMode("razor");
+    expect(store.canUndo()).toBe(false);
+  });
+
+  test("zoom constants match Swift", () => {
+    expect(ZOOM_MIN).toBe(0.05);
+    expect(ZOOM_MAX).toBe(40);
+    expect(ZOOM_TOOLBAR_STEP).toBe(1.25);
   });
 });

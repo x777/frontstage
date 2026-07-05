@@ -28,6 +28,8 @@ import {
   resolveDropPlan,
   planRippleInsertPreview,
   selectForwardAction,
+  ZOOM_MIN as MIN_ZOOM,
+  ZOOM_MAX as MAX_ZOOM,
 } from "@palmier/core";
 import type { RippleInsertPreviewPlan } from "@palmier/core";
 import type { EditorStore, MediaManifestEntry } from "@palmier/core";
@@ -39,8 +41,6 @@ import { hitTest, trimTickCommand, selectForwardScopeForKey } from "./pointer.js
 import type { MediaDragController } from "../media/media-drag.js";
 import { ClipContextMenu, type ClipContextMenuState } from "./ClipContextMenu.js";
 
-const MIN_ZOOM = 0.05;
-const MAX_ZOOM = 40;
 const DRAG_THRESHOLD = 3;
 
 // Duck-typed: TimelinePanel only needs to read entries + hear about changes (mirrors MediaPanel's library dep).

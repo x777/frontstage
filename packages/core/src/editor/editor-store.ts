@@ -2,6 +2,8 @@ import type { Timeline } from "../timeline.js";
 import type { GapSelection, TimelineRangeSelection } from "../timeline/ripple-types.js";
 import { normalizeRange, isValidRange } from "../timeline/ripple-types.js";
 
+export type ToolMode = "pointer" | "razor";
+
 export interface EditorView {
   zoom: number;
   scrollX: number;
@@ -29,6 +31,7 @@ export interface EditorState {
   playhead: number;
   view: EditorView;
   layout: PanelLayout;
+  toolMode: ToolMode;
 }
 
 export interface Command {
@@ -53,6 +56,7 @@ export class EditorStore {
       playhead: 0,
       view: { zoom: 1, scrollX: 0 },
       layout: { focused: "timeline", maximized: null, hidden: [] },
+      toolMode: "pointer",
     };
   }
 
@@ -117,6 +121,13 @@ export class EditorStore {
   setScroll(x: number): void {
     if (x === this.state.view.scrollX) return;
     this.state = { ...this.state, view: { ...this.state.view, scrollX: x } };
+    this.lastCoalesceKey = null;
+    this.emit();
+  }
+
+  setToolMode(mode: ToolMode): void {
+    if (mode === this.state.toolMode) return;
+    this.state = { ...this.state, toolMode: mode };
     this.lastCoalesceKey = null;
     this.emit();
   }
@@ -213,6 +224,7 @@ export class EditorStore {
       playhead: 0,
       view: { zoom: 1, scrollX: 0 },
       layout: this.state.layout,
+      toolMode: "pointer",
     };
     this.undoStack = [];
     this.redoStack = [];

@@ -63,6 +63,7 @@ export * from "./timeline/gesture-hit.js";
 export * from "./timeline/link-group.js";
 export * from "./timeline/drop-routing.js";
 export * from "./timeline/ripple-insert-preview.js";
+export * from "./timeline/zoom.js";
 export * from "./color/effect.js";
 export * from "./color/blend-mode.js";
 export * from "./color/effect-registry.js";
