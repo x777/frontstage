@@ -1,6 +1,7 @@
 import { useState, useRef, type KeyboardEvent } from "react";
 import type { MentionContext } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { Button, Icon, useHover } from "../primitives/index.js";
 
 export interface MentionItem {
   id: string;
@@ -17,9 +18,64 @@ interface MentionInputProps {
   mentionItems: MentionItem[];
 }
 
+// AgentInputBox.sendStopButton renders its glyph at IconSize.sm (18) inside a circular chrome —
+// the transport bar's precedent (TRANSPORT_ICON_SIZE) for a smaller glyph within a larger hit box.
+const SEND_ICON_SIZE = 14;
+
+function MentionOption({
+  item,
+  index,
+  isLast,
+  onPick,
+}: {
+  item: MentionItem;
+  index: number;
+  isLast: boolean;
+  onPick: (item: MentionItem) => void;
+}) {
+  const { hovered, hoverProps } = useHover();
+  return (
+    <button
+      data-testid={`agent-mention-option-${index}`}
+      onMouseDown={(e) => e.preventDefault()} // prevent textarea blur
+      onClick={() => onPick(item)}
+      {...hoverProps}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: theme.spacing.xs,
+        width: "100%",
+        background: hovered ? `rgba(255, 255, 255, ${theme.opacity.soft})` : "none",
+        border: "none",
+        borderBottom: isLast ? "none" : `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+        color: theme.text.primary,
+        cursor: "pointer",
+        fontSize: theme.fontSize.xs,
+        padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
+        textAlign: "left",
+      }}
+    >
+      <span
+        style={{
+          fontSize: theme.fontSize.micro,
+          color: theme.text.muted,
+          border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+          borderRadius: theme.radius.xs,
+          padding: `0 ${theme.spacing.xxs}`,
+          flexShrink: 0,
+        }}
+      >
+        {item.kind}
+      </span>
+      {item.label}
+    </button>
+  );
+}
+
 export function MentionInput({ value, onChange, onSend, disabled, mentionItems }: MentionInputProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [chosenItems, setChosenItems] = useState<MentionItem[]>([]);
+  const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Track the live text value so selection logic uses the most recent input
   const liveValueRef = useRef(value);
@@ -95,52 +151,30 @@ export function MentionInput({ value, onChange, onSend, disabled, mentionItems }
           }}
         >
           {mentionItems.map((item, i) => (
-            <button
+            <MentionOption
               key={item.id}
-              data-testid={`agent-mention-option-${i}`}
-              onMouseDown={(e) => e.preventDefault()} // prevent textarea blur
-              onClick={() => handleSelectMention(item)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: theme.spacing.xs,
-                width: "100%",
-                background: "none",
-                border: "none",
-                borderBottom:
-                  i < mentionItems.length - 1
-                    ? `${theme.borderWidth.hairline} solid ${theme.border.divider}`
-                    : "none",
-                color: theme.text.primary,
-                cursor: "pointer",
-                fontSize: theme.fontSize.xs,
-                padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-                textAlign: "left",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: theme.fontSize.micro,
-                  color: theme.text.muted,
-                  border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                  borderRadius: theme.radius.xs,
-                  padding: `0 ${theme.spacing.xxs}`,
-                  flexShrink: 0,
-                }}
-              >
-                {item.kind}
-              </span>
-              {item.label}
-            </button>
+              item={item}
+              index={i}
+              isLast={i === mentionItems.length - 1}
+              onPick={handleSelectMention}
+            />
           ))}
         </div>
       )}
 
+      {/* AgentInputBox's glass rounded-xl card: textField on top, a hairline divider, then the
+          bottom bar. Our composer has no leadingTools slot (the model picker/skills button live
+          in AgentPanel's own header instead), so the bottom bar is just the send affordance. */}
       <div
         style={{
           display: "flex",
-          alignItems: "flex-end",
-          gap: theme.spacing.xs,
+          flexDirection: "column",
+          background: theme.bg.surface,
+          borderRadius: theme.radius.xl,
+          borderWidth: focused ? theme.borderWidth.thin : theme.borderWidth.hairline,
+          borderStyle: "solid",
+          borderColor: focused ? theme.accent.primary : theme.border.primary,
+          transition: `border-color ${theme.anim.hover} ease-out`,
         }}
       >
         <textarea
@@ -149,40 +183,55 @@ export function MentionInput({ value, onChange, onSend, disabled, mentionItems }
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           disabled={disabled}
           rows={1}
+          placeholder="Ask, or type @ to reference media"
           style={{
-            flex: 1,
-            resize: "none",
-            background: theme.bg.surface,
+            background: "none",
             color: theme.text.primary,
-            border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-            borderRadius: theme.radius.sm,
-            padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-            fontSize: theme.fontSize.sm,
-            fontWeight: theme.fontWeight.regular,
+            border: "none",
+            resize: "none",
             outline: "none",
             fontFamily: "inherit",
+            fontSize: theme.fontSize.md,
+            fontWeight: theme.fontWeight.regular,
+            padding: `${theme.spacing.smMd} ${theme.spacing.mdLg} ${theme.spacing.xs}`,
+            minHeight: theme.size.composerInputMinH,
+            maxHeight: theme.size.composerInputMaxH,
+            overflowY: "auto",
           }}
         />
-        <button
-          data-testid="agent-send"
-          onClick={handleSend}
-          disabled={!canSend}
+        <div style={{ height: theme.borderWidth.hairline, background: theme.border.subtle, flexShrink: 0 }} />
+        <div
           style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
             padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-            background: canSend ? theme.accent.primary : theme.bg.raised,
-            color: canSend ? theme.text.onAccent : theme.text.muted,
-            border: "none",
-            borderRadius: theme.radius.sm,
-            fontSize: theme.fontSize.sm,
-            fontWeight: theme.fontWeight.medium,
-            cursor: canSend ? "pointer" : "not-allowed",
-            flexShrink: 0,
           }}
         >
-          Send
-        </button>
+          <Button
+            testid="agent-send"
+            onClick={handleSend}
+            disabled={!canSend}
+            variant="accent"
+            shape="capsule"
+            title="Send"
+            style={{
+              width: theme.iconSize.xl,
+              height: theme.iconSize.xl,
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Icon name="send" size={SEND_ICON_SIZE} />
+          </Button>
+        </div>
       </div>
     </div>
   );

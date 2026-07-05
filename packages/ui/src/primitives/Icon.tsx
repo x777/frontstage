@@ -24,7 +24,9 @@ export type IconName =
   | "volume-off"
   | "grip"
   | "diamond"
-  | "diamond-filled";
+  | "diamond-filled"
+  | "book"
+  | "send";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -181,6 +183,20 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // "diamond.fill" SF Symbol — solid, matching play/pause's filled-shape treatment. Fills the
   // viewBox (was 3,21 inset, ~75% of size) so a size=N render is ~N px, matching Swift.
   "diamond-filled": <polygon points="12,1 23,12 12,23 1,12" fill="currentColor" stroke="none" />,
+  // "book.closed" — ViewSkillsButton.swift. Cover outline with a spine line near the leading edge.
+  book: (
+    <>
+      <path d="M4.5 5a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v14.5a1 1 0 0 1-1 1H7A2.5 2.5 0 0 0 4.5 22z" />
+      <line x1="8" y1="3" x2="8" y2="19.5" />
+    </>
+  ),
+  // "arrow.up" — the composer's send affordance (AgentInputBox.sendStopButton).
+  send: (
+    <>
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <path d="M6 11l6-6 6 6" />
+    </>
+  ),
 };
 
 export function Icon(props: { name: IconName; size?: number | string; testid?: string }) {

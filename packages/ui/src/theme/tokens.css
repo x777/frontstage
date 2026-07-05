@@ -141,6 +141,10 @@
   --size-dialog-min: 280px;
   --size-mention-picker-max: 160px;
   --size-session-list-max: 120px;
+
+  /* Agent chat composer (M16E T1, AgentInputBox.swift textField frame verbatim) */
+  --size-composer-input-min-h: 32px;
+  --size-composer-input-max-h: 64px;
   --size-generation-panel-min: 320px;
   --size-settings-panel-min: 320px;
   --size-activity-max: 420px;
@@ -356,4 +360,20 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Agent chat "generating" indicator (M16E T1) — CSS analog of GeneratingOverlay.swift's
+   aiGradient + ShimmerModifier: a moving highlight swept across text clipped to --gradient-ai,
+   reusing the M10D --anim-shimmer-duration. */
+@keyframes gradient-text-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: -200% 50%;
+  }
+}
+
+textarea[data-testid="agent-input"]::placeholder {
+  color: var(--text-muted);
 }

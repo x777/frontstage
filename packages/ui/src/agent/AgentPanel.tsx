@@ -6,6 +6,7 @@ import { useAgentSession } from "./use-agent-session.js";
 import { SessionSwitcher } from "./SessionSwitcher.js";
 import { MentionInput, type MentionItem } from "./MentionInput.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { Button, Icon, IconButton } from "../primitives/index.js";
 
 export interface AgentPanelProps {
   session: AgentSession;
@@ -17,11 +18,42 @@ export interface AgentPanelProps {
   onOpenSkills?: () => void;
 }
 
+// Icon glyph sizes — small glyphs inside larger hit boxes, matching TransportBar's precedent.
+const SKILLS_ICON_SIZE = 14;
+const CANCEL_ICON_SIZE = 10;
+
 function joinTextBlocks(content: AgentContentBlock[]): string {
   return content
     .filter((b): b is { kind: "text"; text: string } => b.kind === "text")
     .map((b) => b.text)
     .join(" ");
+}
+
+// AgentMessageView.ToolRunRow's name typography (mono, medium, tertiary) — shared by the
+// committed assistant chip and the live streaming chip. No expand/collapse (that's tool-block
+// rendering behavior, out of scope for a styling pass).
+function ToolCallChip({ id, name }: { id: string; name: string }) {
+  return (
+    <span
+      key={id}
+      data-testid="agent-toolcall"
+      style={{
+        display: "inline-block",
+        marginLeft: theme.spacing.xs,
+        marginTop: theme.spacing.xxs,
+        padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
+        background: theme.bg.raised,
+        borderRadius: theme.radius.xs,
+        fontFamily: "ui-monospace, monospace",
+        fontSize: theme.fontSize.xs,
+        fontWeight: theme.fontWeight.medium,
+        color: theme.text.tertiary,
+        border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
+      }}
+    >
+      → {name}
+    </span>
+  );
 }
 
 function MessageRow({ msg }: { msg: AgentMessage }) {
@@ -30,13 +62,13 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
       <div
         data-testid="agent-msg-user"
         style={{
-          padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-          marginBottom: theme.spacing.xs,
-          background: theme.bg.surface,
-          borderRadius: theme.radius.sm,
+          padding: `${theme.spacing.smMd} ${theme.spacing.lg}`,
+          background: `rgba(255, 255, 255, ${theme.opacity.faint})`,
+          borderRadius: theme.radius.lg,
           color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
+          fontSize: theme.fontSize.md,
           fontWeight: theme.fontWeight.regular,
+          lineHeight: 1.4,
           alignSelf: "flex-end",
           maxWidth: "80%",
           wordBreak: "break-word",
@@ -56,34 +88,17 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
       <div
         data-testid="agent-msg-assistant"
         style={{
-          padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-          marginBottom: theme.spacing.xs,
           color: theme.text.primary,
-          fontSize: theme.fontSize.sm,
+          fontSize: theme.fontSize.md,
           fontWeight: theme.fontWeight.regular,
+          lineHeight: 1.4,
           maxWidth: "100%",
           wordBreak: "break-word",
         }}
       >
         {joinTextBlocks(msg.content)}
         {toolCallBlocks.map((tc) => (
-          <span
-            key={tc.id}
-            data-testid="agent-toolcall"
-            style={{
-              display: "inline-block",
-              marginLeft: theme.spacing.xs,
-              marginTop: theme.spacing.xxs,
-              padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-              background: theme.bg.raised,
-              borderRadius: theme.radius.xs,
-              fontSize: theme.fontSize.xxs,
-              color: theme.text.secondary,
-              border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-            }}
-          >
-            → {tc.name}
-          </span>
+          <ToolCallChip key={tc.id} id={tc.id} name={tc.name} />
         ))}
       </div>
     );
@@ -104,8 +119,8 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
             data-testid="agent-toolresult"
             style={{
               padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-              marginBottom: theme.spacing.xxs,
-              fontSize: theme.fontSize.xxs,
+              fontFamily: "ui-monospace, monospace",
+              fontSize: theme.fontSize.xs,
               color: tr.isError ? theme.status.error : theme.text.tertiary,
               fontWeight: theme.fontWeight.regular,
               wordBreak: "break-word",
@@ -163,8 +178,11 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
             alignItems: "center",
             justifyContent: "space-between",
             gap: theme.spacing.sm,
-            padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-            borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+            height: theme.size.panelHeader,
+            boxSizing: "border-box",
+            padding: `0 ${theme.spacing.sm}`,
+            background: theme.bg.raised,
+            borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
             flexShrink: 0,
           }}
         >
@@ -174,30 +192,21 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
             ) : model != null ? (
               <span
                 data-testid="agent-model"
-                style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted, fontWeight: theme.fontWeight.regular }}
+                style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}
               >
                 {model}
               </span>
             ) : null}
           </div>
           {onOpenSkills && (
-            <button
-              data-testid="agent-skills-button"
+            <IconButton
+              testid="agent-skills-button"
               onClick={onOpenSkills}
               title="View Skills"
-              style={{
-                background: "none",
-                border: "none",
-                color: theme.text.tertiary,
-                cursor: "pointer",
-                fontSize: theme.fontSize.sm,
-                fontWeight: theme.fontWeight.medium,
-                padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                flexShrink: 0,
-              }}
+              frame="smMd"
             >
-              Skills
-            </button>
+              <Icon name="book" size={SKILLS_ICON_SIZE} />
+            </IconButton>
           )}
         </div>
       )}
@@ -213,8 +222,8 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          padding: theme.spacing.sm,
-          gap: theme.spacing.xxs,
+          padding: `${theme.spacing.sm} ${theme.spacing.lgXl}`,
+          gap: theme.spacing.xl,
         }}
       >
         {state.messages.map((msg) => (
@@ -225,39 +234,29 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
           <div
             data-testid="agent-streaming"
             style={{
-              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-              marginBottom: theme.spacing.xs,
-              color: theme.text.secondary,
-              fontSize: theme.fontSize.sm,
+              color: theme.text.primary,
+              fontSize: theme.fontSize.md,
               fontWeight: theme.fontWeight.regular,
+              lineHeight: 1.4,
             }}
           >
             {state.streaming.text}
             <span
               style={{
                 marginLeft: theme.spacing.xxs,
-                color: theme.text.muted,
+                fontWeight: theme.fontWeight.semibold,
+                background: theme.gradients.ai,
+                backgroundSize: "200% 100%",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+                animation: `gradient-text-shimmer ${theme.anim.shimmerDuration} linear infinite`,
               }}
             >
               …
             </span>
             {state.streaming.toolCalls.map((tc) => (
-              <span
-                key={tc.id}
-                data-testid="agent-toolcall"
-                style={{
-                  display: "inline-block",
-                  marginLeft: theme.spacing.xs,
-                  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-                  background: theme.bg.raised,
-                  borderRadius: theme.radius.xs,
-                  fontSize: theme.fontSize.xxs,
-                  color: theme.text.secondary,
-                  border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                }}
-              >
-                → {tc.name}
-              </span>
+              <ToolCallChip key={tc.id} id={tc.id} name={tc.name} />
             ))}
           </div>
         )}
@@ -266,14 +265,9 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
           <div
             data-testid="agent-error"
             style={{
-              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-              marginBottom: theme.spacing.xs,
               color: theme.status.error,
-              fontSize: theme.fontSize.sm,
+              fontSize: theme.fontSize.xs,
               fontWeight: theme.fontWeight.regular,
-              background: theme.bg.surface,
-              borderRadius: theme.radius.sm,
-              border: `${theme.borderWidth.hairline} solid ${theme.status.error}`,
             }}
           >
             {state.error}
@@ -287,29 +281,19 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
         style={{
           display: "flex",
           flexDirection: "column",
-          padding: theme.spacing.sm,
-          borderTop: `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
+          padding: `${theme.spacing.xs} ${theme.spacing.mdLg} ${theme.spacing.mdLg}`,
           flexShrink: 0,
           gap: theme.spacing.xxs,
         }}
       >
         {isBusy && (
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              data-testid="agent-cancel"
-              onClick={() => session.cancel()}
-              style={{
-                padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                background: theme.bg.raised,
-                color: theme.text.secondary,
-                border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-                borderRadius: theme.radius.sm,
-                fontSize: theme.fontSize.sm,
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
+            <Button testid="agent-cancel" size="small" onClick={() => session.cancel()}>
+              <span style={{ display: "flex", alignItems: "center", gap: theme.spacing.xxs }}>
+                <Icon name="x" size={CANCEL_ICON_SIZE} />
+                Cancel
+              </span>
+            </Button>
           </div>
         )}
         <MentionInput

@@ -13,7 +13,7 @@ export function ModelPicker({ models, value, onChange, testid, label }: ModelPic
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.xxs }}>
       {label && (
-        <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
+        <span style={{ fontSize: theme.fontSize.sm, color: theme.text.primary, fontWeight: theme.fontWeight.medium }}>
           {label}
         </span>
       )}
@@ -22,13 +22,13 @@ export function ModelPicker({ models, value, onChange, testid, label }: ModelPic
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
-          background: theme.bg.surface,
+          background: theme.bg.raised,
           border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xs,
+          borderRadius: theme.radius.xsSm,
           color: theme.text.primary,
           fontSize: theme.fontSize.sm,
           fontWeight: theme.fontWeight.regular,
-          padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
+          padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
           cursor: "pointer",
           width: "100%",
         }}

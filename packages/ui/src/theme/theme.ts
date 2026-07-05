@@ -143,6 +143,8 @@ export const theme = {
     dialogMin: "var(--size-dialog-min)",
     mentionPickerMax: "var(--size-mention-picker-max)",
     sessionListMax: "var(--size-session-list-max)",
+    composerInputMinH: "var(--size-composer-input-min-h)",
+    composerInputMaxH: "var(--size-composer-input-max-h)",
     generationPanelMin: "var(--size-generation-panel-min)",
     settingsPanelMin: "var(--size-settings-panel-min)",
     activityMax: "var(--size-activity-max)",

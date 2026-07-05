@@ -281,20 +281,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
                 <PanelResizeHandle style={resizeHandleStyle} />
                 <Panel defaultSize={22} minSize={14}>
                   <section data-testid="panel-agent" style={panelSectionStyle}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                        borderBottom: `${theme.borderWidth.thin} solid ${theme.border.divider}`,
-                        background: theme.bg.raised,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <span style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary, fontWeight: theme.fontWeight.medium }}>
-                        Agent
-                      </span>
-                    </div>
+                    <PanelHeader title="Agent" />
                     <div style={{ flex: 1, overflow: "hidden" }}>{agent}</div>
                   </section>
                 </Panel>

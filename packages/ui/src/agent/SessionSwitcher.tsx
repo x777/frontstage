@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import type { AgentSession, ChatSessionStore, ChatSessionIndexEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
+import { Button, Icon, MenuList } from "../primitives/index.js";
 
 interface SessionSwitcherProps {
   session: AgentSession;
   sessionStore: ChatSessionStore;
   onNew?: () => void;
 }
+
+const NEW_CHAT_ICON_SIZE = 12;
 
 export function SessionSwitcher({ session, sessionStore, onNew }: SessionSwitcherProps) {
   const [sessions, setSessions] = useState<ChatSessionIndexEntry[]>([]);
@@ -55,26 +58,14 @@ export function SessionSwitcher({ session, sessionStore, onNew }: SessionSwitche
           display: "flex",
           alignItems: "center",
           padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-          gap: theme.spacing.xs,
         }}
       >
-        <button
-          data-testid="agent-new"
-          onClick={handleNew}
-          style={{
-            background: "none",
-            border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-            borderRadius: theme.radius.xs,
-            color: theme.text.secondary,
-            cursor: "pointer",
-            fontSize: theme.fontSize.xxs,
-            padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-            lineHeight: 1,
-            flexShrink: 0,
-          }}
-        >
-          New Chat
-        </button>
+        <Button testid="agent-new" size="small" onClick={handleNew}>
+          <span style={{ display: "flex", alignItems: "center", gap: theme.spacing.xxs }}>
+            <Icon name="plus" size={NEW_CHAT_ICON_SIZE} />
+            New Chat
+          </span>
+        </Button>
       </div>
 
       {sessions.length > 0 && (
@@ -82,32 +73,13 @@ export function SessionSwitcher({ session, sessionStore, onNew }: SessionSwitche
           style={{
             overflowY: "auto",
             maxHeight: theme.size.sessionListMax,
-            display: "flex",
-            flexDirection: "column",
+            padding: `0 ${theme.spacing.sm} ${theme.spacing.xs}`,
           }}
         >
-          {sessions.map((entry, i) => (
-            <button
-              key={entry.id}
-              data-testid={`agent-session-${i}`}
-              onClick={() => handleSelect(entry.id)}
-              style={{
-                background: "none",
-                border: "none",
-                borderTop: i === 0 ? "none" : `${theme.borderWidth.hairline} solid ${theme.border.divider}`,
-                color: theme.text.primary,
-                cursor: "pointer",
-                fontSize: theme.fontSize.xxs,
-                padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
-                textAlign: "left",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {entry.title}
-            </button>
-          ))}
+          <MenuList
+            items={sessions.map((entry, i) => ({ id: entry.id, label: entry.title, testid: `agent-session-${i}` }))}
+            onSelect={handleSelect}
+          />
         </div>
       )}
     </div>
