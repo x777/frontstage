@@ -1,5 +1,6 @@
 {
   "name": "@frontstage/desktop",
+  "productName": "Frontstage",
   "version": "0.0.0",
   "private": true,
   "main": "src/main/index.cjs",
@@ -42,6 +43,7 @@
   "build": {
     "appId": "studio.frontstage.app",
     "productName": "Frontstage",
+    "artifactName": "Frontstage-Setup-${version}.${ext}",
     "directories": {
       "output": "release",
       "buildResources": "build"
