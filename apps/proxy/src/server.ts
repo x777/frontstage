@@ -319,7 +319,7 @@ async function forward(body: string, upstream: string, apiKey: string, origin: s
         Authorization: "Bearer " + apiKey,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://frontstage.studio",
-        "X-Title": "FrontstagePro",
+        "X-Title": "Frontstage",
       },
       body,
     });

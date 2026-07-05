@@ -446,7 +446,7 @@ bootstrap().catch((err) => {
     Object.assign(wrapper.style, { padding: "2rem", fontFamily: "monospace", color: "#c00" });
 
     const heading = document.createElement("strong");
-    heading.textContent = "Failed to start FrontstagePro";
+    heading.textContent = "Failed to start Frontstage";
 
     const detail = document.createElement("pre");
     Object.assign(detail.style, { marginTop: "1rem", whiteSpace: "pre-wrap" });

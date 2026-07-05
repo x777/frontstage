@@ -923,7 +923,7 @@ ipcMain.handle("ai:generateImage", async (_e, body) => {
       Authorization: "Bearer " + key,
       "Content-Type": "application/json",
       "HTTP-Referer": "https://frontstage.studio",
-      "X-Title": "FrontstagePro",
+      "X-Title": "Frontstage",
     },
     body: JSON.stringify(body),
   });
@@ -945,7 +945,7 @@ ipcMain.on("ai:streamChat", async (event, { id, body }) => {
         Authorization: "Bearer " + key,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://frontstage.studio",
-        "X-Title": "FrontstagePro",
+        "X-Title": "Frontstage",
       },
       body: JSON.stringify(body),
     });
