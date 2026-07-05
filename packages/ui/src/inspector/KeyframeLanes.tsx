@@ -14,10 +14,9 @@ import { theme } from "../theme/theme.js";
 import { Icon } from "../primitives/Icon.js";
 import { Section, labelStyle } from "./fields.js";
 
-// Mirrors --size-kf-diamond (verified against Swift's KeyframesMetrics.diamondSize = 8; was
-// wrongly 10, corrected). A number because Icon's SVG width/height and the hit-test tolerance
-// both need a raw px value, not a CSS var string.
-const DIAMOND_PX = 8;
+const DIAMOND_PX = 8;        // render size — Swift KeyframesMetrics.diamondSize
+const HIT_TOLERANCE_PX = 10; // pointer grab zone — restored to pre-M16D value (zero behavior change).
+                             // Swift's KeyframesLane.hitTolerance is 7; aligning to it is a future interaction-parity item, not this milestone.
 
 type Prop = "opacity" | "rotation" | "scale" | "position" | "crop" | "volume";
 
@@ -190,7 +189,7 @@ function KeyframeLane({ clip, playhead, store, def, tint }: KeyframeLaneProps) {
       let hitKf: { frame: number; value: unknown } | null = null;
       for (const kf of keyframes) {
         const kfX = xForKfFrame(kf.frame, laneWidth);
-        if (Math.abs(localX - kfX) <= DIAMOND_PX) {
+        if (Math.abs(localX - kfX) <= HIT_TOLERANCE_PX) {
           hitKf = kf as { frame: number; value: unknown };
           break;
         }
@@ -260,7 +259,7 @@ function KeyframeLane({ clip, playhead, store, def, tint }: KeyframeLaneProps) {
       const rect = lane.getBoundingClientRect();
       const localX = e.clientX - rect.left;
       for (const kf of keyframes) {
-        if (Math.abs(localX - xForKfFrame(kf.frame, rect.width)) <= DIAMOND_PX) {
+        if (Math.abs(localX - xForKfFrame(kf.frame, rect.width)) <= HIT_TOLERANCE_PX) {
           e.preventDefault();
           store.dispatch(removeKeyframeCommand(clip.id, def.trackKey, kf.frame, `kf-${clip.id}-${def.prop}`));
           return;
@@ -303,7 +302,8 @@ function KeyframeLane({ clip, playhead, store, def, tint }: KeyframeLaneProps) {
           opacity: withinClip ? theme.opacity.opaque : theme.opacity.disabled,
         }}
       >
-        <Icon name={hasKfAtOffset ? "diamond-filled" : "diamond"} size={DIAMOND_PX} />
+        {/* Swift's stamp glyph is FontSize.xs (10pt), independent of and larger than the lane diamondSize. */}
+        <Icon name={hasKfAtOffset ? "diamond-filled" : "diamond"} size={10} />
       </button>
 
       {/* Label — canonical row typography (sm/medium/primary, M16D T2); fixed width here (unlike

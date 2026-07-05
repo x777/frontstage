@@ -14,6 +14,8 @@ export type IconName =
   | "pause"
   | "step-back"
   | "step-forward"
+  | "skip-to-start"
+  | "skip-to-end"
   | "eye"
   | "eye-off"
   | "lock"
@@ -105,6 +107,22 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="17.6" y="5.5" width="2.4" height="13" rx="1" fill="currentColor" stroke="none" />
     </>
   ),
+  // "backward.end.fill" — double left-pointing chevron with the boundary bar on the left.
+  "skip-to-start": (
+    <>
+      <rect x="3" y="5.5" width="2.4" height="13" rx="1" fill="currentColor" stroke="none" />
+      <path d="M13 5.5v13l-7-6.5z" fill="currentColor" stroke="none" />
+      <path d="M20 5.5v13l-7-6.5z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // "forward.end.fill" — mirror of skip-to-start, bar on the right.
+  "skip-to-end": (
+    <>
+      <path d="M4 5.5v13l7-6.5z" fill="currentColor" stroke="none" />
+      <path d="M11 5.5v13l7-6.5z" fill="currentColor" stroke="none" />
+      <rect x="18.6" y="5.5" width="2.4" height="13" rx="1" fill="currentColor" stroke="none" />
+    </>
+  ),
   eye: (
     <>
       <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z" />
@@ -151,16 +169,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   // "diamond" SF Symbol — hollow ring built from fill geometry (evenodd), not a stroked outline.
+  // Outer ring fills the viewBox (matches diamond-filled) so a size=N render is ~N px.
   "diamond": (
     <path
       fillRule="evenodd"
-      d="M12 3L21 12L12 21L3 12Z M12 7L17 12L12 17L7 12Z"
+      d="M12 1L23 12L12 23L1 12Z M12 6L18 12L12 18L6 12Z"
       fill="currentColor"
       stroke="none"
     />
   ),
-  // "diamond.fill" SF Symbol — solid, matching play/pause's filled-shape treatment.
-  "diamond-filled": <polygon points="12,3 21,12 12,21 3,12" fill="currentColor" stroke="none" />,
+  // "diamond.fill" SF Symbol — solid, matching play/pause's filled-shape treatment. Fills the
+  // viewBox (was 3,21 inset, ~75% of size) so a size=N render is ~N px, matching Swift.
+  "diamond-filled": <polygon points="12,1 23,12 12,23 1,12" fill="currentColor" stroke="none" />,
 };
 
 export function Icon(props: { name: IconName; size?: number | string; testid?: string }) {

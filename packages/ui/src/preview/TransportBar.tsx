@@ -19,9 +19,10 @@ function formatTimecode(frame: number, fps: number): string {
   return `${mm}:${ss}:${ff}`;
 }
 
-// transportButton() renders SF Symbols at FontSize.sm (11pt) inside a 32x28 hit box (all 5
-// Swift buttons share that size, no oversized play button). IconButton is square, so frame="lgXl"
-// (28px) is the closest kit match — a small glyph with generous hover padding, not a filled icon.
+// All 5 transport buttons (skip-start, step-back, play/pause, step-fwd, skip-end) render SF
+// Symbols at FontSize.sm (11pt) inside a 32x28 hit box in Swift, no oversized play button.
+// IconButton is square, so frame="lgXl" (28px) is the closest kit match — a small glyph with
+// generous hover padding, not a filled icon.
 const TRANSPORT_ICON_SIZE = 14;
 
 export function TransportBar({ engine, store, fps, durationFrames }: TransportBarProps) {
@@ -48,6 +49,14 @@ export function TransportBar({ engine, store, fps, durationFrames }: TransportBa
 
   function handleStepFwd() {
     void engine.seek(Math.min(durationFrames - 1, engine.currentFrame + 1), "exact");
+  }
+
+  function handleSeekStart() {
+    void engine.seek(0, "exact");
+  }
+
+  function handleSeekEnd() {
+    void engine.seek(Math.max(0, durationFrames - 1), "exact");
   }
 
   return (
@@ -79,6 +88,9 @@ export function TransportBar({ engine, store, fps, durationFrames }: TransportBa
       </span>
 
       <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.md }}>
+        <IconButton frame="lgXl" testid="transport-skip-start" title="Jump to start" onClick={handleSeekStart}>
+          <Icon name="skip-to-start" size={TRANSPORT_ICON_SIZE} />
+        </IconButton>
         <IconButton frame="lgXl" testid="transport-step-back" title="Step back 1 frame" onClick={handleStepBack}>
           <Icon name="step-back" size={TRANSPORT_ICON_SIZE} />
         </IconButton>
@@ -92,6 +104,9 @@ export function TransportBar({ engine, store, fps, durationFrames }: TransportBa
         </IconButton>
         <IconButton frame="lgXl" testid="transport-step-fwd" title="Step forward 1 frame" onClick={handleStepFwd}>
           <Icon name="step-forward" size={TRANSPORT_ICON_SIZE} />
+        </IconButton>
+        <IconButton frame="lgXl" testid="transport-skip-end" title="Jump to end" onClick={handleSeekEnd}>
+          <Icon name="skip-to-end" size={TRANSPORT_ICON_SIZE} />
         </IconButton>
       </div>
     </div>
