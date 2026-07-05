@@ -41,6 +41,7 @@ import { useExportCommand } from "./use-export-command.js";
 import type { ExportKind } from "./use-export-command.js";
 import { ExportProgress } from "./ExportProgress.js";
 import type { ExportGateway } from "./export-gateway.js";
+import { handleEditorKeydown } from "./editor-shortcuts.js";
 
 // Duck-typed library interface covering what MediaPanel, InspectorPanel, and drag-drop each need.
 export interface EditorLibrary {
@@ -229,10 +230,15 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  // Keyboard shortcuts — use shared confirmDiscard so Ctrl+N / Ctrl+O honor the discard guard
+  // Keyboard shortcuts — editor shortcuts (undo/redo/split/trim/tool modes) run unconditionally;
+  // Ctrl+N/O/S require a project session and use the shared confirmDiscard guard.
   useEffect(() => {
-    if (!session) return;
     function onKeyDown(e: KeyboardEvent) {
+      if (handleEditorKeydown(e, store)) {
+        e.preventDefault();
+        return;
+      }
+      if (!session) return;
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       if (e.key === "s" || e.key === "S") {
@@ -252,7 +258,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [session, confirmDiscard, runProjectCommand]);
+  }, [store, session, confirmDiscard, runProjectCommand]);
 
   useEffect(() => {
     return store.subscribe(() => persistLayout(store));
