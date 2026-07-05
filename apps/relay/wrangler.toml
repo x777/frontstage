@@ -1,6 +1,6 @@
 name = "frontstage-relay"
 main = "src/index.ts"
-compatibility_date = "2026-07-06"
+compatibility_date = "2026-07-01"
 workers_dev = false
 
 routes = [
@@ -10,7 +10,7 @@ routes = [
 # Real namespace id is set at deploy time (wrangler kv namespace create + wrangler secret/vars
 # update) — never committed here. See README/deploy notes for the one-time setup steps.
 kv_namespaces = [
-  { binding = "RATE", id = "TBD-at-deploy" }
+  { binding = "RATE", id = "980edaf913e84b878cc53a264c39dc3e" }
 ]
 
 [observability]
