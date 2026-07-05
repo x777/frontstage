@@ -16,6 +16,7 @@ import {
   trimRightDelta,
   moveClipCommand,
   splitClipCommand,
+  splitLinkedClipCommand,
   removeClipCommand,
   addClipCommand,
   clipFromAsset,
@@ -40,6 +41,7 @@ import type { TimelinePalette, DropIndicator, TimelineOverlays } from "./draw-ti
 import { hitTest, trimTickCommand, selectForwardScopeForKey } from "./pointer.js";
 import type { MediaDragController } from "../media/media-drag.js";
 import { ClipContextMenu, type ClipContextMenuState } from "./ClipContextMenu.js";
+import { useStore } from "../store/use-store.js";
 
 const DRAG_THRESHOLD = 3;
 
@@ -115,7 +117,10 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
   const dropIndicatorRef = useRef<DropIndicator | null>(null);
   const ghostPreviewRef = useRef<RippleInsertPreviewPlan | null>(null);
   const marqueeRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const razorPreviewFrameRef = useRef<number | null>(null);
+  const razorSnapStateRef = useRef(newSnapState());
   const [menu, setMenu] = useState<ClipContextMenuState | null>(null);
+  const toolMode = useStore(store, (s) => s.toolMode);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -150,6 +155,16 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
         trackHeights: timeline.tracks.map(() => DEFAULT_TRACK_HEIGHT),
       });
 
+      // Leaving razor mode invalidates any live preview — cheapest correct point to drop it.
+      if (snap.toolMode !== "razor" && razorPreviewFrameRef.current !== null) {
+        razorPreviewFrameRef.current = null;
+        razorSnapStateRef.current = newSnapState();
+      }
+      const razorLineX =
+        snap.toolMode === "razor" && razorPreviewFrameRef.current !== null
+          ? xForFrame(geom, razorPreviewFrameRef.current)
+          : null;
+
       // Build overlays: marquee + range band + ghost-insert preview
       const overlays: TimelineOverlays = {};
       if (marqueeRectRef.current) {
@@ -171,7 +186,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       const statusByRef = libraryEntries ? generationStatusByRef(libraryEntries) : undefined;
       const nameByRef = libraryEntries ? mediaNameByRef(libraryEntries) : undefined;
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef, null);
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef, razorLineX);
     }
 
     function scheduleDraw() {
@@ -299,6 +314,14 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
           cv.setPointerCapture(e.pointerId);
           store.setPlayhead(frameAtX(geom, x));
         }
+      } else if (snap.toolMode === "razor") {
+        // Razor: splits the hit clip only — no selection change, no drags (mirrors Swift's
+        // TimelineInputController early return; ruler clicks above still scrub/range-select).
+        if (hit.kind === "clip") {
+          const frame = razorPreviewFrameRef.current ?? frameAtX(geom, x);
+          store.dispatch(splitLinkedClipCommand(hit.clipId, frame));
+          scheduleDraw();
+        }
       } else if (hit.kind === "clip") {
         // Always select on pointerdown
         store.select([hit.clipId]);
@@ -401,7 +424,34 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
         return;
       }
 
-      if (!drag) return;
+      if (!drag) {
+        // Hover path — no gesture in progress. Only razor mode cares (snapped split-line preview).
+        const coords = getGeomAndCoords(e);
+        if (!coords) return;
+        const { geom, x, y } = coords;
+        const snap = store.getSnapshot();
+        if (snap.toolMode === "razor" && y >= RULER_HEIGHT) {
+          const candidate = frameAtX(geom, x);
+          const targets = collectTargets(snap.timeline.tracks, { playheadFrame: snap.playhead, includePlayhead: true });
+          const snapResult = findSnap({
+            position: candidate,
+            targets,
+            state: razorSnapStateRef.current,
+            baseThresholdPx: 8,
+            pixelsPerFrame: geom.pixelsPerFrame,
+          });
+          const next = snapResult ? snapResult.frame : candidate;
+          if (razorPreviewFrameRef.current !== next) {
+            razorPreviewFrameRef.current = next;
+            scheduleDraw();
+          }
+        } else if (razorPreviewFrameRef.current !== null) {
+          razorPreviewFrameRef.current = null;
+          razorSnapStateRef.current = newSnapState();
+          scheduleDraw();
+        }
+        return;
+      }
 
       const coords = getGeomAndCoords(e);
       if (!coords) return;
@@ -518,6 +568,15 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
         } else {
           snapLineXRef.current = null;
         }
+        scheduleDraw();
+      }
+    }
+
+    function onPointerLeave() {
+      // No pointermove fires once the cursor is off the canvas — drop a stale razor preview.
+      if (razorPreviewFrameRef.current !== null) {
+        razorPreviewFrameRef.current = null;
+        razorSnapStateRef.current = newSnapState();
         scheduleDraw();
       }
     }
@@ -660,6 +719,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUpOrCancel);
     canvas.addEventListener("pointercancel", onPointerUpOrCancel);
+    canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.setAttribute("tabindex", "0");
     canvas.addEventListener("keydown", onKeyDown);
@@ -736,6 +796,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", onPointerUpOrCancel);
       canvas.removeEventListener("pointercancel", onPointerUpOrCancel);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("keydown", onKeyDown);
       canvas.removeEventListener("contextmenu", onContextMenu);
@@ -758,7 +819,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       <canvas
         ref={canvasRef}
         data-testid="timeline-canvas"
-        style={{ display: "block" }}
+        style={{ display: "block", cursor: toolMode === "razor" ? "crosshair" : undefined }}
       />
       <ClipContextMenu store={store} menu={menu} onClose={() => setMenu(null)} />
     </div>
