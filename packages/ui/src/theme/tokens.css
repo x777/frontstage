@@ -174,11 +174,12 @@
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.25);
 
-  /* Keyframe lane tokens */
-  --size-kf-lane: 28px;
-  --size-kf-diamond: 10px;
-  --size-kf-toggle: 18px;
-  --size-kf-label: 52px;
+  /* Keyframe lane tokens (M16D T3, KeyframesLane.swift's KeyframesMetrics verbatim where an
+     analog exists) */
+  --size-kf-lane: 22px; /* KeyframesMetrics.rowHeight — was wrongly 28px (no boxed-lane analog in Swift; this is the closest one: Swift's whole per-property row height) */
+  --size-kf-diamond: 8px; /* KeyframesMetrics.diamondSize — was wrongly 10px, corrected */
+  --size-kf-toggle: 18px; /* keyframeControls stamp button height (InspectorView.swift) — verified match */
+  --size-kf-label: 52px; /* no Swift analog (Swift's lanes carry no label at all); kept as the pre-existing fixed alignment column */
 
   /* Adjust inspector slider */
   --size-adjust-track: 4px;

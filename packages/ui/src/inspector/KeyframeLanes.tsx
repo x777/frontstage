@@ -1,5 +1,5 @@
 import { useRef, useCallback } from "react";
-import type { EditorStore, Clip, KeyframeTrackKey } from "@palmier/core";
+import type { EditorStore, Clip, ClipType, KeyframeTrackKey } from "@palmier/core";
 import {
   opacityAt,
   rotationAt,
@@ -11,9 +11,13 @@ import {
 } from "@palmier/core";
 import type { KeyframeValueMap } from "@palmier/core";
 import { theme } from "../theme/theme.js";
+import { Icon } from "../primitives/Icon.js";
+import { Section, labelStyle } from "./fields.js";
 
-// Mirrors --size-kf-diamond; needed as a number for hit-test geometry.
-const DIAMOND_PX = 10;
+// Mirrors --size-kf-diamond (verified against Swift's KeyframesMetrics.diamondSize = 8; was
+// wrongly 10, corrected). A number because Icon's SVG width/height and the hit-test tolerance
+// both need a raw px value, not a CSS var string.
+const DIAMOND_PX = 8;
 
 type Prop = "opacity" | "rotation" | "scale" | "position" | "crop" | "volume";
 
@@ -73,6 +77,19 @@ const VOLUME_PROP: PropDef<"volumeTrack"> = {
 const VISUAL_TYPES = new Set(["video", "image", "text", "lottie"]);
 const AUDIO_TYPES = new Set(["audio", "video"]);
 
+// Swift fills every lane diamond with clip.sourceClipType.themeColor (KeyframesLaneRow's Canvas
+// draw), not a fixed accent — mirrors the ClipType→color mapping the timeline canvas already
+// uses (draw-timeline.ts's trackColor).
+function laneTint(sourceClipType: ClipType): string {
+  switch (sourceClipType) {
+    case "audio": return theme.track.audio;
+    case "image": return theme.track.image;
+    case "text": return theme.track.text;
+    case "lottie": return theme.track.lottie;
+    default: return theme.track.video;
+  }
+}
+
 export interface KeyframeLanesProps {
   clip: Clip;
   playhead: number;
@@ -90,24 +107,14 @@ export function KeyframeLanes({ clip, playhead, store }: KeyframeLanesProps) {
 
   if (props.length === 0) return null;
 
+  const tint = laneTint(clip.sourceClipType);
+
   return (
-    <div data-testid="inspector-section-Keyframes" style={{ borderBottom: `${theme.borderWidth.hairline} solid ${theme.border.divider}`, padding: `${theme.spacing.xs} ${theme.spacing.sm}` }}>
-      <div
-        style={{
-          fontSize: theme.fontSize.micro,
-          fontWeight: theme.fontWeight.semibold,
-          color: theme.text.tertiary,
-          letterSpacing: theme.letterSpacing.wide,
-          textTransform: "uppercase",
-          marginBottom: theme.spacing.xxs,
-        }}
-      >
-        Keyframes
-      </div>
+    <Section title="Keyframes">
       {props.map((def) => (
-        <KeyframeLane key={def.prop} clip={clip} playhead={playhead} store={store} def={def} />
+        <KeyframeLane key={def.prop} clip={clip} playhead={playhead} store={store} def={def} tint={tint} />
       ))}
-    </div>
+    </Section>
   );
 }
 
@@ -116,9 +123,10 @@ interface KeyframeLaneProps {
   playhead: number;
   store: EditorStore;
   def: PropDef<KeyframeTrackKey>;
+  tint: string;
 }
 
-function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
+function KeyframeLane({ clip, playhead, store, def, tint }: KeyframeLaneProps) {
   const laneRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -274,7 +282,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
         padding: `${theme.spacing.xxs} 0`,
       }}
     >
-      {/* Toggle button */}
+      {/* Toggle button — plain icon, no box chrome, per Swift's keyframeControls stamp button */}
       <button
         data-testid={`kf-toggle-${def.prop}`}
         onClick={handleToggle}
@@ -283,35 +291,25 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
           width: theme.size.kfToggle,
           height: theme.size.kfToggle,
           flexShrink: 0,
-          background: hasKfAtOffset ? theme.accent.timecode : theme.bg.raised,
-          border: `${theme.borderWidth.hairline} solid ${hasKfAtOffset ? theme.accent.timecode : theme.border.primary}`,
+          background: "transparent",
+          border: "none",
           borderRadius: theme.radius.xs,
           cursor: withinClip ? "pointer" : "not-allowed",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           padding: 0,
+          color: hasKfAtOffset ? theme.accent.timecode : theme.text.tertiary,
           opacity: withinClip ? theme.opacity.opaque : theme.opacity.disabled,
         }}
       >
-        {/* Diamond icon */}
-        <svg width="8" height="8" viewBox="0 0 8 8">
-          <polygon
-            points="4,0 8,4 4,8 0,4"
-            fill={hasKfAtOffset ? theme.bg.base : theme.text.muted}
-          />
-        </svg>
+        <Icon name={hasKfAtOffset ? "diamond-filled" : "diamond"} size={DIAMOND_PX} />
       </button>
 
-      {/* Label */}
-      <span
-        style={{
-          fontSize: theme.fontSize.xs,
-          color: theme.text.secondary,
-          minWidth: theme.size.kfLabel,
-          flexShrink: 0,
-        }}
-      >
+      {/* Label — canonical row typography (sm/medium/primary, M16D T2); fixed width here (unlike
+          the natural-width main inspector rows) so lanes for different-length labels line up,
+          the same alignment rationale as Swift's own AppTheme.Slider.labelColumn exception. */}
+      <span style={{ ...labelStyle, minWidth: theme.size.kfLabel }}>
         {def.label}
       </span>
 
@@ -337,10 +335,11 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
       >
         {/* Keyframe diamonds */}
         {keyframes.map((kf) => (
-          <KfDiamond key={kf.frame} frame={kf.frame} dur={dur} />
+          <KfDiamond key={kf.frame} frame={kf.frame} dur={dur} tint={tint} />
         ))}
 
-        {/* Playhead marker */}
+        {/* Playhead marker — Swift's KeyframesPanel.playheadOverlay uses Playhead.color (red),
+            not the amber accent.timecode; this was drawing the wrong color. */}
         <div
           style={{
             position: "absolute",
@@ -348,7 +347,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
             bottom: 0,
             left: `${playheadRatio * 100}%`,
             width: theme.borderWidth.thin,
-            background: theme.accent.timecode,
+            background: theme.timeline.playhead,
             transform: "translateX(-50%)",
             pointerEvents: "none",
           }}
@@ -358,7 +357,7 @@ function KeyframeLane({ clip, playhead, store, def }: KeyframeLaneProps) {
   );
 }
 
-function KfDiamond({ frame, dur }: { frame: number; dur: number }) {
+function KfDiamond({ frame, dur, tint }: { frame: number; dur: number; tint: string }) {
   const ratio = dur > 0 ? frame / dur : 0;
   return (
     <div
@@ -367,13 +366,14 @@ function KfDiamond({ frame, dur }: { frame: number; dur: number }) {
         position: "absolute",
         top: "50%",
         left: `${ratio * 100}%`,
-        transform: "translate(-50%, -50%) rotate(45deg)",
-        width: theme.size.kfDiamond,
-        height: theme.size.kfDiamond,
-        background: theme.accent.timecode,
+        transform: "translate(-50%, -50%)",
+        color: tint,
+        lineHeight: 0,
         cursor: "ew-resize",
         pointerEvents: "auto",
       }}
-    />
+    >
+      <Icon name="diamond-filled" size={DIAMOND_PX} />
+    </div>
   );
 }

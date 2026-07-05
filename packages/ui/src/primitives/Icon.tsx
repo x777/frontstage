@@ -20,7 +20,9 @@ export type IconName =
   | "lock-open"
   | "volume"
   | "volume-off"
-  | "grip";
+  | "grip"
+  | "diamond"
+  | "diamond-filled";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -148,6 +150,17 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <line x1="6" y1="16" x2="18" y2="16" />
     </>
   ),
+  // "diamond" SF Symbol — hollow ring built from fill geometry (evenodd), not a stroked outline.
+  "diamond": (
+    <path
+      fillRule="evenodd"
+      d="M12 3L21 12L12 21L3 12Z M12 7L17 12L12 17L7 12Z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
+  // "diamond.fill" SF Symbol — solid, matching play/pause's filled-shape treatment.
+  "diamond-filled": <polygon points="12,3 21,12 12,21 3,12" fill="currentColor" stroke="none" />,
 };
 
 export function Icon(props: { name: IconName; size?: number | string; testid?: string }) {
