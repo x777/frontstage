@@ -12,6 +12,7 @@ import { canTranscribe, classifyRefsByCache, formatCredits } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
 import { Select } from "../primitives/Select.js";
+import { TextInput } from "../primitives/TextInput.js";
 import { Button } from "../primitives/Button.js";
 import { GeneratingOverlay, generatingLabel } from "./GeneratingOverlay.js";
 import { CaptionPresetGallery, isHighlightPreset } from "./CaptionPresetGallery.js";
@@ -68,27 +69,18 @@ function summarizeSuccess(text: string): string {
   return text;
 }
 
-// Inspector-row language (fields.tsx/AdjustmentRow): fixed label column, control to its right.
+// Inspector-row language (fields.tsx): natural-width label (no fixed column), control to its
+// right — matches Swift's InspectorRow (CaptionTab.swift is InspectorRow-based throughout).
 const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: theme.spacing.xs };
 const labelStyle: React.CSSProperties = {
-  fontSize: theme.fontSize.xs,
-  color: theme.text.tertiary,
-  minWidth: theme.size.inspectorLabel,
+  fontSize: theme.fontSize.sm,
+  fontWeight: theme.fontWeight.medium,
+  color: theme.text.primary,
+  whiteSpace: "nowrap",
   flexShrink: 0,
 };
 const mutedStyle: React.CSSProperties = { fontSize: theme.fontSize.xxs, color: theme.text.muted, fontWeight: theme.fontWeight.regular };
 const fieldGap: React.CSSProperties = { display: "flex", flexDirection: "column", gap: theme.spacing.xxs };
-const inputStyle: React.CSSProperties = {
-  background: theme.bg.surface,
-  border: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-  borderRadius: theme.radius.xs,
-  color: theme.text.primary,
-  fontSize: theme.fontSize.xs,
-  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-  width: "100%",
-  boxSizing: "border-box",
-  outline: "none",
-};
 
 export function CaptionsTab({ store, executor, transcription, library }: CaptionsTabProps) {
   const timeline = useStore(store, (s) => s.timeline);
@@ -229,13 +221,12 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
 
         <div style={rowStyle}>
           <span style={labelStyle}>Language</span>
-          <input
-            data-testid="captions-language-input"
-            type="text"
+          <TextInput
+            testid="captions-language-input"
             value={language}
-            onChange={(e) => setLanguage(e.target.value)}
+            onChange={setLanguage}
             placeholder="Auto-detect (BCP-47, e.g. en, fr-CA)"
-            style={inputStyle}
+            style={{ flex: 1 }}
           />
         </div>
 
@@ -251,73 +242,71 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
 
         <div style={rowStyle}>
           <span style={labelStyle}>Max words</span>
-          <input
-            data-testid="captions-maxwords-input"
+          <TextInput
+            testid="captions-maxwords-input"
             type="number"
             min={1}
             value={maxWords}
-            onChange={(e) => setMaxWords(e.target.value)}
+            onChange={setMaxWords}
             placeholder="No limit"
-            style={inputStyle}
+            style={{ flex: 1 }}
           />
         </div>
 
         <div style={rowStyle}>
           <span style={labelStyle}>Font</span>
-          <input
-            data-testid="captions-fontname-input"
-            type="text"
+          <TextInput
+            testid="captions-fontname-input"
             value={fontName}
-            onChange={(e) => setFontName(e.target.value)}
-            style={inputStyle}
+            onChange={setFontName}
+            style={{ flex: 1 }}
           />
         </div>
 
         <div style={rowStyle}>
           <span style={labelStyle}>Size</span>
-          <input
-            data-testid="captions-fontsize-input"
+          <TextInput
+            testid="captions-fontsize-input"
             type="number"
             min={12}
             max={300}
-            value={fontSize}
-            onChange={(e) => setFontSize(Math.max(12, Math.min(300, Number(e.target.value) || 48)))}
-            style={inputStyle}
+            value={String(fontSize)}
+            onChange={(v) => setFontSize(Math.max(12, Math.min(300, Number(v) || 48)))}
+            style={{ flex: 1 }}
           />
         </div>
 
         <div style={rowStyle}>
           <span style={labelStyle}>Color</span>
-          <input
-            data-testid="captions-color-input"
-            type="text"
+          <TextInput
+            testid="captions-color-input"
             value={color}
-            onChange={(e) => setColor(e.target.value)}
-            style={inputStyle}
+            onChange={setColor}
+            style={{ flex: 1 }}
           />
         </div>
 
         <div style={rowStyle}>
           <span style={labelStyle}>Center X</span>
-          <input
-            data-testid="captions-centerx-input"
+          <TextInput
+            testid="captions-centerx-input"
             type="number"
             step={0.01}
-            value={centerX}
-            onChange={(e) => setCenterX(snapToHalf(Number(e.target.value)))}
-            style={inputStyle}
+            value={String(centerX)}
+            onChange={(v) => setCenterX(snapToHalf(Number(v)))}
+            style={{ flex: 1 }}
           />
         </div>
 
         <div style={rowStyle}>
           <span style={labelStyle}>Center Y</span>
-          <input
-            data-testid="captions-centery-input"
+          <TextInput
+            testid="captions-centery-input"
             type="number"
             step={0.01}
-            value={centerY}
-            onChange={(e) => setCenterY(snapToHalf(Number(e.target.value)))}
-            style={inputStyle}
+            value={String(centerY)}
+            onChange={(v) => setCenterY(snapToHalf(Number(v)))}
+            style={{ flex: 1 }}
           />
         </div>
 

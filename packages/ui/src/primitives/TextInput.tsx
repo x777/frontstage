@@ -8,10 +8,14 @@ export function TextInput(props: {
   disabled?: boolean;
   testid?: string;
   type?: string;
+  min?: number | string;
+  max?: number | string;
+  step?: number | string;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  onBlur?: () => void;
   style?: React.CSSProperties;
 }) {
-  const { value, onChange, placeholder, disabled, testid, type = "text", onKeyDown, style } = props;
+  const { value, onChange, placeholder, disabled, testid, type = "text", min, max, step, onKeyDown, onBlur, style } = props;
   const [focused, setFocused] = useState(false);
 
   return (
@@ -21,10 +25,13 @@ export function TextInput(props: {
       disabled={disabled}
       value={value}
       placeholder={placeholder}
+      min={min}
+      max={max}
+      step={step}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onBlur={() => { setFocused(false); onBlur?.(); }}
       style={{
         background: theme.bg.raised,
         color: theme.text.primary,

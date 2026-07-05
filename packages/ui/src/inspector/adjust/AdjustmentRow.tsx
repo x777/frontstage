@@ -37,9 +37,9 @@ export function AdjustmentRow({
     >
       <span
         style={{
-          fontSize: theme.fontSize.xs,
+          fontSize: theme.fontSize.sm,
           color: theme.text.secondary,
-          minWidth: theme.size.inspectorLabel,
+          minWidth: theme.size.adjustLabelCol,
           flexShrink: 0,
         }}
       >

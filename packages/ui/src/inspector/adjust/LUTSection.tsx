@@ -201,9 +201,9 @@ export function LUTSection({ store, clipIds, engineRef, library, reconciler }: L
         <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
           <span
             style={{
-              fontSize: theme.fontSize.xs,
+              fontSize: theme.fontSize.sm,
               color: theme.text.secondary,
-              minWidth: theme.size.inspectorLabel,
+              minWidth: theme.size.adjustLabelCol,
               flexShrink: 0,
             }}
           >

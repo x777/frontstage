@@ -1,32 +1,35 @@
 import { useRef } from "react";
 import { theme } from "../theme/theme.js";
+import { TextInput } from "../primitives/TextInput.js";
+import { Checkbox } from "../primitives/Checkbox.js";
 
 const labelToTestId = (label: string) =>
   "inspector-" + label.toLowerCase().replace(/\s+/g, "-");
 
-const inputStyle: React.CSSProperties = {
-  background: theme.bg.raised,
-  color: theme.text.primary,
-  border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-  borderRadius: theme.radius.xs,
-  padding: `${theme.spacing.xxs} ${theme.spacing.xs}`,
-  fontSize: theme.fontSize.xs,
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const rowStyle: React.CSSProperties = {
+export const rowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: theme.spacing.xs,
   padding: `${theme.spacing.xxs} 0`,
 };
 
-const labelStyle: React.CSSProperties = {
-  fontSize: theme.fontSize.xs,
+// Canonical inspector row label — matches Swift's InspectorRow (Inspector/Components/InspectorRow.swift):
+// natural width (no fixed column), sm/medium/primary. Used for both editable property rows here and
+// aligned into CaptionsTab, which is InspectorRow-based in Swift too.
+export const labelStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.sm,
+  fontWeight: theme.fontWeight.medium,
+  color: theme.text.primary,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const valueStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.sm,
   color: theme.text.secondary,
-  minWidth: theme.size.inspectorLabel,
+  minWidth: theme.size.inspectorValue,
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
   flexShrink: 0,
 };
 
@@ -86,19 +89,19 @@ export function NumberField({ label, value, onChange, onCommit, step = 1, min, m
       >
         {label}
       </span>
-      <input
+      <TextInput
         type="number"
-        value={value}
-        step={step}
+        value={String(value)}
         min={min}
         max={max}
-        onChange={(e) => {
-          const v = clamp(Number(e.target.value));
-          if (!isNaN(v)) onChange(v);
+        step={step}
+        onChange={(v) => {
+          const n = clamp(Number(v));
+          if (!isNaN(n)) onChange(n);
         }}
         onBlur={() => onCommit?.(localRef.current)}
-        style={inputStyle}
-        data-testid={testId + "-input"}
+        testid={testId + "-input"}
+        style={{ flex: 1 }}
       />
     </div>
   );
@@ -130,7 +133,7 @@ export function SliderField({ label, value, onChange, onCommit, min = 0, max = 1
         style={{ flex: 1 }}
         data-testid={testId + "-input"}
       />
-      <span style={{ ...labelStyle, minWidth: theme.size.inspectorValue, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <span style={valueStyle}>
         {value.toFixed(2)}
       </span>
     </div>
@@ -148,12 +151,8 @@ export function ToggleField({ label, value, onChange }: ToggleFieldProps) {
   return (
     <div style={rowStyle} data-testid={testId}>
       <span style={labelStyle}>{label}</span>
-      <input
-        type="checkbox"
-        checked={value}
-        onChange={(e) => onChange(e.target.checked)}
-        data-testid={testId + "-input"}
-      />
+      <span style={{ flex: 1 }} />
+      <Checkbox checked={value} onChange={onChange} testid={testId + "-input"} />
     </div>
   );
 }
@@ -170,13 +169,12 @@ export function TextField({ label, value, onChange, onCommit }: TextFieldProps) 
   return (
     <div style={rowStyle} data-testid={testId}>
       <span style={labelStyle}>{label}</span>
-      <input
-        type="text"
+      <TextInput
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={(e) => onCommit?.(e.target.value)}
-        style={inputStyle}
-        data-testid={testId + "-input"}
+        onChange={onChange}
+        onBlur={() => onCommit?.(value)}
+        testid={testId + "-input"}
+        style={{ flex: 1 }}
       />
     </div>
   );
@@ -198,9 +196,9 @@ export function Section({ title, children }: SectionProps) {
     >
       <div
         style={{
-          fontSize: theme.fontSize.micro,
+          fontSize: theme.fontSize.xxs,
           fontWeight: theme.fontWeight.semibold,
-          color: theme.text.tertiary,
+          color: theme.text.muted,
           letterSpacing: theme.letterSpacing.wide,
           textTransform: "uppercase",
           marginBottom: theme.spacing.xxs,

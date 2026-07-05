@@ -17,7 +17,7 @@ import type { Clip, Transform, Crop, TextStyle } from "@palmier/core";
 import type { PlaybackEngine } from "@palmier/engine";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
-import { NumberField, SliderField, ToggleField, TextField, Section } from "./fields.js";
+import { NumberField, SliderField, ToggleField, TextField, Section, rowStyle, labelStyle } from "./fields.js";
 import { KeyframeLanes } from "./KeyframeLanes.js";
 import { BasicCorrectionSection } from "./adjust/BasicCorrectionSection.js";
 import { CurvesSection } from "./adjust/CurvesSection.js";
@@ -81,6 +81,8 @@ export function InspectorPanel({ store, library, engineRef, lutReconciler }: Ins
     return () => { cancelled = true; };
   }, [engineRef, playhead, timeline, selection]);
 
+  // Swift has no literal "nothing selected" placeholder (InspectorView falls back to project
+  // metadata) — the closest analog is marqueeSelectionSummary's centered sm/tertiary text.
   const emptyState = (
     <div
       data-testid="inspector-empty"
@@ -89,7 +91,7 @@ export function InspectorPanel({ store, library, engineRef, lutReconciler }: Ins
         alignItems: "center",
         justifyContent: "center",
         height: "100%",
-        color: theme.text.muted,
+        color: theme.text.tertiary,
         fontSize: theme.fontSize.sm,
       }}
     >
@@ -447,28 +449,15 @@ export function InspectorPanel({ store, library, engineRef, lutReconciler }: Ins
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: theme.spacing.xs,
-        padding: `${theme.spacing.xxs} 0`,
-      }}
-    >
+    <div style={rowStyle}>
+      <span style={labelStyle}>{label}</span>
       <span
         style={{
-          fontSize: theme.fontSize.xs,
+          fontSize: theme.fontSize.sm,
           color: theme.text.secondary,
-          minWidth: theme.size.inspectorLabel,
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontSize: theme.fontSize.xs,
-          color: theme.text.primary,
+          flex: 1,
+          minWidth: 0,
+          textAlign: "right",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -485,25 +474,9 @@ type TextAlignment = "left" | "center" | "right";
 function AlignmentField({ value, onChange }: { value: TextAlignment; onChange: (v: TextAlignment) => void }) {
   const options: TextAlignment[] = ["left", "center", "right"];
   return (
-    <div
-      data-testid="inspector-alignment"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: theme.spacing.xs,
-        padding: `${theme.spacing.xxs} 0`,
-      }}
-    >
-      <span
-        style={{
-          fontSize: theme.fontSize.xs,
-          color: theme.text.secondary,
-          minWidth: theme.size.inspectorLabel,
-          flexShrink: 0,
-        }}
-      >
-        Align
-      </span>
+    <div data-testid="inspector-alignment" style={rowStyle}>
+      <span style={labelStyle}>Align</span>
+      <span style={{ flex: 1 }} />
       <div style={{ display: "flex", gap: theme.spacing.xxs }}>
         {options.map((opt) => (
           <button

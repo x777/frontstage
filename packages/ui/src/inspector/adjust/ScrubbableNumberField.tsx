@@ -69,6 +69,20 @@ export function ScrubbableNumberField({
 
   const cancelEdit = () => { cancelRef.current = true; setEditing(false); };
 
+  // Matches Swift's ScrubbableNumberField: sm/medium/tabular-nums, no visible box chrome (plain
+  // inline text, per SwiftUI's `.plain` TextField style) — only the foreground color distinguishes
+  // editing (primary) from display (accent when interactive, tertiary when mixed).
+  const baseFieldStyle: React.CSSProperties = {
+    width: theme.size.inspectorValue,
+    textAlign: "right",
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    fontVariantNumeric: "tabular-nums",
+    padding: `${theme.spacing.xxs} ${theme.spacing.sm}`,
+    flexShrink: 0,
+    boxSizing: "border-box",
+  };
+
   if (editing) {
     return (
       <input
@@ -83,18 +97,11 @@ export function ScrubbableNumberField({
         }}
         onBlur={commitEdit}
         style={{
-          width: theme.size.inspectorValue,
-          background: theme.bg.raised,
-          color: theme.accent.primary,
-          border: `${theme.borderWidth.hairline} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.xs,
-          fontSize: theme.fontSize.xs,
-          textAlign: "right",
+          ...baseFieldStyle,
+          background: "transparent",
+          border: "none",
           outline: "none",
-          padding: `0 ${theme.spacing.xxs}`,
-          fontVariantNumeric: "tabular-nums",
-          flexShrink: 0,
-          boxSizing: "border-box",
+          color: theme.text.primary,
         }}
         data-testid="scrub-field-input"
       />
@@ -108,15 +115,11 @@ export function ScrubbableNumberField({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       style={{
+        ...baseFieldStyle,
         display: "inline-block",
-        width: theme.size.inspectorValue,
-        textAlign: "right",
-        fontSize: theme.fontSize.xs,
-        color: value === null ? theme.text.muted : theme.accent.primary,
+        color: value === null ? theme.text.tertiary : theme.accent.primary,
         cursor: "ew-resize",
         userSelect: "none",
-        fontVariantNumeric: "tabular-nums",
-        flexShrink: 0,
       }}
       data-testid="scrub-field"
     >
