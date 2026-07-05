@@ -100,3 +100,53 @@ describe("WebAiGateway", () => {
     expect(headers?.["Content-Type"]).toBe("application/json");
   });
 });
+
+describe("WebAiGateway relay mode", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("streamChat hits <origin>/api/v1/chat/completions with credentials included, X-OpenRouter-Key set, no Authorization header", async () => {
+    let capturedUrl: string | undefined;
+    let capturedInit: RequestInit | undefined;
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      capturedUrl = url;
+      capturedInit = init;
+      return { ok: true, status: 200, body: makeFakeReadableStream("data: [DONE]\n") };
+    });
+
+    const gw = new WebAiGateway({ origin: "https://frontstage.studio", getKeys: () => ({ openRouterKey: "or-secret" }) });
+    for await (const _ of gw.streamChat({ model: "x", tools: [], messages: [] })) { /* drain */ }
+
+    expect(capturedUrl).toBe("https://frontstage.studio/api/v1/chat/completions");
+    expect(capturedInit?.credentials).toBe("include");
+    const headers = capturedInit?.headers as Record<string, string>;
+    expect(headers["X-OpenRouter-Key"]).toBe("or-secret");
+    expect(headers["Authorization"]).toBeUndefined();
+  });
+
+  it("omits X-OpenRouter-Key when getKeys() has no openRouterKey", async () => {
+    let capturedInit: RequestInit | undefined;
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      capturedInit = init;
+      return { ok: true, status: 200, body: makeFakeReadableStream("data: [DONE]\n") };
+    });
+
+    const gw = new WebAiGateway({ origin: "", getKeys: () => ({}) });
+    for await (const _ of gw.streamChat({ model: "x", tools: [], messages: [] })) { /* drain */ }
+    const headers = capturedInit?.headers as Record<string, string>;
+    expect(headers["X-OpenRouter-Key"]).toBeUndefined();
+  });
+
+  it("an empty relay origin (same-origin default) resolves to a bare /api path", async () => {
+    let capturedUrl: string | undefined;
+    vi.stubGlobal("fetch", async (url: string) => {
+      capturedUrl = url;
+      return { ok: true, status: 200, body: makeFakeReadableStream("data: [DONE]\n") };
+    });
+
+    const gw = new WebAiGateway({ origin: "", getKeys: () => ({}) });
+    for await (const _ of gw.streamChat({ model: "x", tools: [], messages: [] })) { /* drain */ }
+    expect(capturedUrl).toBe("/api/v1/chat/completions");
+  });
+});

@@ -6,7 +6,7 @@ import type { PlaybackEngine } from "@frontstage/engine";
 import { renderSpanToMp4 } from "@frontstage/engine";
 import "@frontstage/ui/theme/tokens.css";
 import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@frontstage/ui";
-import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@frontstage/ui";
+import type { KeyConfig, FalKeyConfig, RelayConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@frontstage/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@frontstage/ai";
 import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@frontstage/ai";
 import { App } from "./App.js";
@@ -19,7 +19,12 @@ import { WebGenGateway } from "./web-gen-gateway.js";
 import { makeWebAudioExtractor } from "./web-audio-extract.js";
 import { createWebMediaImport } from "./web-media-import.js";
 import { createWebSkillStorage, createWebSkillCatalogDeps } from "./web-skills.js";
+import { getRelayOrigin, getUserKeys, setUserKeys, fetchMe, loginUrl, logout } from "./relay-config.js";
 import "./web-fs-test-entry.js";
+
+// Build-time flag set by the site build script (T3) — the deployed cloud site opts into relay
+// mode; every other build (self-host, desktop, local dev) keeps today's self-hosted proxy mode.
+const RELAY_MODE = (import.meta.env.VITE_RELAY_MODE as string | undefined) === "1";
 
 interface FrontstageAppProps {
   store: EditorStore;
@@ -49,10 +54,25 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
   const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("frontstage.ai.proxyUrl") ?? aiProxyUrl);
   const [falEnabled, setFalEnabled] = useState(false);
   const [confirmThreshold, setConfirmThreshold] = useState(() => readConfirmThreshold());
+  const [relayUser, setRelayUser] = useState<{ id: string; name: string; provider: string } | null>(null);
+  const [relayFalKey, setRelayFalKey] = useState(() => getUserKeys().falKey ?? "");
+  const [relayOpenRouterKey, setRelayOpenRouterKey] = useState(() => getUserKeys().openRouterKey ?? "");
 
   useEffect(() => {
     genGateway.hasKey().then(setFalEnabled).catch(() => setFalEnabled(false));
   }, [genGateway]);
+
+  useEffect(() => {
+    if (!RELAY_MODE) return;
+    fetchMe().then(setRelayUser).catch(() => setRelayUser(null));
+  }, []);
+
+  function handleSaveRelayKeys(keys: { falKey?: string; openRouterKey?: string }) {
+    setUserKeys(keys);
+    if (keys.falKey !== undefined) setRelayFalKey(keys.falKey);
+    if (keys.openRouterKey !== undefined) setRelayOpenRouterKey(keys.openRouterKey);
+    genGateway.hasKey().then(setFalEnabled).catch(() => setFalEnabled(false));
+  }
 
   function onAgentModelChange(id: string) {
     setAgentModel(id);
@@ -86,6 +106,21 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
 
   const falKeyConfig: FalKeyConfig = { kind: "proxyInfo", enabled: falEnabled };
 
+  const relayConfig: RelayConfig | undefined = RELAY_MODE
+    ? {
+        auth: relayUser
+          ? {
+              status: "signedIn",
+              user: { name: relayUser.name, provider: relayUser.provider },
+              onLogout: () => { logout().finally(() => setRelayUser(null)); },
+            }
+          : { status: "signedOut", loginUrl },
+        falKey: relayFalKey,
+        openRouterKey: relayOpenRouterKey,
+        onSaveKeys: handleSaveRelayKeys,
+      }
+    : undefined;
+
   return (
     <App
       store={store}
@@ -109,6 +144,7 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
         settings: {
           keyConfig,
           falKeyConfig,
+          relay: relayConfig,
           llmModels: listLLMModels(),
           imageModels: listImageModels(),
           agentModel,
@@ -146,7 +182,9 @@ async function bootstrap() {
   const aiProxyToken =
     (window as unknown as Record<string, unknown>).__aiProxyToken as string | undefined ??
     (import.meta.env.VITE_AI_PROXY_TOKEN as string | undefined);
-  const webAiGateway = new WebAiGateway(aiProxyUrl, aiProxyToken);
+  const webAiGateway = RELAY_MODE
+    ? new WebAiGateway({ origin: getRelayOrigin(), getKeys: getUserKeys })
+    : new WebAiGateway(aiProxyUrl, aiProxyToken);
   (window as unknown as Record<string, unknown>).__webAiGateway = webAiGateway;
 
   // If __pickSaveFile is injected (e2e seam), use it; otherwise real showSaveFilePicker.
@@ -180,8 +218,11 @@ async function bootstrap() {
   (window as unknown as Record<string, unknown>).__skillStore = skillStore;
   (window as unknown as Record<string, unknown>).__skillCatalog = skillCatalog;
 
-  // Generation orchestrator (image/video jobs) — routed through the self-hosted proxy (fal key never in browser).
-  const genGateway = new WebGenGateway(aiProxyUrl, aiProxyToken);
+  // Generation orchestrator (image/video jobs) — routed through the self-hosted proxy (fal key
+  // never in browser) or, in relay mode, through the cloud relay with the browser-resident key header.
+  const genGateway = RELAY_MODE
+    ? new WebGenGateway({ origin: getRelayOrigin(), getKeys: getUserKeys })
+    : new WebGenGateway(aiProxyUrl, aiProxyToken);
   const generationHost: GenerationHost = {
     addPlaceholder: (entry) => library.addPlaceholder(entry),
     patchEntry: (id, patch) => library.patchEntry(id, patch),
@@ -344,11 +385,15 @@ async function bootstrap() {
   // renderMatte (M13A T1, create_matte) is wired here rather than inside createWebMediaImport:
   // it's pure canvas rendering with no host-specific I/O, so it's the same @frontstage/ui function on
   // both hosts — spread on top of the web-specific fromBytes/fromUrl facade.
-  const mediaImportFacade = { ...createWebMediaImport({
-    library,
-    proxyUrl: () => localStorage.getItem("frontstage.ai.proxyUrl") ?? aiProxyUrl,
-    proxyToken: () => localStorage.getItem("frontstage.ai.proxyToken") ?? undefined,
-  }), renderMatte: renderMattePng };
+  const mediaImportFacade = { ...createWebMediaImport(
+    RELAY_MODE
+      ? { library, relayOrigin: () => getRelayOrigin() }
+      : {
+          library,
+          proxyUrl: () => localStorage.getItem("frontstage.ai.proxyUrl") ?? aiProxyUrl,
+          proxyToken: () => localStorage.getItem("frontstage.ai.proxyToken") ?? undefined,
+        },
+  ), renderMatte: renderMattePng };
 
   const engineRef: { current: PlaybackEngine | null } = { current: null };
   const executor = new ToolExecutor(buildCatalog(), {

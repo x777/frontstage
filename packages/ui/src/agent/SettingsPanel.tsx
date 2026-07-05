@@ -58,6 +58,19 @@ export interface McpSettings {
   regenerateToken: () => Promise<string>;
 }
 
+// The web relay's account pane (M18C T2) — OAuth sign-in + browser-resident BYO keys, in place of
+// the self-host proxy's OpenRouter/fal.ai sections when a site is served through the cloud relay.
+export type RelayAuthState =
+  | { status: "signedOut"; loginUrl: (provider: "google" | "github") => string }
+  | { status: "signedIn"; user: { name: string; provider: string }; onLogout: () => void };
+
+export interface RelayConfig {
+  auth: RelayAuthState;
+  falKey: string;
+  openRouterKey: string;
+  onSaveKeys: (keys: { falKey?: string; openRouterKey?: string }) => void;
+}
+
 export interface SettingsPanelProps {
   keyConfig: KeyConfig;
   falKeyConfig?: FalKeyConfig;
@@ -72,6 +85,7 @@ export interface SettingsPanelProps {
   onClose?: () => void;
   mcp?: McpSettings;
   skills?: SkillsPaneProps;
+  relay?: RelayConfig;
 }
 
 function KeychainConfig({
@@ -177,6 +191,64 @@ function FalProxyInfo({ cfg }: { cfg: Extract<FalKeyConfig, { kind: "proxyInfo" 
     >
       {cfg.enabled ? "fal.ai: configured on proxy ✓" : "fal.ai: not configured — set FAL_KEY on your proxy"}
     </span>
+  );
+}
+
+// Signed-out: "Sign in with Google/GitHub" (navigates via loginUrl — a full-page redirect into the
+// OAuth consent flow, not a fetch). Signed-in: name + provider + Logout + the two BYO key fields,
+// persisted on every keystroke via onSaveKeys (mirrors the keychain fields' immediate-save feel).
+function RelayAuthPane({ cfg }: { cfg: RelayConfig }) {
+  const [falKey, setFalKey] = useState(cfg.falKey);
+  const [openRouterKey, setOpenRouterKey] = useState(cfg.openRouterKey);
+
+  if (cfg.auth.status === "signedOut") {
+    const { loginUrl } = cfg.auth;
+    return (
+      <div data-testid="settings-relay" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
+        <span data-testid="settings-relay-status" style={{ fontSize: theme.fontSize.xs, color: theme.text.muted }}>
+          Not signed in
+        </span>
+        <div style={{ display: "flex", gap: theme.spacing.xs }}>
+          <Button testid="settings-relay-google" onClick={() => { window.location.href = loginUrl("google"); }}>
+            Sign in with Google
+          </Button>
+          <Button testid="settings-relay-github" onClick={() => { window.location.href = loginUrl("github"); }}>
+            Sign in with GitHub
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const { user, onLogout } = cfg.auth;
+  return (
+    <div data-testid="settings-relay" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span data-testid="settings-relay-user" style={{ fontSize: theme.fontSize.xs, color: theme.text.secondary }}>
+          {user.name} · {user.provider}
+        </span>
+        <Button testid="settings-relay-logout" size="small" onClick={onLogout}>
+          Log out
+        </Button>
+      </div>
+      <TextInput
+        type="password"
+        testid="settings-relay-fal-key"
+        value={falKey}
+        onChange={(v) => { setFalKey(v); cfg.onSaveKeys({ falKey: v }); }}
+        placeholder="fal.ai key"
+        style={fullWidthInput}
+      />
+      <TextInput
+        type="password"
+        testid="settings-relay-openrouter-key"
+        value={openRouterKey}
+        onChange={(v) => { setOpenRouterKey(v); cfg.onSaveKeys({ openRouterKey: v }); }}
+        placeholder="OpenRouter key"
+        style={fullWidthInput}
+      />
+      <span style={{ fontSize: theme.fontSize.xxs, color: theme.text.muted }}>Keys stay in this browser.</span>
+    </div>
   );
 }
 
@@ -328,6 +400,7 @@ export function SettingsPanel({
   onClose,
   mcp,
   skills,
+  relay,
 }: SettingsPanelProps) {
   const [tab, setTab] = useState<SettingsTab>("agent");
 
@@ -427,9 +500,15 @@ export function SettingsPanel({
           >
             {/* Agent: OpenRouter key · agent model · MCP server */}
             <div style={paneStyle("agent")}>
-              <PaneSection header="OpenRouter">
-                {keyConfig.kind === "keychain" ? <KeychainConfig cfg={keyConfig} /> : <ProxyConfig cfg={keyConfig} />}
-              </PaneSection>
+              {relay ? (
+                <PaneSection header="Frontstage Cloud">
+                  <RelayAuthPane cfg={relay} />
+                </PaneSection>
+              ) : (
+                <PaneSection header="OpenRouter">
+                  {keyConfig.kind === "keychain" ? <KeychainConfig cfg={keyConfig} /> : <ProxyConfig cfg={keyConfig} />}
+                </PaneSection>
+              )}
               <ModelPicker
                 testid="settings-agent-model"
                 label="Agent model"
@@ -447,7 +526,7 @@ export function SettingsPanel({
 
             {/* Generation: fal.ai key · image model · confirm threshold */}
             <div style={paneStyle("generation")}>
-              {falKeyConfig && (
+              {!relay && falKeyConfig && (
                 <section data-testid="settings-fal" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
                   <span style={sectionHeaderStyle}>fal.ai</span>
                   {falKeyConfig.kind === "keychain" ? (

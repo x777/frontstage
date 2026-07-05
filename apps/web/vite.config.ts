@@ -19,8 +19,12 @@ const crossOriginIsolation = (): Plugin => ({
   },
 });
 
-export default defineConfig({
+// The relay-hosted deployment (T3) serves this build under /studio/, but the local dev server and
+// e2e suite must keep hitting "/" — otherwise playwright.config.ts's baseURL breaks. `mode` is
+// "production" only for `vite build`, never for `vite`/`vite dev`, so this only affects production output.
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/studio/" : "/",
   plugins: [react(), crossOriginIsolation()],
   server: { port: 5181 },
   preview: { port: 5181 },
-});
+}));

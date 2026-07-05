@@ -68,7 +68,7 @@ export { MentionInput } from "./agent/MentionInput.js";
 export type { MentionItem } from "./agent/MentionInput.js";
 export { useAgentSession } from "./agent/use-agent-session.js";
 export { SettingsPanel } from "./agent/SettingsPanel.js";
-export type { SettingsPanelProps, KeyConfig, FalKeyConfig } from "./agent/SettingsPanel.js";
+export type { SettingsPanelProps, KeyConfig, FalKeyConfig, RelayConfig, RelayAuthState } from "./agent/SettingsPanel.js";
 export { CONFIRM_THRESHOLD_STORAGE_KEY, DEFAULT_CONFIRM_THRESHOLD, readConfirmThreshold, writeConfirmThreshold } from "./agent/generation-settings.js";
 export { ModelPicker } from "./agent/ModelPicker.js";
 export type { ModelPickerProps } from "./agent/ModelPicker.js";

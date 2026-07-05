@@ -4,7 +4,7 @@ import type { ProjectSession } from "@frontstage/core";
 import type { AgentSession, ChatSessionStore, ModelEntry, ToolContext } from "@frontstage/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
-import type { KeyConfig, FalKeyConfig, McpSettings } from "../agent/SettingsPanel.js";
+import type { KeyConfig, FalKeyConfig, McpSettings, RelayConfig } from "../agent/SettingsPanel.js";
 import type { SkillsPaneProps } from "../skills/SkillsPane.js";
 import { ProjectActivityButton } from "./ProjectActivityView.js";
 import {
@@ -95,6 +95,7 @@ export interface EditorProps {
       onConfirmThresholdChange: (value: number) => void;
       mcp?: McpSettings;
       skills?: SkillsPaneProps;
+      relay?: RelayConfig;
     };
   };
 }
@@ -506,6 +507,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
           onClose={() => setSettingsVisible(false)}
           mcp={agent.settings.mcp}
           skills={agent.settings.skills}
+          relay={agent.settings.relay}
         />
       )}
 

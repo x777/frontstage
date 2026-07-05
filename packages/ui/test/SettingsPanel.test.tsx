@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { SettingsPanel } from "../src/agent/SettingsPanel.js";
-import type { McpSettings } from "../src/agent/SettingsPanel.js";
+import type { McpSettings, RelayConfig } from "../src/agent/SettingsPanel.js";
 import type { ModelEntry, SkillStorage, SkillCatalogDeps } from "@frontstage/ai";
 import { SkillStore, SkillCatalog } from "@frontstage/ai";
 
@@ -286,4 +286,104 @@ test("SettingsPanel: Skills section renders the SkillsPane when the skills prop 
 test("SettingsPanel: Skills section absent when the skills prop is not provided", () => {
   render(<SettingsPanel {...makeKeychainProps()} />);
   expect(screen.queryByTestId("settings-skills")).toBeNull();
+});
+
+// --- relay (M18C T2: cloud sign-in + browser-stored BYO keys) ---
+
+function withMockedLocation(fn: () => void) {
+  const original = window.location;
+  // Object.defineProperty's descriptor.value is `any`, sidestepping the direct-assignment type
+  // error TS raises for window.location (lib.dom.d.ts types its setter/getter asymmetrically).
+  Object.defineProperty(window, "location", { value: { href: "" }, writable: true, configurable: true });
+  try {
+    fn();
+  } finally {
+    Object.defineProperty(window, "location", { value: original, writable: true, configurable: true });
+  }
+}
+
+function makeRelayProps(auth: RelayConfig["auth"]): RelayConfig {
+  return { auth, falKey: "", openRouterKey: "", onSaveKeys: vi.fn() };
+}
+
+test("SettingsPanel relay: not provided — no relay section, OpenRouter/fal sections render as before", () => {
+  render(<SettingsPanel {...makeKeychainProps()} falKeyConfig={{ kind: "proxyInfo", enabled: true }} />);
+  expect(screen.queryByTestId("settings-relay")).toBeNull();
+  expect(screen.getByTestId("settings-key")).toBeTruthy();
+  expect(screen.getByTestId("settings-fal")).toBeTruthy();
+});
+
+test("SettingsPanel relay: provided — replaces the OpenRouter section and hides the fal.ai section", () => {
+  const relay = makeRelayProps({ status: "signedOut", loginUrl: () => "https://relay.example/api/auth/google" });
+  render(<SettingsPanel {...makeKeychainProps()} falKeyConfig={{ kind: "proxyInfo", enabled: true }} relay={relay} />);
+  expect(screen.getByTestId("settings-relay")).toBeTruthy();
+  expect(screen.queryByTestId("settings-key")).toBeNull();
+  expect(screen.queryByTestId("settings-fal")).toBeNull();
+});
+
+test("SettingsPanel relay signedOut: shows Sign in with Google/GitHub buttons", () => {
+  const relay = makeRelayProps({ status: "signedOut", loginUrl: (p) => `https://relay.example/api/auth/${p}` });
+  render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+  expect(screen.getByTestId("settings-relay-google").textContent).toContain("Google");
+  expect(screen.getByTestId("settings-relay-github").textContent).toContain("GitHub");
+});
+
+test("SettingsPanel relay signedOut: clicking Sign in with Google navigates to loginUrl('google')", () => {
+  withMockedLocation(() => {
+    const relay = makeRelayProps({ status: "signedOut", loginUrl: (p) => `https://relay.example/api/auth/${p}` });
+    render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+    fireEvent.click(screen.getByTestId("settings-relay-google"));
+    expect(window.location.href).toBe("https://relay.example/api/auth/google");
+  });
+});
+
+test("SettingsPanel relay signedOut: clicking Sign in with GitHub navigates to loginUrl('github')", () => {
+  withMockedLocation(() => {
+    const relay = makeRelayProps({ status: "signedOut", loginUrl: (p) => `https://relay.example/api/auth/${p}` });
+    render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+    fireEvent.click(screen.getByTestId("settings-relay-github"));
+    expect(window.location.href).toBe("https://relay.example/api/auth/github");
+  });
+});
+
+test("SettingsPanel relay signedIn: shows the user's name, provider, and a Logout button", () => {
+  const onLogout = vi.fn();
+  const relay = makeRelayProps({ status: "signedIn", user: { name: "Ada Lovelace", provider: "google" }, onLogout });
+  render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+  const userLine = screen.getByTestId("settings-relay-user").textContent ?? "";
+  expect(userLine).toContain("Ada Lovelace");
+  expect(userLine).toContain("google");
+  expect(screen.getByTestId("settings-relay-logout")).toBeTruthy();
+});
+
+test("SettingsPanel relay signedIn: clicking Logout calls onLogout", () => {
+  const onLogout = vi.fn();
+  const relay = makeRelayProps({ status: "signedIn", user: { name: "Ada", provider: "github" }, onLogout });
+  render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+  fireEvent.click(screen.getByTestId("settings-relay-logout"));
+  expect(onLogout).toHaveBeenCalledTimes(1);
+});
+
+test("SettingsPanel relay signedIn: shows the 'Keys stay in this browser.' copy and two password fields", () => {
+  const relay = makeRelayProps({ status: "signedIn", user: { name: "Ada", provider: "github" }, onLogout: vi.fn() });
+  render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+  expect(screen.getByTestId("settings-relay").textContent).toContain("Keys stay in this browser.");
+  expect(screen.getByTestId("settings-relay-fal-key").getAttribute("type")).toBe("password");
+  expect(screen.getByTestId("settings-relay-openrouter-key").getAttribute("type")).toBe("password");
+});
+
+test("SettingsPanel relay signedIn: typing the fal key calls onSaveKeys({ falKey })", () => {
+  const onSaveKeys = vi.fn();
+  const relay: RelayConfig = { auth: { status: "signedIn", user: { name: "Ada", provider: "github" }, onLogout: vi.fn() }, falKey: "", openRouterKey: "", onSaveKeys };
+  render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+  fireEvent.change(screen.getByTestId("settings-relay-fal-key"), { target: { value: "fal-new-key" } });
+  expect(onSaveKeys).toHaveBeenCalledWith({ falKey: "fal-new-key" });
+});
+
+test("SettingsPanel relay signedIn: typing the OpenRouter key calls onSaveKeys({ openRouterKey })", () => {
+  const onSaveKeys = vi.fn();
+  const relay: RelayConfig = { auth: { status: "signedIn", user: { name: "Ada", provider: "github" }, onLogout: vi.fn() }, falKey: "", openRouterKey: "", onSaveKeys };
+  render(<SettingsPanel {...makeKeychainProps()} relay={relay} />);
+  fireEvent.change(screen.getByTestId("settings-relay-openrouter-key"), { target: { value: "or-new-key" } });
+  expect(onSaveKeys).toHaveBeenCalledWith({ openRouterKey: "or-new-key" });
 });

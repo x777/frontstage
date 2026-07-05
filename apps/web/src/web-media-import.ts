@@ -3,10 +3,23 @@ import { MediaLibrary, probeMediaBlob } from "@frontstage/ui";
 import { extensionForImportMime, extensionForImportUrl, importTypeForExtension } from "@frontstage/ai";
 import type { ToolContext } from "@frontstage/ai";
 
-export interface WebMediaImportDeps {
+export interface ProxyMediaImportDeps {
   library: MediaLibrary;
   proxyUrl: () => string;
   proxyToken: () => string | undefined;
+}
+
+// Relay mode (M18C T2): /import/download needs no BYO key header, only the session cookie —
+// see apps/relay/src/index.ts, which gates it on getSession() before dispatch, same as fal/download.
+export interface RelayMediaImportDeps {
+  library: MediaLibrary;
+  relayOrigin: () => string;
+}
+
+export type WebMediaImportDeps = ProxyMediaImportDeps | RelayMediaImportDeps;
+
+function isRelayDeps(deps: WebMediaImportDeps): deps is RelayMediaImportDeps {
+  return "relayOrigin" in deps;
 }
 
 function stemName(pathname: string): string {
@@ -19,7 +32,7 @@ function stemName(pathname: string): string {
 // imports read the local filesystem, which the browser sandbox doesn't allow; the tool reports
 // "not available on web" whenever this facade has no fromPath.
 export function createWebMediaImport(deps: WebMediaImportDeps): NonNullable<ToolContext["mediaImport"]> {
-  const { library, proxyUrl, proxyToken } = deps;
+  const { library } = deps;
 
   async function fromBytes(bytes: Uint8Array, mimeType: string, name?: string, folderId?: string): Promise<{ assetId: string }> {
     return library.importBytes(bytes, mimeType, name, folderId);
@@ -43,16 +56,22 @@ export function createWebMediaImport(deps: WebMediaImportDeps): NonNullable<Tool
 
     void (async () => {
       try {
-        const base = proxyUrl();
+        const relay = isRelayDeps(deps);
+        const base = relay ? `${deps.relayOrigin()}/api` : deps.proxyUrl();
         if (!base) throw new Error("No AI proxy configured. Set the proxy URL in Settings to import from URLs.");
 
         const headers: Record<string, string> = { "Content-Type": "application/json" };
-        const token = proxyToken();
-        if (token) headers["Authorization"] = "Bearer " + token;
+        let init: RequestInit = { method: "POST", headers, body: JSON.stringify({ url }) };
+        if (relay) {
+          init = { ...init, credentials: "include" };
+        } else {
+          const token = deps.proxyToken();
+          if (token) headers["Authorization"] = "Bearer " + token;
+        }
 
         let res: Response;
         try {
-          res = await fetch(base + "/import/download", { method: "POST", headers, body: JSON.stringify({ url }) });
+          res = await fetch(base + "/import/download", init);
         } catch (err) {
           throw new Error(`Could not reach the AI proxy at ${base}. Check the proxy URL in Settings. (${String(err)})`);
         }

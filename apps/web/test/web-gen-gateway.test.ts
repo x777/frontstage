@@ -176,3 +176,62 @@ describe("WebGenGateway", () => {
     });
   });
 });
+
+describe("WebGenGateway relay mode", () => {
+  let capturedUrl: string | undefined;
+  let capturedInit: RequestInit | undefined;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(handler: (url: string, init: RequestInit) => { ok: boolean; status: number; json?: () => Promise<unknown>; arrayBuffer?: () => Promise<ArrayBuffer> }) {
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      capturedUrl = url;
+      capturedInit = init;
+      return handler(url, init);
+    });
+  }
+
+  it("hasKey is local truth — no network call, true iff getKeys().falKey is set", async () => {
+    let fetchCalled = false;
+    vi.stubGlobal("fetch", async () => { fetchCalled = true; return { ok: true, status: 200, json: async () => ({ enabled: true }) }; });
+
+    const withKey = new WebGenGateway({ origin: "https://frontstage.studio", getKeys: () => ({ falKey: "fal-secret" }) });
+    expect(await withKey.hasKey()).toBe(true);
+
+    const withoutKey = new WebGenGateway({ origin: "https://frontstage.studio", getKeys: () => ({}) });
+    expect(await withoutKey.hasKey()).toBe(false);
+
+    expect(fetchCalled).toBe(false);
+  });
+
+  it("submitJob POSTs to <origin>/api/fal/submit with credentials included, X-Fal-Key set, no Authorization header", async () => {
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ jobId: "job-1" }) }));
+    const gw = new WebGenGateway({ origin: "https://frontstage.studio", getKeys: () => ({ falKey: "fal-secret" }) });
+    const result = await gw.submitJob("fal-ai/veo3/fast", { prompt: "a cat" });
+
+    expect(result).toEqual({ jobId: "job-1" });
+    expect(capturedUrl).toBe("https://frontstage.studio/api/fal/submit");
+    expect(capturedInit?.credentials).toBe("include");
+    const headers = capturedInit?.headers as Record<string, string>;
+    expect(headers["X-Fal-Key"]).toBe("fal-secret");
+    expect(headers["Authorization"]).toBeUndefined();
+  });
+
+  it("jobStatus GETs <origin>/api/fal/status with credentials included", async () => {
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ status: { status: "IN_PROGRESS" } }) }));
+    const gw = new WebGenGateway({ origin: "https://frontstage.studio", getKeys: () => ({ falKey: "fal-secret" }) });
+    await gw.jobStatus("fal-ai/veo3/fast", "job-1");
+
+    expect(capturedUrl).toBe("https://frontstage.studio/api/fal/status?model=fal-ai%2Fveo3%2Ffast&job=job-1");
+    expect(capturedInit?.credentials).toBe("include");
+  });
+
+  it("an empty relay origin (same-origin default) resolves to a bare /api path", async () => {
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ jobId: "job-1" }) }));
+    const gw = new WebGenGateway({ origin: "", getKeys: () => ({}) });
+    await gw.submitJob("fal-ai/veo3/fast", {});
+    expect(capturedUrl).toBe("/api/fal/submit");
+  });
+});
