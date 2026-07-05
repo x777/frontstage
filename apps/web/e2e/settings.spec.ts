@@ -33,7 +33,7 @@ test("settings: changing agent model updates agentSession model", async ({ page 
 
   await picker.selectOption(newValue!);
 
-  const stored = await page.evaluate(() => localStorage.getItem("palmier.agent.model"));
+  const stored = await page.evaluate(() => localStorage.getItem("frontstage.agent.model"));
   expect(stored).toBe(newValue);
 });
 
@@ -113,6 +113,6 @@ test("settings proxy: Save persists to localStorage", async ({ page }) => {
 
   await page.locator('[data-testid="settings-proxy-save"]').click();
 
-  const stored = await page.evaluate(() => localStorage.getItem("palmier.ai.proxyUrl"));
+  const stored = await page.evaluate(() => localStorage.getItem("frontstage.ai.proxyUrl"));
   expect(stored).toBe("http://test-proxy.example.com");
 });

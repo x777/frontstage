@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TEXT_ANIMATION_PRESETS, type TextAnimationPreset } from "@palmier/core";
+import { TEXT_ANIMATION_PRESETS, type TextAnimationPreset } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 
 const HIGHLIGHT_PRESETS: ReadonlySet<TextAnimationPreset> = new Set(["highlightPop", "highlightBlock"]);

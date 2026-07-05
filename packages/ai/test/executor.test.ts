@@ -5,8 +5,8 @@ import {
   defaultTimeline,
   defaultTransform,
   defaultCrop,
-} from "@palmier/core";
-import type { Timeline, Track } from "@palmier/core";
+} from "@frontstage/core";
+import type { Timeline, Track } from "@frontstage/core";
 import {
   ToolExecutor,
   asUndoStep,

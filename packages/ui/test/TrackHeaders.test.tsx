@@ -1,5 +1,5 @@
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import { EditorStore, defaultTimeline, type Timeline, type Track } from "@palmier/core";
+import { EditorStore, defaultTimeline, type Timeline, type Track } from "@frontstage/core";
 import { TrackHeaders } from "../src/timeline/TrackHeaders.js";
 
 // jsdom has no PointerEvent (as of jsdom 24), so @testing-library/dom's fireEvent.pointer* falls

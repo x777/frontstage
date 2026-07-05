@@ -1,5 +1,5 @@
 import { render, screen, within, fireEvent, act, waitFor } from "@testing-library/react";
-import { EditorStore, defaultTimeline, type MediaFolder, type MediaManifestEntry } from "@palmier/core";
+import { EditorStore, defaultTimeline, type MediaFolder, type MediaManifestEntry } from "@frontstage/core";
 import { MediaPanel } from "../src/media/MediaPanel.js";
 import type { MediaIndexingFacade } from "../src/media/MediaPanel.js";
 import type { IndexStatus } from "../src/media/media-indexing.js";

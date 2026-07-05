@@ -1,4 +1,4 @@
-import { timelineTotalFrames, fitShortestSide, type Timeline } from "@palmier/core";
+import { timelineTotalFrames, fitShortestSide, type Timeline } from "@frontstage/core";
 import { SourceCoordinator } from "../compositor/source-coordinator.js";
 import type { MediaByteSource } from "../media/media-source.js";
 import { FrameRenderer } from "../render/webgpu-renderer.js";

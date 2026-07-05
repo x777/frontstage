@@ -1,5 +1,5 @@
-import { parseTimecodeTag, type SourceTimecode } from "@palmier/core";
-import type { ToolContext } from "@palmier/ai";
+import { parseTimecodeTag, type SourceTimecode } from "@frontstage/core";
+import type { ToolContext } from "@frontstage/ai";
 import type { ExportSaveFilter } from "./desktop-gateway.js";
 
 export interface DesktopInteropExportDeps {

@@ -318,8 +318,8 @@ async function forward(body: string, upstream: string, apiKey: string, origin: s
       headers: {
         Authorization: "Bearer " + apiKey,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://palmier.pro",
-        "X-Title": "PalmierPro",
+        "HTTP-Referer": "https://frontstage.ai",
+        "X-Title": "FrontstagePro",
       },
       body,
     });
@@ -604,7 +604,7 @@ async function handleImportDownload(rawBody: string, origin: string, res: http.S
 }
 
 // URL shape mirrors packages/ai/src/generation/fal-wire.ts (falUploadInitiateRequest /
-// parseFalUploadInitiate / isAllowedFalHost) — this app has no runtime dep on @palmier/ai, kept
+// parseFalUploadInitiate / isAllowedFalHost) — this app has no runtime dep on @frontstage/ai, kept
 // in sync manually, same as the desktop main-process re-inlining noted there.
 async function handleFalUpload(
   req: http.IncomingMessage,

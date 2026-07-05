@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, addClipCommand, moveClipCommand, splitLinkedClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption } from "@palmier/core";
+import { findClip, addClipCommand, moveClipCommand, splitLinkedClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import type { ProjectSession, ConfirmDiscard, ProjectRef, FcpxmlTarget, FcpxmlVersion } from "@palmier/core";
+import type { ProjectSession, ConfirmDiscard, ProjectRef, FcpxmlTarget, FcpxmlVersion } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Button, MenuList } from "../primitives/index.js";
 import type { MenuListItem } from "../primitives/index.js";

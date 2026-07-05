@@ -1,4 +1,4 @@
-import { Icon, IconButton } from "@palmier/ui";
+import { Icon, IconButton } from "@frontstage/ui";
 
 const dark: React.CSSProperties = { background: "var(--bg-base)", padding: 16, display: "flex", gap: 8, alignItems: "center" };
 

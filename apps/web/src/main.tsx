@@ -1,14 +1,14 @@
 import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorStore, ProjectSession, SAMPLER_VERSION } from "@palmier/core";
-import type { GenerationLogEntry } from "@palmier/core";
-import type { PlaybackEngine } from "@palmier/engine";
-import { renderSpanToMp4 } from "@palmier/engine";
-import "@palmier/ui/theme/tokens.css";
-import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
-import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@palmier/ai";
-import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@palmier/ai";
+import { EditorStore, ProjectSession, SAMPLER_VERSION } from "@frontstage/core";
+import type { GenerationLogEntry } from "@frontstage/core";
+import type { PlaybackEngine } from "@frontstage/engine";
+import { renderSpanToMp4 } from "@frontstage/engine";
+import "@frontstage/ui/theme/tokens.css";
+import { restoreLayout, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@frontstage/ui";
+import type { KeyConfig, FalKeyConfig, GenerationFacade, MediaIndexingHost, MediaIndexingFacade } from "@frontstage/ui";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@frontstage/ai";
+import type { GenerationHost, TranscriptionHost, ToolContext, ToolResult } from "@frontstage/ai";
 import { App } from "./App.js";
 import { sampleTimeline, buildSampleLibrary } from "./sample-project.js";
 import { WebGateway } from "./web-gateway.js";
@@ -21,7 +21,7 @@ import { createWebMediaImport } from "./web-media-import.js";
 import { createWebSkillStorage, createWebSkillCatalogDeps } from "./web-skills.js";
 import "./web-fs-test-entry.js";
 
-interface PalmierAppProps {
+interface FrontstageAppProps {
   store: EditorStore;
   session: ProjectSession;
   library: Awaited<ReturnType<typeof buildSampleLibrary>>;
@@ -43,10 +43,10 @@ interface PalmierAppProps {
   skillCatalog: SkillCatalog;
 }
 
-function PalmierApp({ store, session, library, exportGateway, interopExport, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade, indexing, skillStore, skillCatalog }: PalmierAppProps) {
-  const [agentModel, setAgentModel] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
-  const [imageModel, setImageModel] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
-  const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl);
+function FrontstageApp({ store, session, library, exportGateway, interopExport, agentSession, imageGenerator, sessionStore, mentionItems, aiProxyUrl, engineRef, getGenerationLog, genGateway, generationFacade, executor, transcriptionFacade, indexing, skillStore, skillCatalog }: FrontstageAppProps) {
+  const [agentModel, setAgentModel] = useState(() => localStorage.getItem("frontstage.agent.model") ?? defaultLLMModel());
+  const [imageModel, setImageModel] = useState(() => localStorage.getItem("frontstage.image.model") ?? defaultImageModel());
+  const [proxyUrl, setProxyUrl] = useState(() => localStorage.getItem("frontstage.ai.proxyUrl") ?? aiProxyUrl);
   const [falEnabled, setFalEnabled] = useState(false);
   const [confirmThreshold, setConfirmThreshold] = useState(() => readConfirmThreshold());
 
@@ -57,13 +57,13 @@ function PalmierApp({ store, session, library, exportGateway, interopExport, age
   function onAgentModelChange(id: string) {
     setAgentModel(id);
     agentSession.setModel(id);
-    localStorage.setItem("palmier.agent.model", id);
+    localStorage.setItem("frontstage.agent.model", id);
   }
 
   function onImageModelChange(id: string) {
     setImageModel(id);
     imageGenerator.setModel(id);
-    localStorage.setItem("palmier.image.model", id);
+    localStorage.setItem("frontstage.image.model", id);
   }
 
   function onConfirmThresholdChange(value: number) {
@@ -74,13 +74,13 @@ function PalmierApp({ store, session, library, exportGateway, interopExport, age
   const keyConfig: KeyConfig = {
     kind: "proxy",
     proxyUrl,
-    proxyToken: localStorage.getItem("palmier.ai.proxyToken") ?? undefined,
+    proxyToken: localStorage.getItem("frontstage.ai.proxyToken") ?? undefined,
     // Proxy auth token (NOT the OpenRouter key — that lives only on the self-hosted proxy). Browser-resident by design for the BYO self-host model; scoped to a user-controlled endpoint.
     onSave: (url, token) => {
-      localStorage.setItem("palmier.ai.proxyUrl", url);
+      localStorage.setItem("frontstage.ai.proxyUrl", url);
       setProxyUrl(url);
-      if (token) localStorage.setItem("palmier.ai.proxyToken", token);
-      else localStorage.removeItem("palmier.ai.proxyToken");
+      if (token) localStorage.setItem("frontstage.ai.proxyToken", token);
+      else localStorage.removeItem("frontstage.ai.proxyToken");
     },
   };
 
@@ -162,8 +162,8 @@ async function bootstrap() {
 
   // Build agent session — __aiGateway seam takes precedence (e2e injects a fake)
   const agentGateway = (window as unknown as Record<string, unknown>).__aiGateway ?? webAiGateway;
-  const initialAgentModel = localStorage.getItem("palmier.agent.model") ?? defaultLLMModel();
-  const initialImageModel = localStorage.getItem("palmier.image.model") ?? defaultImageModel();
+  const initialAgentModel = localStorage.getItem("frontstage.agent.model") ?? defaultLLMModel();
+  const initialImageModel = localStorage.getItem("frontstage.image.model") ?? defaultImageModel();
   const imageGenerator = new ImageGenerator({
     gateway: agentGateway as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     host: { addMedia: (e, b) => library.addEntry(e, b), appendGenerationLog },
@@ -342,12 +342,12 @@ async function bootstrap() {
   // Reads localStorage at call time (not just the bootstrap-time aiProxyUrl) so a proxy URL/token
   // change in Settings takes effect without a reload — mirrors keyConfig's persistence keys above.
   // renderMatte (M13A T1, create_matte) is wired here rather than inside createWebMediaImport:
-  // it's pure canvas rendering with no host-specific I/O, so it's the same @palmier/ui function on
+  // it's pure canvas rendering with no host-specific I/O, so it's the same @frontstage/ui function on
   // both hosts — spread on top of the web-specific fromBytes/fromUrl facade.
   const mediaImportFacade = { ...createWebMediaImport({
     library,
-    proxyUrl: () => localStorage.getItem("palmier.ai.proxyUrl") ?? aiProxyUrl,
-    proxyToken: () => localStorage.getItem("palmier.ai.proxyToken") ?? undefined,
+    proxyUrl: () => localStorage.getItem("frontstage.ai.proxyUrl") ?? aiProxyUrl,
+    proxyToken: () => localStorage.getItem("frontstage.ai.proxyToken") ?? undefined,
   }), renderMatte: renderMattePng };
 
   const engineRef: { current: PlaybackEngine | null } = { current: null };
@@ -391,7 +391,7 @@ async function bootstrap() {
     },
   });
 
-  const sessionStore = new ChatSessionStore(localProjectStore("palmier.chats"));
+  const sessionStore = new ChatSessionStore(localProjectStore("frontstage.chats"));
 
   // Build mention items from the library's media entries
   const mentionItems = library.getManifest().entries.map((e) => ({
@@ -402,7 +402,7 @@ async function bootstrap() {
   }));
 
   // Expose for E2E tests
-  (window as unknown as Record<string, unknown>).__palmierStore = store;
+  (window as unknown as Record<string, unknown>).__frontstageStore = store;
   (window as unknown as Record<string, unknown>).__mediaLibrary = library;
   (window as unknown as Record<string, unknown>).__projectSession = session;
   (window as unknown as Record<string, unknown>).__projectGateway = gateway;
@@ -413,7 +413,7 @@ async function bootstrap() {
   if (!root) throw new Error("No #root element");
   createRoot(root).render(
     <StrictMode>
-      <PalmierApp
+      <FrontstageApp
         store={store}
         session={session}
         library={library}
@@ -446,7 +446,7 @@ bootstrap().catch((err) => {
     Object.assign(wrapper.style, { padding: "2rem", fontFamily: "monospace", color: "#c00" });
 
     const heading = document.createElement("strong");
-    heading.textContent = "Failed to start PalmierPro";
+    heading.textContent = "Failed to start FrontstagePro";
 
     const detail = document.createElement("pre");
     Object.assign(detail.style, { marginTop: "1rem", whiteSpace: "pre-wrap" });

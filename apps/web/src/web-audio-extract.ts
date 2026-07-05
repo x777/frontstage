@@ -1,4 +1,4 @@
-import { demuxMp4, buildAudioChunks, AudioDecodeManager, encodeWavPcm16Mono } from "@palmier/engine";
+import { demuxMp4, buildAudioChunks, AudioDecodeManager, encodeWavPcm16Mono } from "@frontstage/engine";
 
 export interface WebAudioExtractDeps {
   openBlob(mediaRef: string): Promise<Blob>;

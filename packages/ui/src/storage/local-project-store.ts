@@ -1,4 +1,4 @@
-import type { ProjectStore } from "@palmier/core";
+import type { ProjectStore } from "@frontstage/core";
 
 /** ProjectStore backed by localStorage, keyed `namespace:name`. Falls back to an in-memory Map when localStorage is unavailable. */
 export function localProjectStore(namespace: string): ProjectStore {

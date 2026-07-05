@@ -23,7 +23,7 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
       MCP_PORT: String(MCP_PORT),
     },
   });
@@ -149,7 +149,7 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
 
     // 7b. tools/call: add_texts edits the live timeline
     const beforeCount = await page.evaluate(() => {
-      const store = (window as any).__palmierStore;
+      const store = (window as any).__frontstageStore;
       const tl = store.getSnapshot().timeline;
       return tl.tracks.reduce((sum: number, tr: any) => sum + tr.clips.length, 0);
     });
@@ -165,7 +165,7 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
 
     // The live timeline must have gained a clip
     const afterCount = await page.evaluate(() => {
-      const store = (window as any).__palmierStore;
+      const store = (window as any).__frontstageStore;
       const tl = store.getSnapshot().timeline;
       return tl.tracks.reduce((sum: number, tr: any) => sum + tr.clips.length, 0);
     });
@@ -182,23 +182,23 @@ test("MCP server: 200 with token, 401 no token, 403 bad origin, regenerate, disa
     }
     expect(badCallIsError).toBe(true);
 
-    // 7d. resources/list: two resources — palmier://models + palmier://timeline
+    // 7d. resources/list: two resources — frontstage://models + frontstage://timeline
     const resList = await client.listResources();
     expect(resList.resources.length).toBe(2);
     const resUris = resList.resources.map((r: any) => r.uri);
-    expect(resUris).toContain("palmier://models");
-    expect(resUris).toContain("palmier://timeline");
+    expect(resUris).toContain("frontstage://models");
+    expect(resUris).toContain("frontstage://timeline");
 
-    // 7e. resources/read palmier://models → MODEL_CATALOG JSON with known model id
-    const modelsRes = await client.readResource({ uri: "palmier://models" });
+    // 7e. resources/read frontstage://models → MODEL_CATALOG JSON with known model id
+    const modelsRes = await client.readResource({ uri: "frontstage://models" });
     const modelsCatalog = JSON.parse(modelsRes.contents[0].text);
     expect(Array.isArray(modelsCatalog)).toBe(true);
     const modelIds = modelsCatalog.map((m: any) => m.id);
     expect(modelIds).toContain("anthropic/claude-sonnet-5");
 
-    // 7f. resources/read palmier://timeline → reflects live edits
+    // 7f. resources/read frontstage://timeline → reflects live edits
     // (add_texts was already called in 7b — timeline has at least one clip)
-    const tlRes = await client.readResource({ uri: "palmier://timeline" });
+    const tlRes = await client.readResource({ uri: "frontstage://timeline" });
     const tlJson = JSON.parse(tlRes.contents[0].text);
     expect(typeof tlJson.fps).toBe("number");
     const allClips = (tlJson.tracks ?? []).flatMap((tr: any) => tr.clips ?? []);

@@ -1,4 +1,4 @@
-import { demuxMp4, buildAudioChunks, AudioDecodeManager } from "@palmier/engine";
+import { demuxMp4, buildAudioChunks, AudioDecodeManager } from "@frontstage/engine";
 
 interface AudioDecodeResult {
   totalFrames: number;

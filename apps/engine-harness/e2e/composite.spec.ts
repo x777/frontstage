@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { ReadPixelFn } from "@palmier/engine";
+import type { ReadPixelFn } from "@frontstage/engine";
 
 test("composite blends a 50% layer over a base in z-order", async ({ page }) => {
   await page.goto("/composite.html");

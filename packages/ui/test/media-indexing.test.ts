@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/react";
-import type { MediaManifestEntry, TranscriptionResult } from "@palmier/core";
-import { candidateTimes, decodeEmbeddings, embeddingRelativePath, encodeEmbeddings } from "@palmier/core";
-import type { EmbeddingHeader } from "@palmier/core";
+import type { MediaManifestEntry, TranscriptionResult } from "@frontstage/core";
+import { candidateTimes, decodeEmbeddings, embeddingRelativePath, encodeEmbeddings } from "@frontstage/core";
+import type { EmbeddingHeader } from "@frontstage/core";
 import { MediaIndexingService, IndexingStatusRelay } from "../src/media/media-indexing.js";
 import type {
   FrameTap,

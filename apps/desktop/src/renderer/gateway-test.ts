@@ -1,5 +1,5 @@
 import { DesktopGateway } from "./desktop-gateway.js";
-import { writeProject, readProject } from "@palmier/core";
+import { writeProject, readProject } from "@frontstage/core";
 
 declare global {
   interface Window {

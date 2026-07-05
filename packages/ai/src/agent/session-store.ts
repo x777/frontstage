@@ -1,5 +1,5 @@
 import type { AgentMessage } from "./conversation.js";
-import type { ProjectStore } from "@palmier/core";
+import type { ProjectStore } from "@frontstage/core";
 
 export interface ChatSessionDoc {
   id: string;

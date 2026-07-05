@@ -1,5 +1,5 @@
 import { DesktopAiGateway } from "./desktop-ai-gateway.js";
-import { buildCatalog } from "@palmier/ai";
+import { buildCatalog } from "@frontstage/ai";
 
 declare global {
   interface Window {

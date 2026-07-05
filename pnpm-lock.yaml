@@ -36,16 +36,16 @@ importers:
         specifier: ^6.27.0
         version: 6.27.0
     devDependencies:
-      '@palmier/ai':
+      '@frontstage/ai':
         specifier: workspace:*
         version: link:../../packages/ai
-      '@palmier/core':
+      '@frontstage/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@palmier/engine':
+      '@frontstage/engine':
         specifier: workspace:*
         version: link:../../packages/engine
-      '@palmier/ui':
+      '@frontstage/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@playwright/test':
@@ -87,10 +87,10 @@ importers:
 
   apps/engine-harness:
     dependencies:
-      '@palmier/core':
+      '@frontstage/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@palmier/engine':
+      '@frontstage/engine':
         specifier: workspace:*
         version: link:../../packages/engine
     devDependencies:
@@ -125,16 +125,16 @@ importers:
 
   apps/web:
     dependencies:
-      '@palmier/ai':
+      '@frontstage/ai':
         specifier: workspace:*
         version: link:../../packages/ai
-      '@palmier/core':
+      '@frontstage/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@palmier/engine':
+      '@frontstage/engine':
         specifier: workspace:*
         version: link:../../packages/engine
-      '@palmier/ui':
+      '@frontstage/ui':
         specifier: workspace:*
         version: link:../../packages/ui
     devDependencies:
@@ -174,10 +174,10 @@ importers:
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1
-      '@palmier/core':
+      '@frontstage/core':
         specifier: workspace:*
         version: link:../core
-      '@palmier/engine':
+      '@frontstage/engine':
         specifier: workspace:*
         version: link:../engine
       zod:
@@ -215,7 +215,7 @@ importers:
 
   packages/engine:
     dependencies:
-      '@palmier/core':
+      '@frontstage/core':
         specifier: workspace:*
         version: link:../core
       mp4-muxer:
@@ -240,13 +240,13 @@ importers:
 
   packages/ui:
     dependencies:
-      '@palmier/ai':
+      '@frontstage/ai':
         specifier: workspace:*
         version: link:../ai
-      '@palmier/core':
+      '@frontstage/core':
         specifier: workspace:*
         version: link:../core
-      '@palmier/engine':
+      '@frontstage/engine':
         specifier: workspace:*
         version: link:../engine
       react-resizable-panels:

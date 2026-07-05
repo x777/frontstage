@@ -403,7 +403,7 @@ function sourceDurationFramesFor(entry: MediaManifestEntry, clip: Clip, fps: num
 // MARK: - Library / project / spine
 
 function libraryNode(ctx: Ctx, clips: EmittableClip[]): XmlNode {
-  return el("library", undefined, [el("event", { name: "Palmier Export" }, [projectNode(ctx, clips)])]);
+  return el("library", undefined, [el("event", { name: "Frontstage Export" }, [projectNode(ctx, clips)])]);
 }
 
 function projectNode(ctx: Ctx, clips: EmittableClip[]): XmlNode {

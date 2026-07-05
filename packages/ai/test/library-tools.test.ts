@@ -10,7 +10,7 @@ import {
   type MediaManifestEntry,
   type Track,
   type Timeline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   listFoldersTool,
   createFolderTool,
@@ -26,7 +26,7 @@ import {
   type ToolContext,
 } from "../src/index.js";
 
-// ── fake library facade (mirrors @palmier/ui MediaLibrary's folder/entry ops without the
+// ── fake library facade (mirrors @frontstage/ui MediaLibrary's folder/entry ops without the
 // dependency — ai must not depend on ui) ─────────────────────────────────────────────────────
 
 class FakeLibrary {

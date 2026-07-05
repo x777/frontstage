@@ -1,5 +1,5 @@
-import { mapFalStatus, extractResultUrls, extractResultError } from "@palmier/ai";
-import type { GenJobGateway, JobStatus } from "@palmier/ai";
+import { mapFalStatus, extractResultUrls, extractResultError } from "@frontstage/ai";
+import type { GenJobGateway, JobStatus } from "@frontstage/ai";
 
 export class WebGenGateway implements GenJobGateway {
   constructor(private proxyUrl: string, private proxyToken?: string) {}

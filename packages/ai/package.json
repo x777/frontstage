@@ -1,5 +1,5 @@
 {
-  "name": "@palmier/ai",
+  "name": "@frontstage/ai",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
-    "@palmier/core": "workspace:*",
-    "@palmier/engine": "workspace:*",
+    "@frontstage/core": "workspace:*",
+    "@frontstage/engine": "workspace:*",
     "zod": "^3.24.0",
     "zod-to-json-schema": "^3.23.0"
   },

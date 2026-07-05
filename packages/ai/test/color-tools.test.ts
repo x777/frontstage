@@ -8,7 +8,7 @@ import {
   type Track,
   type Timeline,
   type MediaManifest,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { applyColorTool, applyEffectTool, inspectColorTool, type ToolContext } from "../src/index.js";
 
 function makeClip(id: string, startFrame = 0) {

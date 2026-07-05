@@ -1,10 +1,10 @@
 // File System Access API's async directory iteration isn't in TS's lib.dom.d.ts yet — needed by
-// web-skills.ts's SkillStorage.list() to enumerate the OPFS palmier-skills/ subfolders.
+// web-skills.ts's SkillStorage.list() to enumerate the OPFS frontstage-skills/ subfolders.
 interface FileSystemDirectoryHandle {
   entries(): AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>;
 }
 
-// Ambient declarations for @palmier/engine transitive dependencies.
+// Ambient declarations for @frontstage/engine transitive dependencies.
 declare module "mp4box" {
   export interface MP4ArrayBuffer extends ArrayBuffer {
     fileStart: number;

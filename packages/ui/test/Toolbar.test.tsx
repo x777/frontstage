@@ -10,7 +10,7 @@ import {
   type Timeline,
   type Track,
   type Clip,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { Toolbar } from "../src/toolbar/Toolbar.js";
 
 function clip(id: string, startFrame: number, durationFrames: number): Clip {

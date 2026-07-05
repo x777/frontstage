@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { AiGateway, ImageResult, ImageRequest } from "../src/index.js";
 import { ImageGenerator } from "../src/index.js";
 import type { ImageImportHost } from "../src/index.js";
-import type { MediaManifestEntry, GenerationLogEntry } from "@palmier/core";
+import type { MediaManifestEntry, GenerationLogEntry } from "@frontstage/core";
 
 function makeGateway(result: ImageResult): AiGateway {
   return {

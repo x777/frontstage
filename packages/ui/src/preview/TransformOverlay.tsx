@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
-import type { EditorStore } from "@palmier/core";
-import { transformAt, findClip, setClipTransformCommand, snapToCanvasEdges } from "@palmier/core";
-import type { Transform } from "@palmier/core";
+import type { EditorStore } from "@frontstage/core";
+import { transformAt, findClip, setClipTransformCommand, snapToCanvasEdges } from "@frontstage/core";
+import type { Transform } from "@frontstage/core";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
 

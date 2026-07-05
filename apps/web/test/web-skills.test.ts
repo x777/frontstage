@@ -105,7 +105,7 @@ describe("createWebSkillStorage — OPFS shim round-trip", () => {
     const { root, getRoot } = makeShim();
     const storage = createWebSkillStorage({ getRoot });
     await storage.write("real-skill", "content");
-    const skillsDir = await root.getDirectoryHandle("palmier-skills", { create: true });
+    const skillsDir = await root.getDirectoryHandle("frontstage-skills", { create: true });
     await skillsDir.getDirectoryHandle("empty-dir", { create: true }); // no SKILL.md inside
 
     const entries = await storage.list();
@@ -137,7 +137,7 @@ describe("createWebSkillStorage — OPFS shim round-trip", () => {
 
   it("malformed ledger JSON -> {}", async () => {
     const { root, getRoot } = makeShim();
-    const skillsDir = await root.getDirectoryHandle("palmier-skills", { create: true });
+    const skillsDir = await root.getDirectoryHandle("frontstage-skills", { create: true });
     const ledgerHandle = await skillsDir.getFileHandle(".installed.json", { create: true });
     ledgerHandle.content = "{ not json";
 

@@ -1,5 +1,5 @@
 // Host-agnostic port of Swift's @MainActor SkillStore — the same scan/cache/CRUD/ledger behavior
-// over an injected SkillStorage facade (desktop = fs IPC on ~/.palmier/skills, web = OPFS; T2).
+// over an injected SkillStorage facade (desktop = fs IPC on ~/.frontstage/skills, web = OPFS; T2).
 
 import { NEW_SKILL_TEMPLATE, parseSkillFile, replaceFrontmatterName, sha12, type Skill } from "./skill.js";
 import type { SkillCatalogEntry } from "./skill-catalog.js";

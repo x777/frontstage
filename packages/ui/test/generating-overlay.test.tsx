@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import type { GenerationStatus } from "@palmier/core";
+import type { GenerationStatus } from "@frontstage/core";
 import { GeneratingOverlay, generatingLabel } from "../src/media/GeneratingOverlay.js";
 
 test("generatingLabel maps each status kind", () => {

@@ -1,5 +1,5 @@
 import { render, screen, act } from "@testing-library/react";
-import { EditorStore, defaultTimeline } from "@palmier/core";
+import { EditorStore, defaultTimeline } from "@frontstage/core";
 import { useStore } from "../src/store/use-store.js";
 
 function Playhead({ store }: { store: EditorStore }) {

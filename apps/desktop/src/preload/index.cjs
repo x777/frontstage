@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld("desktopSpike", {
   encodeFrame: (rgba, w, h) => ipcRenderer.invoke("spike:encode-frame", rgba, w, h),
 });
 
-if (process.env.PALMIER_E2E === "1") {
+if (process.env.FRONTSTAGE_E2E === "1") {
   contextBridge.exposeInMainWorld("__e2eMenuTrigger", { fire: (cmd) => _menuCommandCb?.(cmd) });
 }
 
@@ -99,7 +99,7 @@ contextBridge.exposeInMainWorld("desktopProject", {
   addRecent: (rec) => ipcRenderer.invoke("project:addRecent", rec),
   removeRecent: (id) => ipcRenderer.invoke("project:removeRecent", id),
   __setNextPick: (p) => ipcRenderer.invoke("project:__setNextPick", p),
-  ...(process.env.PALMIER_E2E === "1" ? { __setNextExportPick: (p) => ipcRenderer.invoke("project:__setNextExportPick", p) } : {}),
+  ...(process.env.FRONTSTAGE_E2E === "1" ? { __setNextExportPick: (p) => ipcRenderer.invoke("project:__setNextExportPick", p) } : {}),
   onMenuCommand: (cb) => { ipcRenderer.removeAllListeners("menu:command"); ipcRenderer.on("menu:command", (_e, c, arg) => cb(c, arg)); _menuCommandCb = (c) => cb(c, undefined); },
   platform: process.platform,
 });

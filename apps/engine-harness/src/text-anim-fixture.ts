@@ -5,11 +5,11 @@ import {
   layoutWordsLine,
   type ReadPixelFn,
   type CompositeLayer,
-} from "@palmier/engine";
+} from "@frontstage/engine";
 import {
   affineTransform, applyTextLayerAnim, buildRenderPlan, defaultCrop, defaultTransform, defaultTextStyle,
   type Timeline, type Clip, type Track, type RGBA, type TextAnimationPreset,
-} from "@palmier/core";
+} from "@frontstage/core";
 
 const W = 300, H = 100;
 const WORDS = ["AAA", "BBB", "CCC"];

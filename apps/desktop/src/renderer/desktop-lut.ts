@@ -1,5 +1,5 @@
-import type { MediaLibrary } from "@palmier/ui";
-import type { ToolContext } from "@palmier/ai";
+import type { MediaLibrary } from "@frontstage/ui";
+import type { ToolContext } from "@frontstage/ai";
 import "./desktop-audio-extract.js"; // declares window.desktopMedia (incl. readLocalFile)
 
 // .cube LUT project persistence (M14C T2, the Swift LUTLoader.store pattern) — apply_color's

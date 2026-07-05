@@ -12,12 +12,12 @@ import {
   type Timeline,
   type Track,
   type TranscriptionResult,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { getTranscriptTool, removeWordsTool } from "../src/tools/transcription-tools.js";
 import type { ToolContext } from "../src/index.js";
 
-vi.mock("@palmier/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@palmier/core")>();
+vi.mock("@frontstage/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@frontstage/core")>();
   return { ...actual, rippleDeleteRangesOnTrack: vi.fn(actual.rippleDeleteRangesOnTrack) };
 });
 

@@ -4,9 +4,9 @@ import {
   TextRasterizer,
   type ReadPixelFn,
   type CompositeLayer,
-} from "@palmier/engine";
-import { affineTransform, defaultTransform, defaultCrop, defaultTextStyle } from "@palmier/core";
-import type { TextLayer } from "@palmier/core";
+} from "@frontstage/engine";
+import { affineTransform, defaultTransform, defaultCrop, defaultTextStyle } from "@frontstage/core";
+import type { TextLayer } from "@frontstage/core";
 
 const W = 200, H = 200;
 

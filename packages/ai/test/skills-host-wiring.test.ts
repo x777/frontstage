@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, type MediaManifest } from "@palmier/core";
+import { EditorStore, defaultTimeline, type MediaManifest } from "@frontstage/core";
 import {
   AgentSession,
   ToolExecutor,

@@ -1,11 +1,11 @@
 import { type ReactNode } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { type EditorStore, type FocusedPanel, PANEL_IDS, isValidPanel } from "@palmier/core";
+import { type EditorStore, type FocusedPanel, PANEL_IDS, isValidPanel } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
 import { PanelHeader, IconButton } from "../primitives/index.js";
 
-const PERSIST_KEY = "palmier.editor.ui";
+const PERSIST_KEY = "frontstage.editor.ui";
 
 export function persistLayout(store: EditorStore): void {
   const state = store.getSnapshot();
@@ -316,7 +316,7 @@ function TopBar({ slot, title }: { slot?: ReactNode; title?: string }) {
         data-testid="top-bar-title"
         style={{ fontSize: theme.fontSize.md, color: theme.text.primary, fontWeight: theme.fontWeight.semibold }}
       >
-        {title ?? "Palmier Pro"}
+        {title ?? "Frontstage"}
       </span>
     </div>
   );

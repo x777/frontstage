@@ -6,7 +6,7 @@
 // buildInput), each WhisperChunk IS one word: chunks map directly to TranscriptionWord[], and
 // TranscriptionSegment[] is derived from those words by grouping on sentence punctuation. Note the
 // output's language array is called `inferred_languages` here (wizper's was `languages`).
-import type { TranscriptionResult, TranscriptionSegment, TranscriptionWord } from "@palmier/core";
+import type { TranscriptionResult, TranscriptionSegment, TranscriptionWord } from "@frontstage/core";
 
 interface WhisperChunk {
   text: string;

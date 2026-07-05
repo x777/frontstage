@@ -45,7 +45,7 @@ test("agent panel: chat message adds a clip to the timeline", async ({ page }) =
   // Wait for app to be ready
   await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
   await page.waitForFunction(
-    () => !!(window as any).__palmierStore && !!(window as any).__agentSession,
+    () => !!(window as any).__frontstageStore && !!(window as any).__agentSession,
     { timeout: 15_000 },
   );
 
@@ -60,7 +60,7 @@ test("agent panel: chat message adds a clip to the timeline", async ({ page }) =
   // Record clip count before
   const beforeCount = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
   });
 
@@ -95,7 +95,7 @@ test("agent panel: chat message adds a clip to the timeline", async ({ page }) =
   // Assert the clip was ACTUALLY added to the timeline
   const afterCount = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
   });
   expect(afterCount).toBe(beforeCount + 1);
@@ -104,7 +104,7 @@ test("agent panel: chat message adds a clip to the timeline", async ({ page }) =
   const clipAtFrame30 = await page.evaluate(() => {
     type Clip = { startFrame: number };
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     const allClips = store.getSnapshot().timeline.tracks.flatMap((t) => t.clips);
     return allClips.some((c) => c.startFrame === 30);
   });

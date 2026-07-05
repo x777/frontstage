@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { GenerationInput, MediaManifestEntry } from "@palmier/core";
-import { createPlaceholderEntry } from "@palmier/core";
+import type { GenerationInput, MediaManifestEntry } from "@frontstage/core";
+import { createPlaceholderEntry } from "@frontstage/core";
 import type { ToolResult, ToolSpec, ToolContext } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 import { genModel, listGenModels, validateGenParams, referenceCapError } from "../generation/gen-catalog.js";

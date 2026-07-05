@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { MediaFolder } from "@palmier/core";
-import { buildFolderIndex, folderPath } from "@palmier/core";
+import type { MediaFolder } from "@frontstage/core";
+import { buildFolderIndex, folderPath } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Icon } from "../primitives/index.js";
 import { FOLDER_DROP_ROOT, isMediaDrag, readMediaDragPayload, type MediaDragPayload } from "./FolderTile.js";

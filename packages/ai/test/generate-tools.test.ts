@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
-import type { MediaManifest, MediaManifestEntry, Timeline, Track } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@frontstage/core";
+import type { MediaManifest, MediaManifestEntry, Timeline, Track } from "@frontstage/core";
 import { generateVideoTool, upscaleMediaTool, generateAudioTool, listModelsTool } from "../src/tools/generate-tools.js";
 import type { ToolContext } from "../src/index.js";
 import type { StartJobArgs } from "../src/generation/generation-service.js";

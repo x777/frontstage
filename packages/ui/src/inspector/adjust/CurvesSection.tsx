@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { EditorStore, Clip } from "@palmier/core";
-import type { GradeCurve } from "@palmier/core";
+import type { EditorStore, Clip } from "@frontstage/core";
+import type { GradeCurve } from "@frontstage/core";
 import {
   findClip,
   parseGradeCurve,
@@ -9,7 +9,7 @@ import {
   setClipEffectsCommand,
   resetSection,
   setSectionEnabled,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { AdjustSection } from "./AdjustSection.js";
 import { CurveEditor } from "./CurveEditor.js";

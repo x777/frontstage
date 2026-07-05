@@ -1,5 +1,5 @@
-import { mapFalStatus, extractResultUrls, extractResultError } from "@palmier/ai";
-import type { GenJobGateway, JobStatus } from "@palmier/ai";
+import { mapFalStatus, extractResultUrls, extractResultError } from "@frontstage/ai";
+import type { GenJobGateway, JobStatus } from "@frontstage/ai";
 
 interface DesktopGenBridge {
   falSubmit(modelEndpoint: string, input: Record<string, unknown>): Promise<{ jobId: string } | { error: string }>;

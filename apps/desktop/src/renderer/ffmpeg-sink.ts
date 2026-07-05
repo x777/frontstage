@@ -1,4 +1,4 @@
-import type { ExportSink, PushFrameSource } from "@palmier/engine";
+import type { ExportSink, PushFrameSource } from "@frontstage/engine";
 
 export interface DesktopExportBridge {
   start(opts: { width: number; height: number; fps: number; audio?: { sampleRate: number; channels: number }; codec: string; outPath: string }): Promise<string>;

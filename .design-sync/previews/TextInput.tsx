@@ -1,4 +1,4 @@
-import { TextInput } from "@palmier/ui";
+import { TextInput } from "@frontstage/ui";
 
 const dark: React.CSSProperties = {
   background: "var(--bg-base)",

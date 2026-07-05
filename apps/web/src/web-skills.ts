@@ -1,13 +1,13 @@
-import type { SkillStorage, SkillCatalogDeps } from "@palmier/ai";
+import type { SkillStorage, SkillCatalogDeps } from "@frontstage/ai";
 
 // Web's SkillStorage (M15 T2) — the same facade as desktop's fs IPC, over OPFS:
-// palmier-skills/<id>/SKILL.md + palmier-skills/.installed.json. No reveal/export members (no
+// frontstage-skills/<id>/SKILL.md + frontstage-skills/.installed.json. No reveal/export members (no
 // filesystem to reveal, no other agents' skill dirs to write into from a browser sandbox).
 
-const SKILLS_DIR_NAME = "palmier-skills";
+const SKILLS_DIR_NAME = "frontstage-skills";
 const SKILL_MD = "SKILL.md";
 const LEDGER_FILENAME = ".installed.json";
-const CATALOG_CACHE_KEY = "palmier.skills.catalogCache";
+const CATALOG_CACHE_KEY = "frontstage.skills.catalogCache";
 
 // Mirrors the desktop main-side guard (skills-fs.mjs's isValidSkillId) — defense in depth even
 // though the File System Access API spec already rejects "."/".."/separators in handle names.

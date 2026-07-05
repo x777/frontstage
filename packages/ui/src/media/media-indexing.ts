@@ -4,10 +4,10 @@
 // frames through a DOM canvas (production FrameTap below), runs T1's pure sampler/codec, and
 // writes the result back through the same writeDerived/patchEntry flow transcripts use.
 
-import type { MediaByteSource } from "@palmier/engine";
-import type { EmbeddingModelInfo } from "@palmier/ai";
-import { canTranscribe } from "@palmier/ai";
-import type { EmbeddingHeader, EmbeddingRow, MediaManifestEntry, TranscriptionResult } from "@palmier/core";
+import type { MediaByteSource } from "@frontstage/engine";
+import type { EmbeddingModelInfo } from "@frontstage/ai";
+import { canTranscribe } from "@frontstage/ai";
+import type { EmbeddingHeader, EmbeddingRow, MediaManifestEntry, TranscriptionResult } from "@frontstage/core";
 import {
   assignShots,
   candidateTimes,
@@ -17,7 +17,7 @@ import {
   gridDiff,
   lumaGrid8x8,
   SCENE_DIFF_THRESHOLD,
-} from "@palmier/core";
+} from "@frontstage/core";
 
 const TAP_SIZE = 256;
 

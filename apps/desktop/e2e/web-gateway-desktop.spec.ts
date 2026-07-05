@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 
 test("DesktopGateway: pickSaveAs, writeProject, writeMedia, readProject, readMedia, recent, security", async () => {
-  const tempDir = mkdtempSync(join(os.tmpdir(), "palmier-gw-test-"));
-  const unauthorizedDir = mkdtempSync(join(os.tmpdir(), "palmier-unauth-"));
+  const tempDir = mkdtempSync(join(os.tmpdir(), "frontstage-gw-test-"));
+  const unauthorizedDir = mkdtempSync(join(os.tmpdir(), "frontstage-unauth-"));
 
   const app = await electron.launch({
     args: [path.join(__dirname, "../src/main/index.cjs")],
@@ -14,7 +14,7 @@ test("DesktopGateway: pickSaveAs, writeProject, writeMedia, readProject, readMed
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
     },
   });
 
@@ -104,7 +104,7 @@ test("DesktopGateway: pickSaveAs, writeProject, writeMedia, readProject, readMed
     expect(recentAfterRemove).not.toContain(tempDir);
 
     // ── SECURITY: addRecent rejects unpicked (never-authorized) path ──────
-    const unpickedDir = mkdtempSync(join(os.tmpdir(), "palmier-unpicked-"));
+    const unpickedDir = mkdtempSync(join(os.tmpdir(), "frontstage-unpicked-"));
     try {
       const addRecentUnpickedError = await page.evaluate(async (unpickedPath: string) => {
         try {
@@ -121,7 +121,7 @@ test("DesktopGateway: pickSaveAs, writeProject, writeMedia, readProject, readMed
     }
 
     // ── SECURITY: addRecent succeeds for a user-picked (authorized) path ──
-    const tempB = mkdtempSync(join(os.tmpdir(), "palmier-picked-"));
+    const tempB = mkdtempSync(join(os.tmpdir(), "frontstage-picked-"));
     try {
       const legitRecentResult = await page.evaluate(async (pickedDir: string) => {
         await (window as any).desktopProject.__setNextPick(pickedDir);

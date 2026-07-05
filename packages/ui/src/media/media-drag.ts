@@ -1,4 +1,4 @@
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
 
 export interface MediaDragSnapshot {
   entry: MediaManifestEntry;

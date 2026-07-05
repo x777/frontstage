@@ -1,4 +1,4 @@
-import type { EditorState, Clip } from "@palmier/core";
+import type { EditorState, Clip } from "@frontstage/core";
 import {
   RULER_HEIGHT,
   TRIM_HANDLE_WIDTH,
@@ -8,8 +8,8 @@ import {
   trackHeightAt,
   trackTopY,
   xForFrame,
-} from "@palmier/core";
-import type { TimelineGeometry, FrameRange } from "@palmier/core";
+} from "@frontstage/core";
+import type { TimelineGeometry, FrameRange } from "@frontstage/core";
 import { generatingLabel } from "../media/GeneratingOverlay.js";
 import { rulerTicks } from "./ruler-ticks.js";
 

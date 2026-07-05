@@ -17,7 +17,7 @@ function toMcpResult(result) {
 
 function createMcpServer(bridge) {
   const mcp = new Server(
-    { name: "palmier-pro", version: "0.1.0" },
+    { name: "frontstage", version: "0.1.0" },
     { capabilities: { tools: {}, resources: {} } },
   );
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await bridge("listTools") }));

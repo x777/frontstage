@@ -7,7 +7,7 @@ import {
   type MediaManifest,
   type Track,
   type Timeline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   ToolExecutor,
   buildCatalog,
@@ -19,7 +19,7 @@ import {
   type AgentSessionDeps,
   type ToolContext,
   type ChatSessionDoc,
-} from "@palmier/ai";
+} from "@frontstage/ai";
 import { SessionSwitcher } from "../src/agent/SessionSwitcher.js";
 
 // ── helpers ────────────────────────────────────────────────────────────────

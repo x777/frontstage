@@ -51,7 +51,7 @@ test("agent: generate_image tool adds an image entry to the media library", asyn
 
   await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
   await page.waitForFunction(
-    () => !!(window as any).__palmierStore && !!(window as any).__agentSession,
+    () => !!(window as any).__frontstageStore && !!(window as any).__agentSession,
     { timeout: 15_000 },
   );
 
@@ -111,7 +111,7 @@ test("generation-panel: generate-toggle opens the per-kind panel; no fal key hon
 
   await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
   await page.waitForFunction(
-    () => !!(window as any).__palmierStore && !!(window as any).__mediaLibrary,
+    () => !!(window as any).__frontstageStore && !!(window as any).__mediaLibrary,
     { timeout: 15_000 },
   );
 

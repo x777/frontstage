@@ -1,5 +1,5 @@
 import type { AiGateway } from "./wire.js";
-import type { MediaManifestEntry, GenerationLogEntry } from "@palmier/core";
+import type { MediaManifestEntry, GenerationLogEntry } from "@frontstage/core";
 
 export interface ImageGenInput {
   prompt: string;

@@ -26,8 +26,8 @@ vi.mock("../src/timeline/TimelinePanel.js", () => ({
 }));
 
 import { render, screen, fireEvent } from "@testing-library/react";
-import { EditorStore, defaultTimeline, type MediaFolder, type MediaManifestEntry } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
+import { EditorStore, defaultTimeline, type MediaFolder, type MediaManifestEntry } from "@frontstage/core";
+import type { MediaByteSource } from "@frontstage/engine";
 import { Editor, type EditorLibrary } from "../src/editor/Editor.js";
 
 function makeLibrary() {

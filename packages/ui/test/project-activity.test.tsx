@@ -1,5 +1,5 @@
 import { render, screen, within, fireEvent } from "@testing-library/react";
-import type { GenerationLogEntry } from "@palmier/core";
+import type { GenerationLogEntry } from "@frontstage/core";
 import { ProjectActivityView, ProjectActivityButton, relativeTime } from "../src/editor/ProjectActivityView.js";
 
 const NOW = new Date("2026-01-03T00:10:00.000Z");

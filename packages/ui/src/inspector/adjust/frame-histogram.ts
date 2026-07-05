@@ -1,4 +1,4 @@
-import { histogramYRGB, hueHistogram } from "@palmier/core";
+import { histogramYRGB, hueHistogram } from "@frontstage/core";
 
 type Engine = { readRGBA(): Promise<Uint8Array>; width: number; height: number };
 

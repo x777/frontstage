@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 test("Editor: panels render, on-disk round-trip, and menu IPC routing", async () => {
-  const tempA = mkdtempSync(join(os.tmpdir(), "palmier-editor-test-"));
+  const tempA = mkdtempSync(join(os.tmpdir(), "frontstage-editor-test-"));
 
   const app = await electron.launch({
     args: [path.join(__dirname, "../src/main/index.cjs")],
@@ -13,7 +13,7 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
     },
   });
 
@@ -38,7 +38,7 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     await page.waitForFunction(
       () =>
         (window as any).__projectSession &&
-        (window as any).__palmierStore &&
+        (window as any).__frontstageStore &&
         (window as any).__desktopGateway,
       { timeout: 15_000 },
     );
@@ -69,7 +69,7 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     // ── 4. Make a timeline edit then New (with discard) ────────────────────
     // Modify fps to mark dirty
     await page.evaluate(() => {
-      const store = (window as any).__palmierStore;
+      const store = (window as any).__frontstageStore;
       const snap = store.getSnapshot();
       store.load({ ...snap.timeline, fps: 24 });
     });
@@ -112,7 +112,7 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     // Wait for timeline to be loaded from disk (fps should be 30, the default)
     await page.waitForFunction(
       () => {
-        const store = (window as any).__palmierStore;
+        const store = (window as any).__frontstageStore;
         const snap = store?.getSnapshot?.();
         return snap?.timeline?.fps === 30;
       },
@@ -120,7 +120,7 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     );
 
     const restoredFps = await page.evaluate(() => {
-      return (window as any).__palmierStore.getSnapshot().timeline.fps;
+      return (window as any).__frontstageStore.getSnapshot().timeline.fps;
     });
     expect(restoredFps).toBe(30);
 
@@ -133,13 +133,13 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     // ── 6. Native-menu dirty-guard: IPC path must open discard dialog ─────
     // Make the store dirty via a real dispatch
     await page.evaluate(() => {
-      const store = (window as any).__palmierStore;
+      const store = (window as any).__frontstageStore;
       const snap = store.getSnapshot();
       store.load({ ...snap.timeline, fps: 29 });
     });
 
     // Drive the native-menu path by firing the registered onMenuCommand callback
-    // through the e2e test hook exposed by the preload (PALMIER_E2E=1).
+    // through the e2e test hook exposed by the preload (FRONTSTAGE_E2E=1).
     // This exercises the exact same code path as Electron main sending menu:command.
     await page.evaluate(() => {
       (window as any).__e2eMenuTrigger.fire("new");
@@ -154,7 +154,7 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
 
     // fps is still 29 (edit was not lost)
     const fpsAfterCancel = await page.evaluate(() =>
-      (window as any).__palmierStore.getSnapshot().timeline.fps,
+      (window as any).__frontstageStore.getSnapshot().timeline.fps,
     );
     expect(fpsAfterCancel).toBe(29);
   } finally {

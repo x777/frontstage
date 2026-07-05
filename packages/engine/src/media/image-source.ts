@@ -1,4 +1,4 @@
-import type { Size } from "@palmier/core";
+import type { Size } from "@frontstage/core";
 
 export class ImageSource {
   private constructor(private vf: VideoFrame, private _size: Size) {}

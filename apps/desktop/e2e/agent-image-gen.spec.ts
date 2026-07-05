@@ -5,7 +5,7 @@ import path from "node:path";
 //               turn 2 → textDelta("Added.") + done(stop)
 // Also provides generateImage for the ImageGenerator seam.
 const FAKE_GATEWAY_SCRIPT = `
-  try { localStorage.removeItem("palmier.agent.visible"); } catch {}
+  try { localStorage.removeItem("frontstage.agent.visible"); } catch {}
   window.__aiGateway = {
     _turn: 0,
     async *streamChat(req) {
@@ -37,7 +37,7 @@ test("agent: generate_image tool adds an image entry to the media library", asyn
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
     },
   });
 
@@ -52,7 +52,7 @@ test("agent: generate_image tool adds an image entry to the media library", asyn
 
     await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
     await page.waitForFunction(
-      () => !!(window as any).__palmierStore && !!(window as any).__agentSession,
+      () => !!(window as any).__frontstageStore && !!(window as any).__agentSession,
       { timeout: 15_000 },
     );
 

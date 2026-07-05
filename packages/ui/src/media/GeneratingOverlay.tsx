@@ -1,4 +1,4 @@
-import type { GenerationStatus } from "@palmier/core";
+import type { GenerationStatus } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 
 export function generatingLabel(status: GenerationStatus): string {

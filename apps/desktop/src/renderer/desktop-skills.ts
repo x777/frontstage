@@ -1,4 +1,4 @@
-import type { SkillStorage, SkillCatalogDeps } from "@palmier/ai";
+import type { SkillStorage, SkillCatalogDeps } from "@frontstage/ai";
 
 interface DesktopSkillsBridge {
   list(): Promise<{ id: string; text: string }[]>;
@@ -20,7 +20,7 @@ declare global {
   }
 }
 
-// Desktop's SkillStorage (M15 T2) — a thin IPC facade over ~/.palmier/skills, id sanitization and
+// Desktop's SkillStorage (M15 T2) — a thin IPC facade over ~/.frontstage/skills, id sanitization and
 // export-allowlist enforcement all live main-side (skills-fs.mjs), not here.
 export function createDesktopSkillStorage(): SkillStorage {
   return {

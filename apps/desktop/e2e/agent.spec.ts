@@ -5,7 +5,7 @@ import path from "node:path";
 //               turn 2 → textDelta("Done.") + done(stop)
 // Also clears persisted agent panel visibility so toggle always opens it fresh.
 const FAKE_GATEWAY_SCRIPT = `
-  try { localStorage.removeItem("palmier.agent.visible"); } catch {}
+  try { localStorage.removeItem("frontstage.agent.visible"); } catch {}
   window.__aiGateway = {
     _turn: 0,
     async *streamChat(req) {
@@ -35,7 +35,7 @@ test("agent panel: chat message adds a clip to the timeline", async () => {
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
     },
   });
 
@@ -56,7 +56,7 @@ test("agent panel: chat message adds a clip to the timeline", async () => {
     // Wait for app to be ready
     await page.waitForSelector('[data-testid="top-bar-title"]', { timeout: 30_000 });
     await page.waitForFunction(
-      () => !!(window as any).__palmierStore && !!(window as any).__agentSession,
+      () => !!(window as any).__frontstageStore && !!(window as any).__agentSession,
       { timeout: 15_000 },
     );
 
@@ -71,7 +71,7 @@ test("agent panel: chat message adds a clip to the timeline", async () => {
     // Record clip count before
     const beforeCount = await page.evaluate(() => {
       type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-      const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
       return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
     });
 
@@ -129,7 +129,7 @@ test("agent panel: chat message adds a clip to the timeline", async () => {
     // Assert the clip was ACTUALLY added to the timeline
     const afterCount = await page.evaluate(() => {
       type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-      const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
       return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
     });
     expect(afterCount).toBe(beforeCount + 1);
@@ -138,7 +138,7 @@ test("agent panel: chat message adds a clip to the timeline", async () => {
     const clipAtFrame30 = await page.evaluate(() => {
       type Clip = { startFrame: number };
       type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
-      const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
       const allClips = store.getSnapshot().timeline.tracks.flatMap((t) => t.clips);
       return allClips.some((c) => c.startFrame === 30);
     });

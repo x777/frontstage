@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
 import { generationStatusByRef } from "../src/timeline/TimelinePanel.js";
 
 function entry(id: string, generationStatus?: string): MediaManifestEntry {

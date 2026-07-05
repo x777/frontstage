@@ -1,5 +1,5 @@
-import { buildChatBody, parseOpenRouterStream, buildImageBody, parseImageResponse } from "@palmier/ai";
-import type { AiGateway, ChatRequest, StreamEvent, ImageRequest, ImageResult } from "@palmier/ai";
+import { buildChatBody, parseOpenRouterStream, buildImageBody, parseImageResponse } from "@frontstage/ai";
+import type { AiGateway, ChatRequest, StreamEvent, ImageRequest, ImageResult } from "@frontstage/ai";
 
 export class WebAiGateway implements AiGateway {
   constructor(private proxyUrl: string, private proxyToken?: string) {}

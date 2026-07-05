@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { generateImageTool, ToolExecutor } from "../src/index.js";
 import type { ToolContext } from "../src/index.js";
-import type { MediaManifestEntry } from "@palmier/core";
-import { EditorStore, defaultTimeline } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
+import { EditorStore, defaultTimeline } from "@frontstage/core";
 import type { StartJobArgs } from "../src/generation/generation-service.js";
 
 type GenerationFacade = NonNullable<ToolContext["generation"]>;

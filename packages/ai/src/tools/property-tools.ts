@@ -11,7 +11,7 @@ import {
   clipTypesCompatible,
   TEXT_ANIMATION_PRESETS,
   type KeyframeTrackKey,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 

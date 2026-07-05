@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
-import type { PlaybackEngine } from "@palmier/engine";
-import { EditorStore, defaultTimeline } from "@palmier/core";
+import type { PlaybackEngine } from "@frontstage/engine";
+import { EditorStore, defaultTimeline } from "@frontstage/core";
 import { TransportBar } from "../src/preview/TransportBar.js";
 
 function fakeEngine(): PlaybackEngine {

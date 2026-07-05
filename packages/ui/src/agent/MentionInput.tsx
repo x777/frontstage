@@ -1,5 +1,5 @@
 import { useState, useRef, type KeyboardEvent } from "react";
-import type { MentionContext } from "@palmier/ai";
+import type { MentionContext } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { Button, Icon, useHover } from "../primitives/index.js";
 

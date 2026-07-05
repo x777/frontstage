@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
-import type { EditorStore } from "@palmier/core";
-import { cropAt, transformAt, findClip, setClipCropCommand } from "@palmier/core";
-import type { Crop } from "@palmier/core";
+import type { EditorStore } from "@frontstage/core";
+import { cropAt, transformAt, findClip, setClipCropCommand } from "@frontstage/core";
+import type { Crop } from "@frontstage/core";
 import { useStore } from "../store/use-store.js";
 import type { CanvasRect } from "./TransformOverlay.js";
 import { theme } from "../theme/theme.js";

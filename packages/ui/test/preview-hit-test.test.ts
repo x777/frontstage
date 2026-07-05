@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@frontstage/core";
 import { selectClipAtPreviewPoint } from "../src/preview/preview-hit-test.js";
 
 function clip(id: string, over: Partial<Clip> = {}): Clip {

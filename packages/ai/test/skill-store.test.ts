@@ -253,7 +253,7 @@ describe("SkillStore — readRaw + desktop-only capability passthroughs (T3)", (
     storage.openRoot = async () => { rootOpened = true; };
     storage.exportToAgent = async (id: string, agent: "claude" | "codex" | "cursor") => {
       exported.push({ id, agent });
-      return { path: `/home/.${agent}/skills/palmier-${id}` };
+      return { path: `/home/.${agent}/skills/frontstage-${id}` };
     };
     const store = new SkillStore(storage);
 
@@ -269,6 +269,6 @@ describe("SkillStore — readRaw + desktop-only capability passthroughs (T3)", (
 
     const result = await store.exportToAgent("s1", "claude");
     expect(exported).toEqual([{ id: "s1", agent: "claude" }]);
-    expect(result).toEqual({ path: "/home/.claude/skills/palmier-s1" });
+    expect(result).toEqual({ path: "/home/.claude/skills/frontstage-s1" });
   });
 });

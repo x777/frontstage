@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { EditorStore, GenerationInput, MediaManifestEntry, Timeline } from "@palmier/core";
-import { addClipCommand, createPlaceholderEntry, resolveOrCreateAudioTrack, timelineTotalFrames } from "@palmier/core";
+import type { EditorStore, GenerationInput, MediaManifestEntry, Timeline } from "@frontstage/core";
+import { addClipCommand, createPlaceholderEntry, resolveOrCreateAudioTrack, timelineTotalFrames } from "@frontstage/core";
 import type { ToolResult, ToolSpec, ToolContext } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 import { genModel, listGenModels, validateGenParams, referenceCapError } from "../generation/gen-catalog.js";

@@ -1,4 +1,4 @@
-import { SearchField } from "@palmier/ui";
+import { SearchField } from "@frontstage/ui";
 
 const dark: React.CSSProperties = { background: "var(--bg-base)", padding: 16, display: "flex", flexDirection: "column", gap: 10, width: 300 };
 

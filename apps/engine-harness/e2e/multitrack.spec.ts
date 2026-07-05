@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { PlaybackEngine } from "@palmier/engine";
+import type { PlaybackEngine } from "@frontstage/engine";
 
 declare global {
   interface Window {

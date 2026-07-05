@@ -44,7 +44,7 @@ const reactChangeScript = `
 
 async function waitForApp(page: Page) {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
   await page.waitForSelector('[data-testid="preview-canvas"]', { timeout: 15_000 });
   await page.waitForSelector('[data-testid="panel-inspector"]', { timeout: 10_000 });
@@ -64,7 +64,7 @@ test("inspector: Transform + Opacity sections appear when video clip selected", 
   await waitForApp(page);
 
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select(["clip-1"]);
   });
 
@@ -76,7 +76,7 @@ test("inspector: opacity slider changes value and single undo restores", async (
   await waitForApp(page);
 
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select(["clip-1"]);
   });
 
@@ -87,25 +87,25 @@ test("inspector: opacity slider changes value and single undo restores", async (
 
   await expect.poll(
     () => page.evaluate(() => {
-      const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
       return store.getSnapshot().timeline.tracks[0]!.clips[0]!.opacity;
     }),
     { timeout: 3_000 },
   ).toBe(0.5);
 
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.undo();
   });
 
   const afterUndo = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.opacity;
   });
   expect(afterUndo).toBe(1);
 
   const canUndo = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.canUndo();
   });
   expect(canUndo).toBe(false);
@@ -115,14 +115,14 @@ test("inspector: transform X field changes centerX and single undo restores", as
   await waitForApp(page);
 
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select(["clip-1"]);
   });
 
   await expect(page.locator('[data-testid="inspector-section-Transform"]')).toBeVisible({ timeout: 5_000 });
 
   const originalCX = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
   });
 
@@ -131,25 +131,25 @@ test("inspector: transform X field changes centerX and single undo restores", as
 
   await expect.poll(
     () => page.evaluate(() => {
-      const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
       return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
     }),
     { timeout: 3_000 },
   ).not.toBe(originalCX);
 
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.undo();
   });
 
   const afterUndo = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
   });
   expect(afterUndo).toBe(originalCX);
 
   const canUndo = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.canUndo();
   });
   expect(canUndo).toBe(false);
@@ -159,7 +159,7 @@ test("inspector: text clip shows Text section and editing textContent works with
   await waitForApp(page);
 
   const textClipId = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const id = "test-text-clip-1";
     const textClip = {
       id,
@@ -199,7 +199,7 @@ test("inspector: text clip shows Text section and editing textContent works with
   });
 
   await page.evaluate((id: string) => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select([id]);
   }, textClipId);
 
@@ -218,7 +218,7 @@ test("inspector: text clip shows Text section and editing textContent works with
 
   await expect.poll(
     () => page.evaluate((id: string) => {
-      const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
       const snap = store.getSnapshot();
       for (const track of snap.timeline.tracks) {
         for (const clip of track.clips) {
@@ -231,12 +231,12 @@ test("inspector: text clip shows Text section and editing textContent works with
   ).toBe("Hello World");
 
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.undo();
   });
 
   const afterUndo = await page.evaluate((id: string) => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const snap = store.getSnapshot();
     for (const track of snap.timeline.tracks) {
       for (const clip of track.clips) {
@@ -253,7 +253,7 @@ test("inspector: keyframe lanes — opacity toggle adds/removes keyframe (one un
 
   // Select clip-1 and make sure the Keyframes section is visible
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select(["clip-1"]);
     store.setPlayhead(10);
   });
@@ -266,7 +266,7 @@ test("inspector: keyframe lanes — opacity toggle adds/removes keyframe (one un
   await page.locator('[data-testid="kf-toggle-opacity"]').click();
 
   const afterAdd = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     return {
       hasTrack: !!clip.opacityTrack,
@@ -285,17 +285,17 @@ test("inspector: keyframe lanes — opacity toggle adds/removes keyframe (one un
 
   // canUndo must be true
   const canUndoAfterAdd = await page.evaluate(() => {
-    return (window as unknown as { __palmierStore: StoreProxy }).__palmierStore.canUndo();
+    return (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore.canUndo();
   });
   expect(canUndoAfterAdd).toBe(true);
 
   // ONE undo removes the track
   await page.evaluate(() => {
-    (window as unknown as { __palmierStore: StoreProxy }).__palmierStore.undo();
+    (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore.undo();
   });
 
   const afterUndo = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     return { hasTrack: !!clip.opacityTrack, canUndo: store.canUndo() };
   });
@@ -310,7 +310,7 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate (preview p
 
   // Select clip-1 (durationFrames=90, startFrame=0, mediaType=video)
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select(["clip-1"]);
   });
 
@@ -318,14 +318,14 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate (preview p
 
   // Set kf at frame 0: opacity=1 (toggle adds current value via opacityAt)
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.setPlayhead(0);
   });
   await page.locator('[data-testid="kf-toggle-opacity"]').click();
 
   // Set kf at frame 60: opacity≈0 — dispatch directly so the value is clearly 0
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.dispatch({
       label: "Set Keyframe",
       coalesceKey: "kf-clip-1-opacity-end",
@@ -350,7 +350,7 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate (preview p
 
   // Verify 2 keyframes with correct values
   const kfCount = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     return clip.opacityTrack?.keyframes.length ?? 0;
   });
@@ -359,7 +359,7 @@ test("inspector: keyframe lanes — two opacity keyframes interpolate (preview p
   // Helper: seek playhead and read the center pixel after the engine settles
   const readPixelAtFrame = async (frame: number): Promise<[number, number, number, number]> => {
     await page.evaluate((f: number) => {
-      const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+      const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
       store.setPlayhead(f);
     }, frame);
     // Give the engine time to seek and render the frame
@@ -393,7 +393,7 @@ test("inspector: keyframe lanes — drag keyframe moves it (one undo)", async ({
 
   // Select clip-1 and add an opacity keyframe at frame 20
   await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.select(["clip-1"]);
     store.setPlayhead(20);
   });
@@ -403,7 +403,7 @@ test("inspector: keyframe lanes — drag keyframe moves it (one undo)", async ({
 
   // Verify keyframe at frame 20
   const beforeDrag = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     return clip.opacityTrack?.keyframes[0]?.frame;
   });
@@ -435,7 +435,7 @@ test("inspector: keyframe lanes — drag keyframe moves it (one undo)", async ({
   await expect.poll(
     async () => {
       const frame = await page.evaluate(() => {
-        const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+        const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
         const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
         return clip.opacityTrack?.keyframes[0]?.frame ?? -1;
       });
@@ -445,7 +445,7 @@ test("inspector: keyframe lanes — drag keyframe moves it (one undo)", async ({
   ).not.toBe(20);
 
   const afterDrag = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     return clip.opacityTrack?.keyframes[0]?.frame;
   });
@@ -454,11 +454,11 @@ test("inspector: keyframe lanes — drag keyframe moves it (one undo)", async ({
 
   // ONE undo reverts the move (back to frame 20)
   await page.evaluate(() => {
-    (window as unknown as { __palmierStore: StoreProxy }).__palmierStore.undo();
+    (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore.undo();
   });
 
   const afterUndoMove = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     return clip.opacityTrack?.keyframes[0]?.frame;
   });

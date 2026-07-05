@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import type { ReadPixelFn } from "@palmier/engine";
+import type { ReadPixelFn } from "@frontstage/engine";
 
 const px = (page: import("@playwright/test").Page, x: number, y: number) =>
   page.evaluate(

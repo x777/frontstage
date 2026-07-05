@@ -1,5 +1,5 @@
-import type { Timeline } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
+import type { Timeline } from "@frontstage/core";
+import type { MediaByteSource } from "@frontstage/engine";
 
 export interface ExportTarget {
   readonly label: string;

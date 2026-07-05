@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
-import type { FcpxmlTarget, FcpxmlVersion, MediaManifestEntry, Timeline } from "@palmier/core";
-import { cuesFromCaptionClips, exportFcpxml, exportXmeml, formatSrt, formatVtt, timelineMediaRefs } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
-import type { ToolContext } from "@palmier/ai";
+import type { FcpxmlTarget, FcpxmlVersion, MediaManifestEntry, Timeline } from "@frontstage/core";
+import { cuesFromCaptionClips, exportFcpxml, exportXmeml, formatSrt, formatVtt, timelineMediaRefs } from "@frontstage/core";
+import type { MediaByteSource } from "@frontstage/engine";
+import type { ToolContext } from "@frontstage/ai";
 import type { ExportGateway } from "./export-gateway.js";
 import type { RunProjectCommand } from "./Editor.js";
 

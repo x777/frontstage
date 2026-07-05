@@ -206,14 +206,14 @@ function saveRecent(entries) {
 let nextPick = null;
 
 ipcMain.handle("project:__setNextPick", (_e, p) => {
-  if (process.env.PALMIER_E2E !== "1") throw new Error("test-only");
+  if (process.env.FRONTSTAGE_E2E !== "1") throw new Error("test-only");
   nextPick = p;
 });
 
 let nextExportPick = null;
 
 ipcMain.handle("project:__setNextExportPick", (_e, p) => {
-  if (process.env.PALMIER_E2E !== "1") throw new Error("test-only");
+  if (process.env.FRONTSTAGE_E2E !== "1") throw new Error("test-only");
   nextExportPick = p;
 });
 
@@ -355,7 +355,7 @@ async function loadProjectRegistry() {
 }
 
 function defaultProjectsDir() {
-  return path.join(app.getPath("documents"), "Palmier Projects");
+  return path.join(app.getPath("documents"), "Frontstage Projects");
 }
 
 ipcMain.handle("projects:list", async () => {
@@ -857,7 +857,7 @@ ipcMain.handle("export:finish", async (_event) => {
 // ── AI IPC (DesktopAiGateway) ────────────────────────────────────────────────
 // Provider API keys are stored exclusively in the main process (never in renderer).
 // In production: safeStorage (OS keychain encryption).
-// In headless CI (PALMIER_E2E=1): plain file fallback when safeStorage unavailable.
+// In headless CI (FRONTSTAGE_E2E=1): plain file fallback when safeStorage unavailable.
 
 const KEY_FILES = {
   openrouter: {
@@ -877,7 +877,7 @@ function keyFiles(provider) {
 function loadKey(provider) {
   const { enc, plain } = keyFiles(provider);
   try {
-    const isE2E = process.env.PALMIER_E2E === "1";
+    const isE2E = process.env.FRONTSTAGE_E2E === "1";
     if (isE2E && !safeStorage.isEncryptionAvailable()) {
       // Headless CI fallback: plain text store
       if (!fs.existsSync(plain)) return null;
@@ -892,7 +892,7 @@ function loadKey(provider) {
 
 ipcMain.handle("ai:setKey", (_e, key, provider) => {
   const { enc, plain } = keyFiles(provider);
-  const isE2E = process.env.PALMIER_E2E === "1";
+  const isE2E = process.env.FRONTSTAGE_E2E === "1";
   if (isE2E && !safeStorage.isEncryptionAvailable()) {
     fs.writeFileSync(plain, String(key), "utf8");
     return;
@@ -902,7 +902,7 @@ ipcMain.handle("ai:setKey", (_e, key, provider) => {
 
 ipcMain.handle("ai:hasKey", (_e, provider) => {
   const { enc, plain } = keyFiles(provider);
-  const isE2E = process.env.PALMIER_E2E === "1";
+  const isE2E = process.env.FRONTSTAGE_E2E === "1";
   if (isE2E && !safeStorage.isEncryptionAvailable()) return fs.existsSync(plain);
   return fs.existsSync(enc);
 });
@@ -922,8 +922,8 @@ ipcMain.handle("ai:generateImage", async (_e, body) => {
     headers: {
       Authorization: "Bearer " + key,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://palmier.pro",
-      "X-Title": "PalmierPro",
+      "HTTP-Referer": "https://frontstage.ai",
+      "X-Title": "FrontstagePro",
     },
     body: JSON.stringify(body),
   });
@@ -944,8 +944,8 @@ ipcMain.on("ai:streamChat", async (event, { id, body }) => {
       headers: {
         Authorization: "Bearer " + key,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://palmier.pro",
-        "X-Title": "PalmierPro",
+        "HTTP-Referer": "https://frontstage.ai",
+        "X-Title": "FrontstagePro",
       },
       body: JSON.stringify(body),
     });
@@ -1548,7 +1548,7 @@ ipcMain.handle("media:importDownload", async (_e, dir, url, relPath) => {
 });
 
 // ── Skills IPC (M15 T2, desktop SkillStorage backend) ───────────────────────
-// ~/.palmier/skills/<id>/SKILL.md — SHARED with the Swift app's SkillStore.swift layout. All
+// ~/.frontstage/skills/<id>/SKILL.md — SHARED with the Swift app's SkillStore.swift layout. All
 // fs logic (id sanitization, ledger, export path-building) lives in skills-fs.mjs, which takes no
 // `electron` import so it's directly unit-testable (mirrors project-registry.mjs's convention).
 
@@ -1559,7 +1559,7 @@ async function loadSkillsFs() {
 }
 
 function skillsRoot() {
-  return path.join(os.homedir(), ".palmier", "skills");
+  return path.join(os.homedir(), ".frontstage", "skills");
 }
 
 function skillsCatalogCachePath() {

@@ -1,5 +1,5 @@
-import { buildRenderPlan, topClipAtPoint, expandToLinkGroup } from "@palmier/core";
-import type { EditorStore, Size } from "@palmier/core";
+import { buildRenderPlan, topClipAtPoint, expandToLinkGroup } from "@frontstage/core";
+import type { EditorStore, Size } from "@frontstage/core";
 
 /**
  * Double-click on the preview canvas -> select the topmost clip under the point at the current

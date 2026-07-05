@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { EditorStore, Clip } from "@palmier/core";
+import type { EditorStore, Clip } from "@frontstage/core";
 import {
   findClip,
   effectDescriptor,
@@ -10,7 +10,7 @@ import {
   setClipEffectsCommand,
   formatParam,
   effectParamLabel,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { AdjustSection } from "./AdjustSection.js";
 import { AdjustmentRow } from "./AdjustmentRow.js";

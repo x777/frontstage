@@ -1,5 +1,5 @@
-import { fitTransform, affineTransform } from "@palmier/core";
-import { FrameRenderer, readPixelFactory, type ReadPixelFn } from "@palmier/engine";
+import { fitTransform, affineTransform } from "@frontstage/core";
+import { FrameRenderer, readPixelFactory, type ReadPixelFn } from "@frontstage/engine";
 
 const W = 200;
 const H = 200;

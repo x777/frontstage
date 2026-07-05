@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { EditorStore, EmbeddingRow, MediaFolder, MediaManifest, MediaManifestEntry, SourceTimecode, TextStyle, TranscriptionResult } from "@palmier/core";
+import type { EditorStore, EmbeddingRow, MediaFolder, MediaManifest, MediaManifestEntry, SourceTimecode, TextStyle, TranscriptionResult } from "@frontstage/core";
 import type { ImageGenInput } from "../agent/image-generator.js";
 import type { StartJobArgs } from "../generation/generation-service.js";
 import type { EmbeddingModelInfo } from "../search/embedding-service.js";
@@ -33,7 +33,7 @@ export interface ToolContext {
     confirmThreshold: number;
     // generate_audio's video-to-audio span source (M14C T3, the M10 deferral) — a headless,
     // silent (no audio), shortSide-downscaled render of [startFrame, startFrame+frameCount)
-    // reusing the SAME export pipeline the real export gateways drive (@palmier/engine's
+    // reusing the SAME export pipeline the real export gateways drive (@frontstage/engine's
     // renderSpanToMp4). Absent -> the tool errors cleanly naming the capability.
     renderSpanToMp4?(startFrame: number, frameCount: number, shortSide: number): Promise<Uint8Array>;
     // Raw-bytes upload to the fal storage path (M11A's gateway.uploadFile) for renderSpanToMp4's
@@ -48,7 +48,7 @@ export interface ToolContext {
     estimateCredits(durationSeconds: number): number;
     // Rendered width of `text` at `style`'s font/size, as a FRACTION of the canvas width (see
     // buildCaptionPhrases' `measure`). Optional — M11D wires a real Canvas2D-backed impl from
-    // @palmier/ui; until then, add_captions falls back to a character-count heuristic.
+    // @frontstage/ui; until then, add_captions falls back to a character-count heuristic.
     measureText?(text: string, style: TextStyle): number;
     // The local whisper fallback's readiness (M14A T3) — LocalAsrService.state === "ready", synchronous
     // since it's a plain state read. Absent/omitted = treated as not-ready. Backs both the keyless
@@ -78,7 +78,7 @@ export interface ToolContext {
     // single-file paths only (Swift: displayName = name ?? filename); directories ignore it.
     fromPath?(absPath: string, folderId?: string, name?: string): Promise<{ assetIds: string[] }>;
     // Solid-color matte rendering (M13A T1, create_matte): the ai package can't touch canvas, so
-    // hosts wire this from @palmier/ui's renderMattePng. Absent -> create_matte errors cleanly.
+    // hosts wire this from @frontstage/ui's renderMattePng. Absent -> create_matte errors cleanly.
     renderMatte?(hex: string, width: number, height: number): Promise<Uint8Array>;
   };
   // .cube LUT project persistence (M14C T2, the Swift LUTLoader.store pattern) backing

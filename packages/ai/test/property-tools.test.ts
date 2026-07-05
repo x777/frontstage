@@ -7,7 +7,7 @@ import {
   findClip,
   type Timeline,
   type Track,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   setClipPropertiesTool,
   setKeyframesTool,

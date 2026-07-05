@@ -14,9 +14,9 @@ import {
   type SourceTimecode,
   type Timeline,
   type Track,
-} from "@palmier/core";
-import type { ToolContext } from "@palmier/ai";
-import type { MediaByteSource } from "@palmier/engine";
+} from "@frontstage/core";
+import type { ToolContext } from "@frontstage/ai";
+import type { MediaByteSource } from "@frontstage/engine";
 
 // A well-formed (empty) timeline — canExportCaptions inspects .tracks on every render, so this must
 // satisfy Timeline's shape even in tests that don't otherwise care about timeline content.

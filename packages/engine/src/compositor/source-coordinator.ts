@@ -1,4 +1,4 @@
-import { affineTransform, applyTextLayerAnim, buildRenderPlan, defaultCrop, frameToSeconds, type Clip, type Size, type Timeline } from "@palmier/core";
+import { affineTransform, applyTextLayerAnim, buildRenderPlan, defaultCrop, frameToSeconds, type Clip, type Size, type Timeline } from "@frontstage/core";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
 import { buildVideoChunks, VideoDecodeManager } from "../decode/video-decoder.js";
 import { ImageSource } from "../media/image-source.js";

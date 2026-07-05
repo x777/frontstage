@@ -1,6 +1,6 @@
 // The generation facade's confirm-gate threshold (super-Swift — Swift has no numeric knob here,
 // just a fixed rule). Persisted alongside the other host settings (agent/image model keys).
-export const CONFIRM_THRESHOLD_STORAGE_KEY = "palmier.generation.confirmThreshold";
+export const CONFIRM_THRESHOLD_STORAGE_KEY = "frontstage.generation.confirmThreshold";
 export const DEFAULT_CONFIRM_THRESHOLD = 50;
 
 // Absent or invalid (non-finite / negative) stored value falls back to the default. Backs both the

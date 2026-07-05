@@ -13,7 +13,7 @@ const CASES: Array<{ label: string; content: string }> = [
 
 for (const { label, content } of CASES) {
   test(`corrupt recent.json (${label}): launch succeeds + listRecent returns []`, async () => {
-    const tmpUserData = mkdtempSync(join(os.tmpdir(), `palmier-recent-harden-${label}-`));
+    const tmpUserData = mkdtempSync(join(os.tmpdir(), `frontstage-recent-harden-${label}-`));
     writeFileSync(join(tmpUserData, "recent.json"), content, "utf8");
 
     const app = await electron.launch({
@@ -25,7 +25,7 @@ for (const { label, content } of CASES) {
       env: {
         ...process.env,
         RENDERER_PORT: "5190",
-        PALMIER_E2E: "1",
+        FRONTSTAGE_E2E: "1",
       },
     });
 

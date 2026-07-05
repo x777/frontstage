@@ -1,5 +1,5 @@
-import type { Timeline } from "@palmier/core";
-import { MediaLibrary } from "@palmier/ui";
+import type { Timeline } from "@frontstage/core";
+import { MediaLibrary } from "@frontstage/ui";
 
 export function sampleTimeline(): Timeline {
   const fps = 30;

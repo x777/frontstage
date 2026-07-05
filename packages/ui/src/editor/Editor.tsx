@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { CubeLUT, EditorStore, GenerationLogEntry, MediaFolder, MediaManifestEntry, ProjectRef } from "@palmier/core";
-import type { ProjectSession } from "@palmier/core";
-import type { AgentSession, ChatSessionStore, ModelEntry, ToolContext } from "@palmier/ai";
+import type { CubeLUT, EditorStore, GenerationLogEntry, MediaFolder, MediaManifestEntry, ProjectRef } from "@frontstage/core";
+import type { ProjectSession } from "@frontstage/core";
+import type { AgentSession, ChatSessionStore, ModelEntry, ToolContext } from "@frontstage/ai";
 import type { MentionItem } from "../agent/MentionInput.js";
 import { SettingsPanel } from "../agent/SettingsPanel.js";
 import type { KeyConfig, FalKeyConfig, McpSettings } from "../agent/SettingsPanel.js";
@@ -15,10 +15,10 @@ import {
   DEFAULT_TRACK_HEIGHT,
   resolveDropPlan,
   rippleInsertClipsSpecs,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { TRACK_HEADER_WIDTH } from "../timeline/TrackHeaders.js";
-import type { RippleInsertSpec } from "@palmier/core";
-import type { MediaByteSource, PlaybackEngine } from "@palmier/engine";
+import type { RippleInsertSpec } from "@frontstage/core";
+import type { MediaByteSource, PlaybackEngine } from "@frontstage/engine";
 import { theme } from "../theme/theme.js";
 import { Button, Dialog, IconButton } from "../primitives/index.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
@@ -109,13 +109,13 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
-    try { return localStorage.getItem("palmier.agent.visible") === "1"; } catch { return false; }
+    try { return localStorage.getItem("frontstage.agent.visible") === "1"; } catch { return false; }
   });
 
   function toggleAgent() {
     setAgentVisible((prev) => {
       const next = !prev;
-      try { localStorage.setItem("palmier.agent.visible", next ? "1" : "0"); } catch { /* storage unavailable */ }
+      try { localStorage.setItem("frontstage.agent.visible", next ? "1" : "0"); } catch { /* storage unavailable */ }
       return next;
     });
   }
@@ -202,8 +202,8 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
   }
 
   // Compute dirty title
-  const projectName = sessionState?.name ?? "Palmier Pro";
-  const title = session ? `${projectName}${isDirty ? " •" : ""}` : "Palmier Pro";
+  const projectName = sessionState?.name ?? "Frontstage";
+  const title = session ? `${projectName}${isDirty ? " •" : ""}` : "Frontstage";
 
   useEffect(() => {
     document.title = title;

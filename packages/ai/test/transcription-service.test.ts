@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import type { MediaManifestEntry, TranscriptRecord } from "@palmier/core";
-import { encodeWavPcm16Mono } from "@palmier/engine/audio/wav-encode.js";
+import type { MediaManifestEntry, TranscriptRecord } from "@frontstage/core";
+import { encodeWavPcm16Mono } from "@frontstage/engine/audio/wav-encode.js";
 import type { GenJobGateway, JobStatus } from "../src/generation/gen-gateway.js";
 import { TranscriptionService } from "../src/transcription/transcription-service.js";
 import type { AudioExtractor, TranscriptionHost } from "../src/transcription/transcription-service.js";

@@ -1,8 +1,8 @@
 import {
   defaultCrop, defaultTransform,
   type Timeline, type Clip,
-} from "@palmier/core";
-import { PlaybackEngine, type MediaByteSource } from "@palmier/engine";
+} from "@frontstage/core";
+import { PlaybackEngine, type MediaByteSource } from "@frontstage/engine";
 
 declare global {
   interface Window {

@@ -1,10 +1,10 @@
-import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer } from "@palmier/engine";
+import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer } from "@frontstage/engine";
 import {
   affineTransform, defaultTransform, defaultCrop, type Effect, type BlendMode,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
   applyColorWheels, applyCurves, applyHueCurves, parseGradeCurve, parseHueCurves,
   parseCubeLUT, sampleLUT, blendPixel, applyChromaKey,
-} from "@palmier/core";
+} from "@frontstage/core";
 
 const W = 200, H = 200;
 

@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import { wheelDisplayColor, pointToXY, xyToPuck } from "@palmier/core";
+import { wheelDisplayColor, pointToXY, xyToPuck } from "@frontstage/core";
 import { theme } from "../../theme/theme.js";
 
 const NUDGE = 0.05;

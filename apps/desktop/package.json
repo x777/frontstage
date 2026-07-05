@@ -1,5 +1,5 @@
 {
-  "name": "@palmier/desktop",
+  "name": "@frontstage/desktop",
   "version": "0.0.0",
   "private": true,
   "main": "src/main/index.cjs",
@@ -22,10 +22,10 @@
     "undici": "^6.27.0"
   },
   "devDependencies": {
-    "@palmier/ai": "workspace:*",
-    "@palmier/core": "workspace:*",
-    "@palmier/engine": "workspace:*",
-    "@palmier/ui": "workspace:*",
+    "@frontstage/ai": "workspace:*",
+    "@frontstage/core": "workspace:*",
+    "@frontstage/engine": "workspace:*",
+    "@frontstage/ui": "workspace:*",
     "@playwright/test": "^1.48.0",
     "@types/node": "^22",
     "@types/react": "^18.3.0",
@@ -40,8 +40,8 @@
     "vitest": "^2.0.0"
   },
   "build": {
-    "appId": "io.palmier.pro",
-    "productName": "Palmier Pro",
+    "appId": "ai.frontstage.app",
+    "productName": "Frontstage",
     "directories": {
       "output": "release",
       "buildResources": "build"

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import type { EditorStore, Clip, CubeLUT } from "@palmier/core";
+import type { EditorStore, Clip, CubeLUT } from "@frontstage/core";
 import {
   findClip,
   parseCubeLUT,
@@ -10,7 +10,7 @@ import {
   setSectionEnabled,
   resetSection,
   setClipEffectsCommand,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { AdjustSection } from "./AdjustSection.js";
 import { AdjustSlider } from "./AdjustSlider.js";

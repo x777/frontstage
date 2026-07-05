@@ -1,4 +1,4 @@
-import { MenuList } from "@palmier/ui";
+import { MenuList } from "@frontstage/ui";
 
 const dark: React.CSSProperties = { background: "var(--bg-base)", padding: 16, display: "inline-block" };
 

@@ -1,6 +1,6 @@
-import type { EditorStore } from "@palmier/core";
-import { findClip, BLEND_MODES, setClipBlendModeCommand } from "@palmier/core";
-import type { BlendMode } from "@palmier/core";
+import type { EditorStore } from "@frontstage/core";
+import { findClip, BLEND_MODES, setClipBlendModeCommand } from "@frontstage/core";
+import type { BlendMode } from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { Select } from "../../primitives/Select.js";
 import { theme } from "../../theme/theme.js";

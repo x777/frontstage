@@ -1,4 +1,4 @@
-import { demuxMp4, buildAudioChunks, AudioDecodeManager, AudioGraph } from "@palmier/engine";
+import { demuxMp4, buildAudioChunks, AudioDecodeManager, AudioGraph } from "@frontstage/engine";
 
 interface AudioGraphRunResult {
   isolated: boolean;

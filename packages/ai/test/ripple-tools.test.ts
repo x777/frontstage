@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type MediaManifest, type Track, type Timeline } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type MediaManifest, type Track, type Timeline } from "@frontstage/core";
 import { rippleDeleteRangesTool, insertClipsTool, type ToolContext } from "../src/index.js";
 
 function makeClip(id: string, startFrame: number, durationFrames = 60) {

@@ -1,5 +1,5 @@
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@frontstage/core";
 import { ClipContextMenu } from "../src/timeline/ClipContextMenu.js";
 
 function clip(id: string, mediaType: Clip["mediaType"], linkGroupId?: string): Clip {

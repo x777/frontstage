@@ -1,4 +1,4 @@
-import type { ToolContext } from "@palmier/ai";
+import type { ToolContext } from "@frontstage/ai";
 import { refFor } from "./desktop-gateway.js";
 import type { DesktopProjectRef } from "./desktop-gateway.js";
 

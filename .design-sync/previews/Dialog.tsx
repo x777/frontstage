@@ -1,4 +1,4 @@
-import { Button, Dialog } from "@palmier/ui";
+import { Button, Dialog } from "@frontstage/ui";
 
 export const ConfirmDiscard = () => (
   <div style={{ background: "var(--bg-base)", width: 480, height: 300, position: "relative" }}>

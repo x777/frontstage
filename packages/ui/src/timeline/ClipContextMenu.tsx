@@ -1,7 +1,7 @@
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
 import { MenuList, type MenuListItem } from "../primitives/index.js";
-import { canLinkSelection, canUnlinkSelection, dispatchLinkSelection, dispatchUnlinkSelection, selectForwardFromClip, type EditorStore } from "@palmier/core";
+import { canLinkSelection, canUnlinkSelection, dispatchLinkSelection, dispatchUnlinkSelection, selectForwardFromClip, type EditorStore } from "@frontstage/core";
 
 export interface ClipContextMenuState { x: number; y: number; clipId?: string }
 

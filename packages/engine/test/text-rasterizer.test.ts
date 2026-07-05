@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { defaultTextStyle, defaultTransform, type TextLayer } from "@palmier/core";
+import { defaultTextStyle, defaultTransform, type TextLayer } from "@frontstage/core";
 import { layoutWordsLine, textRasterCacheKey } from "../src/render/text-rasterizer.js";
 
 const size = { width: 200, height: 100 };

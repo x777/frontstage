@@ -1,7 +1,7 @@
-import { createImportPlaceholderEntry } from "@palmier/core";
-import { MediaLibrary, probeMediaBlob } from "@palmier/ui";
-import { extensionForImportMime, extensionForImportUrl, importTypeForExtension } from "@palmier/ai";
-import type { ToolContext } from "@palmier/ai";
+import { createImportPlaceholderEntry } from "@frontstage/core";
+import { MediaLibrary, probeMediaBlob } from "@frontstage/ui";
+import { extensionForImportMime, extensionForImportUrl, importTypeForExtension } from "@frontstage/ai";
+import type { ToolContext } from "@frontstage/ai";
 
 export interface WebMediaImportDeps {
   library: MediaLibrary;

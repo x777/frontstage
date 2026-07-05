@@ -40,13 +40,13 @@ describe("SkillCatalog — loadCached (cache-first, no network)", () => {
 });
 
 describe("SkillCatalog — refresh", () => {
-  test("fetches catalog.json from the default palmier-skills raw base", async () => {
+  test("fetches catalog.json from the default frontstage-skills raw base", async () => {
     const deps = makeDeps();
     const catalog = new SkillCatalog(deps);
     const entries = await catalog.refresh();
     expect(entries).toEqual(ENTRIES);
     expect(deps.fetchText).toHaveBeenCalledWith(
-      "https://raw.githubusercontent.com/palmier-io/palmier-skills/main/catalog.json",
+      "https://raw.githubusercontent.com/x777/frontstage-skills/main/catalog.json",
     );
   });
 
@@ -118,15 +118,15 @@ describe("SkillCatalog — skillText", () => {
     const catalog = new SkillCatalog(deps);
     const text = await catalog.skillText(ENTRIES[0]!);
     expect(deps.fetchText).toHaveBeenCalledWith(
-      "https://raw.githubusercontent.com/palmier-io/palmier-skills/main/skills/foo/SKILL.md",
+      "https://raw.githubusercontent.com/x777/frontstage-skills/main/skills/foo/SKILL.md",
     );
     expect(text).toBe("---\nname: Foo\ndescription: does foo\n---\nbody");
   });
 
   test("respects a baseUrl override for the joined path", async () => {
-    const deps = makeDeps({ baseUrl: "file:///tmp/palmier-skills" });
+    const deps = makeDeps({ baseUrl: "file:///tmp/frontstage-skills" });
     const catalog = new SkillCatalog(deps);
     await catalog.skillText(ENTRIES[1]!);
-    expect(deps.fetchText).toHaveBeenCalledWith("file:///tmp/palmier-skills/skills/bar/SKILL.md");
+    expect(deps.fetchText).toHaveBeenCalledWith("file:///tmp/frontstage-skills/skills/bar/SKILL.md");
   });
 });

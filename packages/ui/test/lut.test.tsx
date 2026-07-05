@@ -1,8 +1,8 @@
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { LUTSection, LutReconciler } from "../src/inspector/adjust/index.js";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
-import type { Clip, Track } from "@palmier/core";
-import type { CubeLUT } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@frontstage/core";
+import type { Clip, Track } from "@frontstage/core";
+import type { CubeLUT } from "@frontstage/core";
 
 function makeClip(id: string, overrides?: Partial<Clip>): Clip {
   return {

@@ -16,7 +16,7 @@ import {
   type Timeline,
   type Track,
   type TranscriptionResult,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { exportProjectTool } from "../src/tools/export-tools.js";
 import type { ToolContext } from "../src/index.js";
 
@@ -115,7 +115,7 @@ describe("export_project — mode validation", () => {
   // making the custom "unknown mode" message below dead code.
   test("the schema accepts any string for mode — validation happens in run()", () => {
     const tool = exportProjectTool();
-    for (const mode of ["video", "xml", "fcpxml", "palmier", "srt", "vtt", "not-a-mode"]) {
+    for (const mode of ["video", "xml", "fcpxml", "frontstage", "srt", "vtt", "not-a-mode"]) {
       expect(tool.inputSchema.safeParse({ mode }).success).toBe(true);
     }
   });
@@ -157,11 +157,11 @@ describe("export_project — deferrals", () => {
     expect((result.blocks[0] as { text: string }).text).toMatch(/File menu/i);
   });
 
-  test("palmier mode is deferred, even without a facade", async () => {
+  test("frontstage mode is deferred, even without a facade", async () => {
     const tool = exportProjectTool();
-    const result = await tool.run({ mode: "palmier" }, makeCtx());
+    const result = await tool.run({ mode: "frontstage" }, makeCtx());
     expect(result.isError).toBe(true);
-    expect((result.blocks[0] as { text: string }).text).toMatch(/palmier/i);
+    expect((result.blocks[0] as { text: string }).text).toMatch(/frontstage/i);
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * Pure port of TimelineRuler.swift's tick math (Sources/PalmierPro/Timeline/TimelineRuler.swift).
+ * Pure port of TimelineRuler.swift's tick math (Sources/FrontstagePro/Timeline/TimelineRuler.swift).
  * Produces tick geometry only — no canvas/DOM access — so draw-timeline.ts stays the single
  * place that touches the palette and CanvasRenderingContext2D.
  */

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { ModelEntry } from "@palmier/ai";
+import type { ModelEntry } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { Button, IconButton, TextInput, Checkbox, Icon, type IconName } from "../primitives/index.js";
 import { ModelPicker } from "./ModelPicker.js";

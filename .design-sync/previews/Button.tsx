@@ -1,4 +1,4 @@
-import { Button } from "@palmier/ui";
+import { Button } from "@frontstage/ui";
 
 // Dark-first DS: cards paint the app's base background themselves.
 const dark: React.CSSProperties = {

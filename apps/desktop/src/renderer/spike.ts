@@ -1,5 +1,5 @@
-import { FrameRenderer } from "@palmier/engine";
-import { affineTransform, defaultTransform, defaultCrop } from "@palmier/core";
+import { FrameRenderer } from "@frontstage/engine";
+import { affineTransform, defaultTransform, defaultCrop } from "@frontstage/core";
 
 declare global {
   interface Window {

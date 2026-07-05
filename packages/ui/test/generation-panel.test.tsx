@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { GenerationPanel } from "../src/agent/GenerationPanel.js";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
 
 function makeFacade(opts: { hasKey?: boolean; startJobResult?: { jobId: string } | { error: string }; entryUrl?: (id: string) => Promise<string | undefined> } = {}) {
   return {

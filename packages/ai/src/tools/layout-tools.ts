@@ -14,7 +14,7 @@ import {
   type LayoutSlot,
   type MediaManifestEntry,
   type Timeline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 

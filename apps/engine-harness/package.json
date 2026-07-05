@@ -1,5 +1,5 @@
 {
-  "name": "@palmier/engine-harness",
+  "name": "@frontstage/engine-harness",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,12 +8,12 @@
     "preview": "vite preview",
     "e2e": "playwright test",
     "test:headed": "playwright test",
-    "test": "echo \"engine-harness: GPU specs need a local GPU (headed Chrome) — skipped in turbo; run 'pnpm -F @palmier/engine-harness test:headed' manually\"",
+    "test": "echo \"engine-harness: GPU specs need a local GPU (headed Chrome) — skipped in turbo; run 'pnpm -F @frontstage/engine-harness test:headed' manually\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@palmier/core": "workspace:*",
-    "@palmier/engine": "workspace:*"
+    "@frontstage/core": "workspace:*",
+    "@frontstage/engine": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

@@ -17,7 +17,7 @@ const TOLERANCE = 30;
 
 test("timeline-canvas exists and clip pixel matches video track color", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
 
   const canvas = page.locator('[data-testid="timeline-canvas"]');
@@ -121,12 +121,12 @@ type StoreProxy = {
 };
 
 function getStore(win: Window): StoreProxy {
-  return (win as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+  return (win as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
 }
 
 async function waitForCanvas(page: import("@playwright/test").Page) {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
   const canvas = page.locator('[data-testid="timeline-canvas"]');
   await expect(canvas).toBeVisible({ timeout: 10_000 });
@@ -155,7 +155,7 @@ test("click clip selects it; click empty deselects", async ({ page }) => {
     const store = getStore(window);
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.id;
     function getStore(win: Window): StoreProxy {
-      return (win as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     }
     type StoreProxy = {
       getSnapshot(): {
@@ -168,7 +168,7 @@ test("click clip selects it; click empty deselects", async ({ page }) => {
   });
 
   const selectionHasClip = await page.evaluate((id: string) => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { selection: Set<string> } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { selection: Set<string> } } }).__frontstageStore;
     return store.getSnapshot().selection.has(id);
   }, clipId);
   expect(selectionHasClip).toBe(true);
@@ -216,7 +216,7 @@ test("click clip selects it; click empty deselects", async ({ page }) => {
   await page.waitForTimeout(50);
 
   const selectionEmpty = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { selection: Set<string> } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { selection: Set<string> } } }).__frontstageStore;
     return store.getSnapshot().selection.size === 0;
   });
   expect(selectionEmpty).toBe(true);
@@ -269,7 +269,7 @@ test("ruler drag scrubs playhead", async ({ page }) => {
   await page.waitForTimeout(100);
 
   const playhead = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { playhead: number } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { playhead: number } } }).__frontstageStore;
     return store.getSnapshot().playhead;
   });
   // Released at x=60 within the canvas; with zoom=1 and scrollX=0, frame ≈ 60
@@ -289,7 +289,7 @@ test("ctrl+wheel changes zoom; plain wheel changes scrollX", async ({ page }) =>
   const cy = box!.y + CLIP_Y;
 
   const zoomBefore = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { view: { zoom: number } } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { view: { zoom: number } } } }).__frontstageStore;
     return store.getSnapshot().view.zoom;
   });
 
@@ -302,14 +302,14 @@ test("ctrl+wheel changes zoom; plain wheel changes scrollX", async ({ page }) =>
   await page.waitForTimeout(150);
 
   const zoomAfter = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { view: { zoom: number } } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { view: { zoom: number } } } }).__frontstageStore;
     return store.getSnapshot().view.zoom;
   });
   expect(zoomAfter).toBeGreaterThan(zoomBefore);
 
   // plain wheel to scroll right — content is now 90 * MAX_ZOOM = 3600px >> canvas width
   const scrollBefore = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { view: { scrollX: number } } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { view: { scrollX: number } } } }).__frontstageStore;
     return store.getSnapshot().view.scrollX;
   });
 
@@ -318,7 +318,7 @@ test("ctrl+wheel changes zoom; plain wheel changes scrollX", async ({ page }) =>
   await page.waitForTimeout(100);
 
   const scrollAfter = await page.evaluate(() => {
-    const store = (window as unknown as { __palmierStore: { getSnapshot(): { view: { scrollX: number } } } }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: { getSnapshot(): { view: { scrollX: number } } } }).__frontstageStore;
     return store.getSnapshot().view.scrollX;
   });
   expect(scrollAfter).toBeGreaterThan(scrollBefore);
@@ -356,7 +356,7 @@ type FullStoreProxy = {
 };
 
 function getFullStore(win: Window): FullStoreProxy {
-  return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+  return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
 }
 
 async function setupZoom10(page: import("@playwright/test").Page): Promise<{
@@ -364,7 +364,7 @@ async function setupZoom10(page: import("@playwright/test").Page): Promise<{
   box: { x: number; y: number; width: number; height: number };
 }> {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
   const canvas = page.locator('[data-testid="timeline-canvas"]');
   await expect(canvas).toBeVisible({ timeout: 10_000 });
@@ -382,7 +382,7 @@ async function setupZoom10(page: import("@playwright/test").Page): Promise<{
     const store = getFullStore(window);
     store.setZoom(10);
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       setZoom(z: number): void;
@@ -417,7 +417,7 @@ test("move: drag clip body changes startFrame; one undo restores", async ({ page
     const clip = snap.timeline.tracks[0]!.clips[0]!;
     return { clipId: clip.id, startFrame: clip.startFrame };
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -444,7 +444,7 @@ test("move: drag clip body changes startFrame; one undo restores", async ({ page
     }
     return null;
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -465,7 +465,7 @@ test("move: drag clip body changes startFrame; one undo restores", async ({ page
     const store = getFullStore(window);
     store.undo();
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       undo(): void;
@@ -482,7 +482,7 @@ test("move: drag clip body changes startFrame; one undo restores", async ({ page
     }
     return null;
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -512,7 +512,7 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     const store = getFullStore(window);
     store.setPlayhead(ph);
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       setPlayhead(f: number): void;
@@ -526,7 +526,7 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     const clip = snap.timeline.tracks[0]!.clips[0]!;
     return { clipId: clip.id, startFrame: clip.startFrame, durationFrames: clip.durationFrames };
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -560,7 +560,7 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     }
     return null;
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -580,7 +580,7 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     const store = getFullStore(window);
     store.undo();
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = { undo(): void };
   });
@@ -609,7 +609,7 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
     }
     return null;
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -626,7 +626,7 @@ test("move: drag near playhead snaps exactly to playhead frame", async ({ page }
 
 test("trim: drag right edge inward; one undo restores", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
   const canvas = page.locator('[data-testid="timeline-canvas"]');
   await expect(canvas).toBeVisible({ timeout: 10_000 });
@@ -645,7 +645,7 @@ test("trim: drag right edge inward; one undo restores", async ({ page }) => {
     const store = getFullStore(window);
     store.setZoom(z);
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = { setZoom(z: number): void };
   }, ZOOM);
@@ -665,7 +665,7 @@ test("trim: drag right edge inward; one undo restores", async ({ page }) => {
     const clip = snap.timeline.tracks[0]!.clips[0]!;
     return { clipId: clip.id, durationFrames: clip.durationFrames, startFrame: clip.startFrame };
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -693,7 +693,7 @@ test("trim: drag right edge inward; one undo restores", async ({ page }) => {
     }
     return null;
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -712,7 +712,7 @@ test("trim: drag right edge inward; one undo restores", async ({ page }) => {
     const store = getFullStore(window);
     store.undo();
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = { undo(): void };
   });
@@ -727,7 +727,7 @@ test("trim: drag right edge inward; one undo restores", async ({ page }) => {
     }
     return null;
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {
@@ -755,7 +755,7 @@ test("split: key press at playhead inside clip produces two clips", async ({ pag
     const store = getFullStore(window);
     store.setPlayhead(30);
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       setPlayhead(f: number): void;
@@ -778,7 +778,7 @@ test("split: key press at playhead inside clip produces two clips", async ({ pag
       clips: track.clips.map((c) => ({ id: c.id, startFrame: c.startFrame, durationFrames: c.durationFrames })),
     };
     function getFullStore(win: Window): FullStoreProxy {
-      return (win as unknown as { __palmierStore: FullStoreProxy }).__palmierStore;
+      return (win as unknown as { __frontstageStore: FullStoreProxy }).__frontstageStore;
     }
     type FullStoreProxy = {
       getSnapshot(): {

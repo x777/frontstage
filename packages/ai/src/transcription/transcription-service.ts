@@ -1,8 +1,8 @@
-import type { MediaManifestEntry, TranscriptionResult, TranscriptRecord } from "@palmier/core";
-import { parseTranscriptRecord, serializeGenerationStatus, transcriptRelativePath } from "@palmier/core";
+import type { MediaManifestEntry, TranscriptionResult, TranscriptRecord } from "@frontstage/core";
+import { parseTranscriptRecord, serializeGenerationStatus, transcriptRelativePath } from "@frontstage/core";
 // Deep import (not the package barrel): the barrel re-exports the WebGPU renderer, which needs DOM
 // lib types ai's tsconfig deliberately omits (ai stays host-agnostic/Node-safe).
-import { decodeWavPcm16Mono } from "@palmier/engine/audio/wav-encode.js";
+import { decodeWavPcm16Mono } from "@frontstage/engine/audio/wav-encode.js";
 import type { GenJobGateway } from "../generation/gen-gateway.js";
 import { nextPollDelay } from "../generation/poll-schedule.js";
 import { genModel } from "../generation/gen-catalog.js";

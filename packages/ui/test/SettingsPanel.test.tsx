@@ -1,8 +1,8 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { SettingsPanel } from "../src/agent/SettingsPanel.js";
 import type { McpSettings } from "../src/agent/SettingsPanel.js";
-import type { ModelEntry, SkillStorage, SkillCatalogDeps } from "@palmier/ai";
-import { SkillStore, SkillCatalog } from "@palmier/ai";
+import type { ModelEntry, SkillStorage, SkillCatalogDeps } from "@frontstage/ai";
+import { SkillStore, SkillCatalog } from "@frontstage/ai";
 
 const LLM_MODELS: ModelEntry[] = [
   { id: "a/llm-1", label: "LLM One", kind: "llm" },

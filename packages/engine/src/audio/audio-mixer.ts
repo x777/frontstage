@@ -1,5 +1,5 @@
-import { buildAudioPlan, timelineTotalFrames, type AudioPlan } from "@palmier/core";
-import type { Clip, Timeline } from "@palmier/core";
+import { buildAudioPlan, timelineTotalFrames, type AudioPlan } from "@frontstage/core";
+import type { Clip, Timeline } from "@frontstage/core";
 import type { MediaByteSource } from "../media/media-source.js";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
 import { buildAudioChunks, AudioDecodeManager } from "../decode/audio-decoder.js";

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { matteName, matteSize } from "@palmier/core";
-import type { MatteAspect } from "@palmier/core";
+import { matteName, matteSize } from "@frontstage/core";
+import type { MatteAspect } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Dialog } from "../primitives/Dialog.js";
 import { Button } from "../primitives/Button.js";

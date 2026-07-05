@@ -1,5 +1,5 @@
-// Ambient declarations for @palmier/engine transitive dependencies.
-// Required because @palmier/ui typechecks across the workspace with engine source.
+// Ambient declarations for @frontstage/engine transitive dependencies.
+// Required because @frontstage/ui typechecks across the workspace with engine source.
 declare module "mp4box" {
   export interface MP4ArrayBuffer extends ArrayBuffer {
     fileStart: number;

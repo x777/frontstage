@@ -1,4 +1,4 @@
-import type { BoundProject, ProjectGateway, ProjectRef } from "@palmier/core";
+import type { BoundProject, ProjectGateway, ProjectRef } from "@frontstage/core";
 import { dirHandleProjectStore, WebMediaGateway } from "./web-fs.js";
 
 export type WebProjectRef = ProjectRef & { handle: FileSystemDirectoryHandle };
@@ -79,7 +79,7 @@ export class WebGateway implements ProjectGateway {
 
   constructor(opts?: WebGatewayOptions) {
     this.pick = opts?.pickDirectory ?? defaultPicker;
-    this.dbName = opts?.dbName ?? "palmier-recent";
+    this.dbName = opts?.dbName ?? "frontstage-recent";
   }
 
   // Test seam: queue a ref (possibly bare {id,name} or with a handle serialized as {}) to be returned

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { StreamEvent } from "@palmier/ai";
+import type { StreamEvent } from "@frontstage/ai";
 import { WebAiGateway } from "../src/web-ai-gateway.js";
 
 // Canned SSE matching the proxy test fixture

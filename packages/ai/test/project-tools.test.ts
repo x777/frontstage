@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { EditorStore, defaultTimeline, type MediaManifest } from "@palmier/core";
+import { EditorStore, defaultTimeline, type MediaManifest } from "@frontstage/core";
 import { buildCatalog, ToolExecutor, type ToolContext } from "../src/index.js";
 
 type ProjectsFacade = NonNullable<ToolContext["projects"]>;

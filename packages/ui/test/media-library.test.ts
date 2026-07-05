@@ -1,6 +1,6 @@
 import { test, expect, afterEach, vi } from "vitest";
-import type { MediaFolder, MediaManifestEntry } from "@palmier/core";
-import { decodeProjectFiles, defaultTimeline, emptyGenerationLog, encodeProjectFiles, PROJECT_FILES } from "@palmier/core";
+import type { MediaFolder, MediaManifestEntry } from "@frontstage/core";
+import { decodeProjectFiles, defaultTimeline, emptyGenerationLog, encodeProjectFiles, PROJECT_FILES } from "@frontstage/core";
 import { MediaLibrary } from "../src/media/media-library.js";
 
 function flushAsync(): Promise<void> {

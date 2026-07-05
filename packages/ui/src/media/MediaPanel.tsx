@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { EditorStore, MediaFolder, MediaManifestEntry } from "@palmier/core";
-import { buildFolderIndex, collectFolderCascade, folderPath, parseGenerationStatus } from "@palmier/core";
+import type { EditorStore, MediaFolder, MediaManifestEntry } from "@frontstage/core";
+import { buildFolderIndex, collectFolderCascade, folderPath, parseGenerationStatus } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Button, Icon, IconButton, MenuList, SearchField, useHover } from "../primitives/index.js";
 import type { IconName, MenuListItem } from "../primitives/index.js";

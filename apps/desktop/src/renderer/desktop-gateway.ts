@@ -1,4 +1,4 @@
-import type { ProjectGateway, ProjectRef, BoundProject } from "@palmier/core";
+import type { ProjectGateway, ProjectRef, BoundProject } from "@frontstage/core";
 
 export type DesktopProjectRef = ProjectRef & { path: string };
 

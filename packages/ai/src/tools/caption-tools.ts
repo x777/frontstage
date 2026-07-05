@@ -14,7 +14,7 @@ import {
   type CaptionClipSpec,
   type CaptionPhrase,
   type TextStyle,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 import { confirmationResult } from "./generate-tools.js";
@@ -26,10 +26,10 @@ type TextCase = (typeof TEXT_CASES)[number];
 
 /**
  * Fallback text-measure used when the host hasn't wired `ctx.transcription.measureText` (M11D wires
- * a real Canvas2D-backed impl from @palmier/ui). Returns the rendered width of `text` at
+ * a real Canvas2D-backed impl from @frontstage/ui). Returns the rendered width of `text` at
  * `style.fontSize`, as a FRACTION of `canvasWidth` — the same unit buildCaptionPhrases' `measure`
  * expects. Deliberately crude (no per-glyph metrics); documented deviation, not a bug. The formula
- * itself lives in @palmier/core (heuristicCaptionWidthFrac) so the ui-side fallback matches exactly.
+ * itself lives in @frontstage/core (heuristicCaptionWidthFrac) so the ui-side fallback matches exactly.
  */
 function heuristicMeasure(text: string, style: TextStyle, canvasWidth: number): number {
   return heuristicCaptionWidthFrac(text, style.fontSize, canvasWidth);

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import type { ProjectSession } from "@palmier/core";
+import type { ProjectSession } from "@frontstage/core";
 import { FileMenu } from "../src/editor/FileMenu.js";
 
 function makeFakeSession(): ProjectSession {

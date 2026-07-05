@@ -1,4 +1,4 @@
-import { SegmentedTabs } from "@palmier/ui";
+import { SegmentedTabs } from "@frontstage/ui";
 
 const dark: React.CSSProperties = { background: "var(--bg-base)", padding: 16, display: "flex", flexDirection: "column", gap: 12, width: 340 };
 

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ModelPicker } from "../src/agent/ModelPicker.js";
-import type { ModelEntry } from "@palmier/ai";
+import type { ModelEntry } from "@frontstage/ai";
 
 const MODELS: ModelEntry[] = [
   { id: "a/model-1", label: "Model One", kind: "llm" },

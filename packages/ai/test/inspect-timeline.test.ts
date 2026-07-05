@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Track, type Timeline, type MediaManifest } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Track, type Timeline, type MediaManifest } from "@frontstage/core";
 import { inspectTimelineTool, buildCatalog, ToolExecutor, type ToolContext } from "../src/index.js";
 
 function makeClip(id: string, durationFrames: number) {

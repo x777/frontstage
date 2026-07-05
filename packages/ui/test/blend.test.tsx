@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { BlendControl } from "../src/inspector/adjust/BlendControl.js";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
-import type { Clip, Track } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@frontstage/core";
+import type { Clip, Track } from "@frontstage/core";
 
 function makeClip(id: string): Clip {
   return {

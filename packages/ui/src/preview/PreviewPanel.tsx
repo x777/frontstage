@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { PlaybackEngine } from "@palmier/engine";
-import type { MediaByteSource } from "@palmier/engine";
-import type { EditorStore, Timeline } from "@palmier/core";
-import { timelineTotalFrames } from "@palmier/core";
+import { PlaybackEngine } from "@frontstage/engine";
+import type { MediaByteSource } from "@frontstage/engine";
+import type { EditorStore, Timeline } from "@frontstage/core";
+import { timelineTotalFrames } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { TransportBar } from "./TransportBar.js";
 import { TransformOverlay } from "./TransformOverlay.js";

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { GenerationLogEntry } from "@palmier/core";
-import type { GenModelKind } from "@palmier/ai";
-import { genModel, formatCredits } from "@palmier/ai";
+import type { GenerationLogEntry } from "@frontstage/core";
+import type { GenModelKind } from "@frontstage/ai";
+import { genModel, formatCredits } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { Icon, IconButton } from "../primitives/index.js";
 

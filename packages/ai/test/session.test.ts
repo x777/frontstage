@@ -7,7 +7,7 @@ import {
   type MediaManifest,
   type Track,
   type Timeline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   ToolExecutor,
   buildCatalog,

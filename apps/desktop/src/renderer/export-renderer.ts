@@ -2,13 +2,13 @@ import {
   runExport,
   demuxMp4,
   type MediaByteSource,
-} from "@palmier/engine";
+} from "@frontstage/engine";
 import {
   fitTransform,
   defaultCrop,
   type Timeline,
   type Clip,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { FfmpegIpcSink } from "./ffmpeg-sink.js";
 
 declare global {

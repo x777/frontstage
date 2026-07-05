@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AgentSession, ChatSessionStore, ChatSessionIndexEntry } from "@palmier/ai";
+import type { AgentSession, ChatSessionStore, ChatSessionIndexEntry } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { Button, Icon, MenuList } from "../primitives/index.js";
 
@@ -29,7 +29,7 @@ export function SessionSwitcher({ session, sessionStore, onNew }: SessionSwitche
       id,
       title: "New Chat",
       createdAt: new Date().toISOString(),
-      messages: [] as import("@palmier/ai").AgentMessage[],
+      messages: [] as import("@frontstage/ai").AgentMessage[],
     };
     session.loadDoc(freshDoc);
     onNew?.();

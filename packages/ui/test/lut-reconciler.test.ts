@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
-import type { Clip, Timeline, Track, CubeLUT } from "@palmier/core";
+import { defaultTimeline, defaultTransform, defaultCrop } from "@frontstage/core";
+import type { Clip, Timeline, Track, CubeLUT } from "@frontstage/core";
 import { LutReconciler } from "../src/inspector/adjust/lut-reconciler.js";
 
 const CUBE_TEXT = `LUT_3D_SIZE 2

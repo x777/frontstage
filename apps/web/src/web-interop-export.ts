@@ -1,5 +1,5 @@
-import type { SourceTimecode } from "@palmier/core";
-import type { ToolContext } from "@palmier/ai";
+import type { SourceTimecode } from "@frontstage/core";
+import type { ToolContext } from "@frontstage/ai";
 
 export interface WebInteropExportDeps {
   // e2e test seam, mirrors WebExportGateway's pickSaveFile — real usage falls through to

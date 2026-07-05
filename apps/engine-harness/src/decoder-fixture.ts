@@ -1,4 +1,4 @@
-import { demuxMp4, buildVideoChunks, VideoDecodeManager } from "@palmier/engine";
+import { demuxMp4, buildVideoChunks, VideoDecodeManager } from "@frontstage/engine";
 
 interface FrameResult {
   width: number;

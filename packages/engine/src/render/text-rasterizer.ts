@@ -1,7 +1,7 @@
 import {
   type Size, type TextLayer, type TextStyle, type TextAlignment, type TextWordState, type RGBA,
   splitTextWords, DEFAULT_HIGHLIGHT_COLOR,
-} from "@palmier/core";
+} from "@frontstage/core";
 
 const css = (c: RGBA): string =>
   `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;

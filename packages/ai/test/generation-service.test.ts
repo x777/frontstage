@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { GenerationService } from "../src/generation/generation-service.js";
 import type { GenerationHost } from "../src/generation/generation-service.js";
 import type { GenJobGateway, JobStatus } from "../src/generation/gen-gateway.js";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
 
 /** Lets any pending microtask chain (submit/poll/download/finalize) drain before assertions. */
 function flush(): Promise<void> {

@@ -7,7 +7,7 @@ import {
   type Timeline,
   type Track,
   type Clip,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { handleEditorKeydown } from "../src/editor/editor-shortcuts.js";
 
 function clip(id: string, startFrame: number, durationFrames: number): Clip {

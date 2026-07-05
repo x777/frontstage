@@ -10,7 +10,7 @@ import {
   toggleTrackSyncLockCommand,
   reorderTrackCommand,
   type EditorStore,
-} from "@palmier/core";
+} from "@frontstage/core";
 
 export const TRACK_HEADER_WIDTH = 100;
 

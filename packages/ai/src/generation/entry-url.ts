@@ -1,4 +1,4 @@
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
 
 // Swift's cachedRemoteURL TTL: 6 days. cachedRemoteURLExpiresAt is stored ISO-8601 (see media.ts).
 const CACHE_TTL_MS = 6 * 24 * 60 * 60 * 1000;

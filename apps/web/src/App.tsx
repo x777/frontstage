@@ -1,6 +1,6 @@
-import { Editor } from "@palmier/ui";
-import type { EditorProps } from "@palmier/ui";
-import type { ProjectSession } from "@palmier/core";
+import { Editor } from "@frontstage/ui";
+import type { EditorProps } from "@frontstage/ui";
+import type { ProjectSession } from "@frontstage/core";
 
 export interface AppProps extends EditorProps {
   session: ProjectSession;

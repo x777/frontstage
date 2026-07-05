@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { MentionInput, type MentionItem } from "../src/agent/MentionInput.js";
-import type { MentionContext } from "@palmier/ai";
+import type { MentionContext } from "@frontstage/ai";
 
 const sampleItems: MentionItem[] = [
   { id: "m1", label: "sunrise.mp4", kind: "media", contextText: "@media sunrise.mp4 (video, 3s, id=m1)" },

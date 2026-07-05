@@ -11,7 +11,7 @@ import {
   type Timeline,
   type Track,
   type TranscriptionResult,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { addCaptionsTool } from "../src/tools/caption-tools.js";
 import type { ToolContext } from "../src/index.js";
 

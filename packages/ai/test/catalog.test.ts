@@ -7,7 +7,7 @@ import {
   type Timeline,
   type Track,
   type MediaManifest,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { buildCatalog, ToolExecutor, type ToolContext } from "../src/index.js";
 
 const EXPECTED_NAMES = [

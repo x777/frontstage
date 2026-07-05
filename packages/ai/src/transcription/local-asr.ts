@@ -1,7 +1,7 @@
 // In-browser whisper ASR runtime seam, mirroring EmbeddingService (M12C) exactly: an injectable
 // LocalAsrPipelines so tests never touch transformers.js/ONNX; createTransformersAsrPipelines
 // (transformers-asr-pipelines.ts) is the real loader, imported lazily.
-import type { TranscriptionResult, TranscriptionSegment, TranscriptionWord } from "@palmier/core";
+import type { TranscriptionResult, TranscriptionSegment, TranscriptionWord } from "@frontstage/core";
 import { deriveSegments } from "../generation/whisper-wire.js";
 
 // The M11A extraction always yields mono 16kHz WAV (encodeWavPcm16Mono's fixed target) — a literal

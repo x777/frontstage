@@ -1,4 +1,4 @@
-import { Checkbox } from "@palmier/ui";
+import { Checkbox } from "@frontstage/ui";
 
 const dark: React.CSSProperties = { background: "var(--bg-base)", padding: 16, display: "flex", flexDirection: "column", gap: 10 };
 

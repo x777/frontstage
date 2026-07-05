@@ -13,7 +13,7 @@ import {
   type Timeline,
   type Track,
   type Clip,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { TimelinePanel } from "../src/timeline/TimelinePanel.js";
 
 if (typeof (globalThis as { PointerEvent?: unknown }).PointerEvent === "undefined") {

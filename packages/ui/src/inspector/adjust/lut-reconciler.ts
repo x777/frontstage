@@ -1,5 +1,5 @@
-import type { CubeLUT, Timeline } from "@palmier/core";
-import { parseCubeLUT } from "@palmier/core";
+import type { CubeLUT, Timeline } from "@frontstage/core";
+import { parseCubeLUT } from "@frontstage/core";
 
 const LUT_TYPE = "color.lut";
 

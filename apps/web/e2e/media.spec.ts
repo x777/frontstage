@@ -206,7 +206,7 @@ test("drag media item onto existing track creates a clip with one undo", async (
   const beforeIds = await page.evaluate(() => {
     type Clip = { id: string };
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.flatMap(t => t.clips.map(c => c.id));
   });
   const beforeCount = beforeIds.length;
@@ -228,7 +228,7 @@ test("drag media item onto existing track creates a clip with one undo", async (
   // A clip should have been added
   const afterCount = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
   });
   expect(afterCount).toBe(beforeCount + 1);
@@ -237,7 +237,7 @@ test("drag media item onto existing track creates a clip with one undo", async (
   const newClipMediaRef = await page.evaluate((knownIds: string[]) => {
     type Clip = { id: string; mediaRef: string };
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: Clip[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     const allClips = store.getSnapshot().timeline.tracks.flatMap(t => t.clips);
     const newClip = allClips.find(c => !knownIds.includes(c.id));
     return newClip?.mediaRef ?? null;
@@ -247,7 +247,7 @@ test("drag media item onto existing track creates a clip with one undo", async (
   // canUndo should be true
   const canUndo = await page.evaluate(() => {
     type Store = { canUndo(): boolean };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.canUndo();
   });
   expect(canUndo).toBe(true);
@@ -255,13 +255,13 @@ test("drag media item onto existing track creates a clip with one undo", async (
   // ONE undo removes the clip
   await page.evaluate(() => {
     type Store = { undo(): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.undo();
   });
 
   const afterUndoCount = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
   });
   expect(afterUndoCount).toBe(beforeCount);
@@ -288,12 +288,12 @@ test("drag to top boundary of track 0 lands on track 0, not a new track", async 
   // Record track count before
   const beforeTracks = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.length;
   });
   const beforeClips = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
   });
 
@@ -313,7 +313,7 @@ test("drag to top boundary of track 0 lands on track 0, not a new track", async 
   // Track count must NOT have increased (clip lands on existing track 0)
   const afterTracks = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.length;
   });
   expect(afterTracks).toBe(beforeTracks);
@@ -321,7 +321,7 @@ test("drag to top boundary of track 0 lands on track 0, not a new track", async 
   // Clip count must have increased by 1
   const afterClips = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.reduce((s, t) => s + t.clips.length, 0);
   });
   expect(afterClips).toBe(beforeClips + 1);
@@ -348,7 +348,7 @@ test("drag media item below last track creates a new track", async ({ page }) =>
   // Record track count before
   const beforeTracks = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.length;
   });
 
@@ -367,7 +367,7 @@ test("drag media item below last track creates a new track", async ({ page }) =>
   // A new track should have been created
   const afterTracks = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.length;
   });
   expect(afterTracks).toBe(beforeTracks + 1);
@@ -375,20 +375,20 @@ test("drag media item below last track creates a new track", async ({ page }) =>
   // canUndo true; one undo removes the new track
   const canUndo = await page.evaluate(() => {
     type Store = { canUndo(): boolean };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.canUndo();
   });
   expect(canUndo).toBe(true);
 
   await page.evaluate(() => {
     type Store = { undo(): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.undo();
   });
 
   const afterUndoTracks = await page.evaluate(() => {
     type Store = { getSnapshot(): { timeline: { tracks: unknown[] } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return store.getSnapshot().timeline.tracks.length;
   });
   expect(afterUndoTracks).toBe(beforeTracks);

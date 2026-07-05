@@ -6,7 +6,7 @@ import {
   defaultCrop,
   type Timeline,
   type Track,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { removeTracksTool, type ToolContext } from "../src/index.js";
 
 function makeClip(id: string) {

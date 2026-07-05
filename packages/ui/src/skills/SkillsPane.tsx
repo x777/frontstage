@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Skill, SkillCatalogEntry } from "@palmier/ai";
-import { SkillStore, SkillCatalog } from "@palmier/ai";
+import type { Skill, SkillCatalogEntry } from "@frontstage/ai";
+import { SkillStore, SkillCatalog } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { Button, IconButton, Icon, SearchField, SegmentedTabs, MenuList, useHover } from "../primitives/index.js";
 import type { MenuListItem } from "../primitives/index.js";
@@ -10,7 +10,7 @@ export interface SkillsPaneProps {
   catalog: SkillCatalog;
 }
 
-const COMMUNITY_URL = "https://github.com/palmier-io/palmier-skills";
+const COMMUNITY_URL = "https://github.com/x777/frontstage-skills";
 
 const EXTERNAL_AGENTS: { id: "claude" | "codex" | "cursor"; label: string }[] = [
   { id: "claude", label: "Claude" },

@@ -1,5 +1,5 @@
-import type { EditorStore } from "@palmier/core";
-import { splitAtPlayheadCommand, trimStartToPlayheadCommand, trimEndToPlayheadCommand } from "@palmier/core";
+import type { EditorStore } from "@frontstage/core";
+import { splitAtPlayheadCommand, trimStartToPlayheadCommand, trimEndToPlayheadCommand } from "@frontstage/core";
 
 function isEditableTarget(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;

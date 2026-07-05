@@ -1,8 +1,8 @@
-import type { EditorStore } from "@palmier/core";
-import type { MediaManifest, MediaGateway } from "@palmier/core";
-import type { ProjectHost, ProjectGateway, BoundProject } from "@palmier/core";
-import type { GenerationLogEntry } from "@palmier/core";
-import { emptyGenerationLog, resetStuckGenerations } from "@palmier/core";
+import type { EditorStore } from "@frontstage/core";
+import type { MediaManifest, MediaGateway } from "@frontstage/core";
+import type { ProjectHost, ProjectGateway, BoundProject } from "@frontstage/core";
+import type { GenerationLogEntry } from "@frontstage/core";
+import { emptyGenerationLog, resetStuckGenerations } from "@frontstage/core";
 
 export interface EditorMediaHost {
   getManifest(): MediaManifest;

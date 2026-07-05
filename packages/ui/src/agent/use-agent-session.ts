@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { AgentSession, AgentSessionState } from "@palmier/ai";
+import type { AgentSession, AgentSessionState } from "@frontstage/ai";
 
 export function useAgentSession(session: AgentSession): AgentSessionState {
   const [s, setS] = useState(() => session.getState());

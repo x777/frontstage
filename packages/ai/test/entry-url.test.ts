@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { MediaManifestEntry } from "@palmier/core";
+import type { MediaManifestEntry } from "@frontstage/core";
 import { makeEntryUrl, mimeForEntry } from "../src/generation/entry-url.js";
 import type { EntryUrlDeps } from "../src/generation/entry-url.js";
 

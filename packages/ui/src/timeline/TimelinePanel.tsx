@@ -31,9 +31,9 @@ import {
   selectForwardAction,
   ZOOM_MIN as MIN_ZOOM,
   ZOOM_MAX as MAX_ZOOM,
-} from "@palmier/core";
-import type { RippleInsertPreviewPlan } from "@palmier/core";
-import type { EditorStore, MediaManifestEntry } from "@palmier/core";
+} from "@frontstage/core";
+import type { RippleInsertPreviewPlan } from "@frontstage/core";
+import type { EditorStore, MediaManifestEntry } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { TrackHeaders, TRACK_HEADER_WIDTH } from "./TrackHeaders.js";
 import { drawTimeline } from "./draw-timeline.js";

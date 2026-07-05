@@ -1,4 +1,4 @@
-import { Toast } from "@palmier/ui";
+import { Toast } from "@frontstage/ui";
 
 export const Message = () => (
   <div style={{ background: "var(--bg-base)", width: 420, height: 120, position: "relative" }}>

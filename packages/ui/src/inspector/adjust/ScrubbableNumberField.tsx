@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { scrubDelta } from "@palmier/core";
+import { scrubDelta } from "@frontstage/core";
 import { theme } from "../../theme/theme.js";
 
 export interface ScrubbableNumberFieldProps {

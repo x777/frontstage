@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import type { MediaFolder } from "@palmier/core";
+import type { MediaFolder } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Icon, MenuList } from "../primitives/index.js";
 
 // Mirrors --icon-size-xl (30px) — Icon's size prop sets raw SVG width/height, not a CSS var.
 const FOLDER_ICON_SIZE = 30;
 
-export const MEDIA_DRAG_MIME = "application/x-palmier-media";
+export const MEDIA_DRAG_MIME = "application/x-frontstage-media";
 
 // `data-folder-drop` value for the root "Library" chip — folder ids are never this string.
 export const FOLDER_DROP_ROOT = "__root__";

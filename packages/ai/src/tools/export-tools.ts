@@ -8,13 +8,13 @@ import {
   formatVtt,
   timelineMediaRefs,
   timelineTotalFrames,
-} from "@palmier/core";
-import type { SourceTimecode } from "@palmier/core";
+} from "@frontstage/core";
+import type { SourceTimecode } from "@frontstage/core";
 import type { ToolResult, ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 
 // Ported from Swift's export_project description (ToolDefinitions.swift) with the routing line
-// verbatim; video/palmier are narrowed to a deferral for this build (see the two error messages
+// verbatim; video/frontstage are narrowed to a deferral for this build (see the two error messages
 // below) since neither has a headless path here yet. srt/vtt are a super-Swift addition (no Swift
 // counterpart) — M14A T1.
 const DESCRIPTION =
@@ -27,14 +27,14 @@ const DESCRIPTION =
   "subtitle file: by default from the timeline's caption clips (chronological, in this run — error if " +
   "there are none); pass captionsSource.mediaRef to export that media's CACHED transcript instead — " +
   "cache-only, this never transcribes, so an uncached ref errors naming get_transcript/add_captions. " +
-  "palmier (self-contained .palmier project package) is not yet available either. Omit outputPath to " +
+  "frontstage (self-contained .frontstage project package) is not yet available either. Omit outputPath to " +
   "open a save dialog (desktop) or picker (web); xml, fcpxml, srt, and vtt finish and report their " +
   "result inline.";
 
 const VIDEO_DEFERRED =
   "export_project: mode 'video' is not yet available from the agent in this build. Use the File menu's Export command.";
-const PALMIER_DEFERRED =
-  "export_project: mode 'palmier' (self-contained .palmier project export) is not yet available from the agent in this build. Use the File menu's Export command, or mode 'xml'/'fcpxml' for a timeline interchange export.";
+const FRONTSTAGE_DEFERRED =
+  "export_project: mode 'frontstage' (self-contained .frontstage project export) is not yet available from the agent in this build. Use the File menu's Export command, or mode 'xml'/'fcpxml' for a timeline interchange export.";
 const INTEROP_UNAVAILABLE = "export_project: timeline interchange export is not available in this context";
 const NO_TRANSCRIPTION_FACADE = "export_project: transcript-backed subtitle export is not available in this context";
 const NO_CAPTION_CLIPS =
@@ -43,7 +43,7 @@ const NO_CAPTION_CLIPS =
 // z.string() + in-run validation, not z.enum: the enum-in-zod trap (M13A H2) — an enum in the schema
 // rejects unknown values at the executor's safeParse gate, before run() ever sees them, so a custom
 // error message here would be dead code.
-const MODES = ["video", "xml", "fcpxml", "palmier", "srt", "vtt"] as const;
+const MODES = ["video", "xml", "fcpxml", "frontstage", "srt", "vtt"] as const;
 type ExportMode = (typeof MODES)[number];
 type FcpxmlTargetArg = "resolve" | "fcp";
 
@@ -83,7 +83,7 @@ export function exportProjectTool(): ToolSpec {
       const mode = modeArg;
 
       if (mode === "video") return errorResult(VIDEO_DEFERRED);
-      if (mode === "palmier") return errorResult(PALMIER_DEFERRED);
+      if (mode === "frontstage") return errorResult(FRONTSTAGE_DEFERRED);
 
       const facade = ctx.interopExport;
       if (!facade) return errorResult(INTEROP_UNAVAILABLE);

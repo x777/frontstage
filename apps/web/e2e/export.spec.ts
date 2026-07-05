@@ -29,7 +29,7 @@ test("WebExportGateway: File→Export writes a valid .mp4 to OPFS", async ({ pag
         tracks: unknown[];
       }): void;
     };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     const snap = store.getSnapshot();
     // Preserve the first track (clip.mp4) but reduce its clip to 3 frames
     const tracks = (snap.timeline.tracks as Array<{ clips: Array<Record<string, unknown>> }>).map((t) => ({

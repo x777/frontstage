@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { sliderFrac, sliderValue } from "@palmier/core";
+import { sliderFrac, sliderValue } from "@frontstage/core";
 import { theme } from "../../theme/theme.js";
 
 const STEP_FRAC = 0.01;

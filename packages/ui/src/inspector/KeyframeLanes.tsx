@@ -1,5 +1,5 @@
 import { useRef, useCallback } from "react";
-import type { EditorStore, Clip, ClipType, KeyframeTrackKey } from "@palmier/core";
+import type { EditorStore, Clip, ClipType, KeyframeTrackKey } from "@frontstage/core";
 import {
   opacityAt,
   rotationAt,
@@ -8,8 +8,8 @@ import {
   cropAt,
   setKeyframeCommand,
   removeKeyframeCommand,
-} from "@palmier/core";
-import type { KeyframeValueMap } from "@palmier/core";
+} from "@frontstage/core";
+import type { KeyframeValueMap } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Icon } from "../primitives/Icon.js";
 import { Section, labelStyle } from "./fields.js";

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Clip } from "@palmier/core";
-import type { Timeline, Track } from "@palmier/core";
+import type { Clip } from "@frontstage/core";
+import type { Timeline, Track } from "@frontstage/core";
 import type { MediaByteSource } from "../src/media/media-source.js";
 import { audioMixClips, AudioMixer } from "../src/audio/audio-mixer.js";
 

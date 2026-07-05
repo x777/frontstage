@@ -1,4 +1,4 @@
-import type { EditorStore, Clip } from "@palmier/core";
+import type { EditorStore, Clip } from "@frontstage/core";
 import {
   findClip,
   effectDescriptor,
@@ -6,7 +6,7 @@ import {
   setEffectParam,
   setClipEffectsCommand,
   formatParam,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { theme } from "../../theme/theme.js";
 import { ColorWheelPad } from "./ColorWheelPad.js";

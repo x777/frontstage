@@ -8,7 +8,7 @@ async function waitForEngineReady(page: Page) {
 
 test("transform overlay appears on selection and single undo reverts whole drag", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
   await waitForEngineReady(page);
 
@@ -18,7 +18,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
       select(ids: string[]): void;
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ id: string }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const snap = store.getSnapshot();
     const clipId = snap.timeline.tracks[0]!.clips[0]!.id;
     store.select([clipId]);
@@ -34,7 +34,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
     type StoreProxy = {
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ transform: { centerX: number } }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
   });
 
@@ -57,7 +57,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
     type StoreProxy = {
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ transform: { centerX: number } }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
   });
   expect(newCX).not.toBe(originalCX);
@@ -65,7 +65,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
   // canUndo must be true
   const canUndo = await page.evaluate(() => {
     type StoreProxy = { canUndo(): boolean };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.canUndo();
   });
   expect(canUndo).toBe(true);
@@ -73,7 +73,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
   // ONE undo should revert the entire drag back to the original value
   await page.evaluate(() => {
     type StoreProxy = { undo(): void };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     store.undo();
   });
 
@@ -81,7 +81,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
     type StoreProxy = {
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ transform: { centerX: number } }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.transform.centerX;
   });
   expect(afterUndoCX).toBe(originalCX);
@@ -89,7 +89,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
   // After one undo, canUndo should be false (only one undo entry for the whole drag)
   const canUndoAfter = await page.evaluate(() => {
     type StoreProxy = { canUndo(): boolean };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.canUndo();
   });
   expect(canUndoAfter).toBe(false);
@@ -97,7 +97,7 @@ test("transform overlay appears on selection and single undo reverts whole drag"
 
 test("crop overlay appears on selection and drag updates crop", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
   await waitForEngineReady(page);
 
@@ -107,7 +107,7 @@ test("crop overlay appears on selection and drag updates crop", async ({ page })
       select(ids: string[]): void;
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ id: string }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     const snap = store.getSnapshot();
     const clipId = snap.timeline.tracks[0]!.clips[0]!.id;
     store.select([clipId]);
@@ -124,7 +124,7 @@ test("crop overlay appears on selection and drag updates crop", async ({ page })
     type StoreProxy = {
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ crop: { left: number } }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.crop.left;
   });
 
@@ -146,7 +146,7 @@ test("crop overlay appears on selection and drag updates crop", async ({ page })
     type StoreProxy = {
       getSnapshot(): { timeline: { tracks: Array<{ clips: Array<{ crop: { left: number } }> }> } };
     };
-    const store = (window as unknown as { __palmierStore: StoreProxy }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: StoreProxy }).__frontstageStore;
     return store.getSnapshot().timeline.tracks[0]!.clips[0]!.crop.left;
   });
   expect(newLeft).not.toBe(originalLeft);
@@ -185,7 +185,7 @@ test("preview canvas renders a non-black frame", async ({ page }) => {
 
 test("play advances playhead, step-fwd advances by one frame", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("palmier.editor.ui"));
+  await page.evaluate(() => localStorage.removeItem("frontstage.editor.ui"));
   await page.reload();
 
   // Wait for engine ready

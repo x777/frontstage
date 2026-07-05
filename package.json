@@ -1,5 +1,5 @@
 {
-  "name": "palmier-cross-platform",
+  "name": "frontstage",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.0",

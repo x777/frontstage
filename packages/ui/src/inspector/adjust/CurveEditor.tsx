@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import type { GradeCurve, CurvePoint } from "@palmier/core";
+import type { GradeCurve, CurvePoint } from "@frontstage/core";
 import {
   displayPoints,
   nearestPoint,
@@ -7,7 +7,7 @@ import {
   movePoint,
   removePoint,
   evalPolyline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { theme } from "../../theme/theme.js";
 
 // Canvas colors mirror their CSS tokens (ctx can't consume CSS vars).

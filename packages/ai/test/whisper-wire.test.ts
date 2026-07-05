@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { parseWhisperResult, deriveSegments } from "../src/generation/whisper-wire.js";
-import type { TranscriptionWord } from "@palmier/core";
+import type { TranscriptionWord } from "@frontstage/core";
 
 describe("parseWhisperResult", () => {
   test("a realistic word-chunks fixture maps chunks 1:1 to words, punctuation groups them into segments", () => {

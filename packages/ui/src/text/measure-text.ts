@@ -1,4 +1,4 @@
-import { heuristicCaptionWidthFrac } from "@palmier/core";
+import { heuristicCaptionWidthFrac } from "@frontstage/core";
 
 export interface CaptionMeasureStyle {
   fontName: string;
@@ -20,7 +20,7 @@ function getMeasureCtx(): CanvasRenderingContext2D | null {
  * ToolContext.transcription.measureText and buildCaptionPhrases' `measure` both expect. Canvas2D
  * measureText when a 2D context is available; jsdom's canvas has no backend (getContext returns
  * null), so tests fall through to the SAME heuristic add_captions uses without a wired measureText
- * (@palmier/core's heuristicCaptionWidthFrac — the one shared constant, see caption-tools.ts).
+ * (@frontstage/core's heuristicCaptionWidthFrac — the one shared constant, see caption-tools.ts).
  */
 export function measureCaptionWidthFrac(text: string, style: CaptionMeasureStyle, canvasWidth: number): number {
   const ctx = getMeasureCtx();

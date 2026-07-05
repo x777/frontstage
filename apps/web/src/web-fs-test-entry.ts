@@ -1,6 +1,6 @@
 import { dirHandleProjectStore, WebMediaGateway } from "./web-fs.js";
 import { WebGateway } from "./web-gateway.js";
-import { writeProject, readProject } from "@palmier/core";
+import { writeProject, readProject } from "@frontstage/core";
 
 // Attach FS test seams only in dev/test; stripped from production builds.
 if (import.meta.env.DEV) {

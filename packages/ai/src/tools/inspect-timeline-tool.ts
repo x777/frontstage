@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { fitLongestEdge, timelineTotalFrames } from "@palmier/core";
+import { fitLongestEdge, timelineTotalFrames } from "@frontstage/core";
 import type { ToolBlock, ToolSpec } from "./types.js";
 import { errorResult } from "./executor.js";
 

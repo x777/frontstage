@@ -1,8 +1,8 @@
 import {
   fitTransform, defaultCrop, defaultTransform, defaultTextStyle,
   type Timeline, type Clip,
-} from "@palmier/core";
-import { demuxMp4, PlaybackEngine, type MediaByteSource } from "@palmier/engine";
+} from "@frontstage/core";
+import { demuxMp4, PlaybackEngine, type MediaByteSource } from "@frontstage/engine";
 
 declare global {
   interface Window {

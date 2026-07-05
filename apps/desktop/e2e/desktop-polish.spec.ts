@@ -7,7 +7,7 @@ import path from "node:path";
 // ── window-state round-trip ──────────────────────────────────────────────────
 
 test("window-state: saved bounds are restored on relaunch", async () => {
-  const tmpUserData = mkdtempSync(join(os.tmpdir(), "palmier-winstate-"));
+  const tmpUserData = mkdtempSync(join(os.tmpdir(), "frontstage-winstate-"));
   mkdirSync(tmpUserData, { recursive: true });
 
   try {
@@ -18,7 +18,7 @@ test("window-state: saved bounds are restored on relaunch", async () => {
         `--user-data-dir=${tmpUserData}`,
       ],
       cwd: path.join(__dirname, ".."),
-      env: { ...process.env, RENDERER_PORT: "5190", PALMIER_E2E: "1" },
+      env: { ...process.env, RENDERER_PORT: "5190", FRONTSTAGE_E2E: "1" },
     });
 
     try {
@@ -54,7 +54,7 @@ test("window-state: saved bounds are restored on relaunch", async () => {
         `--user-data-dir=${tmpUserData}`,
       ],
       cwd: path.join(__dirname, ".."),
-      env: { ...process.env, RENDERER_PORT: "5190", PALMIER_E2E: "1" },
+      env: { ...process.env, RENDERER_PORT: "5190", FRONTSTAGE_E2E: "1" },
     });
 
     try {
@@ -79,7 +79,7 @@ test("window-state: saved bounds are restored on relaunch", async () => {
 // ── corrupt window-state doesn't brick ──────────────────────────────────────
 
 test("window-state: corrupt file does not brick the app", async () => {
-  const tmpUserData = mkdtempSync(join(os.tmpdir(), "palmier-winstate-corrupt-"));
+  const tmpUserData = mkdtempSync(join(os.tmpdir(), "frontstage-winstate-corrupt-"));
   mkdirSync(tmpUserData, { recursive: true });
   writeFileSync(join(tmpUserData, "window-state.json"), "this is not json {{{{", "utf8");
 
@@ -89,7 +89,7 @@ test("window-state: corrupt file does not brick the app", async () => {
       `--user-data-dir=${tmpUserData}`,
     ],
     cwd: path.join(__dirname, ".."),
-    env: { ...process.env, RENDERER_PORT: "5190", PALMIER_E2E: "1" },
+    env: { ...process.env, RENDERER_PORT: "5190", FRONTSTAGE_E2E: "1" },
   });
 
   try {
@@ -113,8 +113,8 @@ test("window-state: corrupt file does not brick the app", async () => {
 // ── Open Recent native-menu path (IPC seam) ──────────────────────────────────
 
 test("open-recent: native menu IPC path opens a recently saved project", async () => {
-  const tmpUserData = mkdtempSync(join(os.tmpdir(), "palmier-openrecent-"));
-  const tmpProj = mkdtempSync(join(os.tmpdir(), "palmier-proj-recent-"));
+  const tmpUserData = mkdtempSync(join(os.tmpdir(), "frontstage-openrecent-"));
+  const tmpProj = mkdtempSync(join(os.tmpdir(), "frontstage-proj-recent-"));
 
   const app = await electron.launch({
     args: [
@@ -122,7 +122,7 @@ test("open-recent: native menu IPC path opens a recently saved project", async (
       `--user-data-dir=${tmpUserData}`,
     ],
     cwd: path.join(__dirname, ".."),
-    env: { ...process.env, RENDERER_PORT: "5190", PALMIER_E2E: "1" },
+    env: { ...process.env, RENDERER_PORT: "5190", FRONTSTAGE_E2E: "1" },
   });
 
   try {

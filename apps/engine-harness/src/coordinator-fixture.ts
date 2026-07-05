@@ -1,5 +1,5 @@
-import { demuxMp4, SourceCoordinator, type MediaByteSource } from "@palmier/engine";
-import { fitTransform, defaultCrop, type Timeline, type Clip } from "@palmier/core";
+import { demuxMp4, SourceCoordinator, type MediaByteSource } from "@frontstage/engine";
+import { fitTransform, defaultCrop, type Timeline, type Clip } from "@frontstage/core";
 
 declare global {
   interface Window {

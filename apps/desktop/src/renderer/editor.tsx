@@ -1,12 +1,12 @@
 import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@palmier/core";
-import type { MediaManifestEntry } from "@palmier/core";
-import "@palmier/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@palmier/ui";
-import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@palmier/ui";
-import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@palmier/ai";
-import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@palmier/ai";
+import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@frontstage/core";
+import type { MediaManifestEntry } from "@frontstage/core";
+import "@frontstage/ui/theme/tokens.css";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@frontstage/ui";
+import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@frontstage/ui";
+import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@frontstage/ai";
+import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@frontstage/ai";
 
 declare global {
   interface Window {
@@ -35,8 +35,8 @@ import { createDesktopMediaImport } from "./desktop-media-import.js";
 import { createDesktopLut } from "./desktop-lut.js";
 import { createDesktopInteropExport } from "./desktop-interop-export.js";
 import { createDesktopSkillStorage, createDesktopSkillCatalogDeps } from "./desktop-skills.js";
-import type { PlaybackEngine } from "@palmier/engine";
-import { renderSpanToMp4 } from "@palmier/engine";
+import type { PlaybackEngine } from "@frontstage/engine";
+import { renderSpanToMp4 } from "@frontstage/engine";
 
 const engineRef: { current: PlaybackEngine | null } = { current: null };
 const store = new EditorStore(defaultTimeline());
@@ -49,8 +49,8 @@ const exportGateway = new DesktopExportGateway();
 // Build agent session — __aiGateway seam takes precedence (e2e injects a fake)
 const _desktopAiGateway = new DesktopAiGateway();
 const agentGateway = (window as unknown as Record<string, unknown>).__aiGateway ?? _desktopAiGateway;
-const initialAgentModel = localStorage.getItem("palmier.agent.model") ?? defaultLLMModel();
-const initialImageModel = localStorage.getItem("palmier.image.model") ?? defaultImageModel();
+const initialAgentModel = localStorage.getItem("frontstage.agent.model") ?? defaultLLMModel();
+const initialImageModel = localStorage.getItem("frontstage.image.model") ?? defaultImageModel();
 const imageGenerator = new ImageGenerator({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   gateway: agentGateway as any,
@@ -234,7 +234,7 @@ const libraryFacade = {
 };
 
 // renderMatte (M13A T1, create_matte) is wired here rather than inside createDesktopMediaImport:
-// it's pure canvas rendering with no host-specific I/O, so it's the same @palmier/ui function on
+// it's pure canvas rendering with no host-specific I/O, so it's the same @frontstage/ui function on
 // both hosts — spread on top of the desktop-specific fromBytes/fromUrl/fromPath facade.
 const mediaImportFacade = { ...createDesktopMediaImport({
   library,
@@ -265,7 +265,7 @@ const projectNavSession: ProjectNavSession = {
 const projectNav = window.desktopProjectNav ? createDesktopProjectNav(projectNavSession, window.desktopProjectNav) : undefined;
 const projectsFacade: ToolContext["projects"] = projectNav?.facade;
 
-// Skills (M15 T2) — ~/.palmier/skills over the main-process fs IPC; the community catalog cache
+// Skills (M15 T2) — ~/.frontstage/skills over the main-process fs IPC; the community catalog cache
 // lives in userData. Reload once at bootstrap (mirrors Swift's SkillStore.init()); the agent's
 // per-run reload happens via getSkillsSuffix below.
 const skillStore = new SkillStore(createDesktopSkillStorage());
@@ -315,7 +315,7 @@ const agentSession = new AgentSession({
   },
 });
 
-const sessionStore = new ChatSessionStore(localProjectStore("palmier.chats"));
+const sessionStore = new ChatSessionStore(localProjectStore("frontstage.chats"));
 
 // Build mention items from the library's media entries
 const mentionItems = library.getManifest().entries.map((e) => ({
@@ -345,15 +345,15 @@ window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
       }
     } else if (kind === "listResources") {
       result = [
-        { uri: "palmier://models", name: "Models", description: "Available AI models", mimeType: "application/json" },
-        { uri: "palmier://timeline", name: "Timeline", description: "Current project timeline", mimeType: "application/json" },
+        { uri: "frontstage://models", name: "Models", description: "Available AI models", mimeType: "application/json" },
+        { uri: "frontstage://timeline", name: "Timeline", description: "Current project timeline", mimeType: "application/json" },
       ];
     } else if (kind === "readResource") {
       const uri = (payload as { uri: string }).uri;
       let text: string;
-      if (uri === "palmier://models") {
+      if (uri === "frontstage://models") {
         text = JSON.stringify(MODEL_CATALOG);
-      } else if (uri === "palmier://timeline") {
+      } else if (uri === "frontstage://timeline") {
         const r = await executor.execute("get_timeline", {});
         const block = r.blocks.find((b) => b.kind === "text");
         text = block && block.kind === "text" ? block.text : "{}";
@@ -373,7 +373,7 @@ window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
 });
 
 // Expose for E2E tests
-(window as unknown as Record<string, unknown>).__palmierStore = store;
+(window as unknown as Record<string, unknown>).__frontstageStore = store;
 (window as unknown as Record<string, unknown>).__mediaLibrary = library;
 (window as unknown as Record<string, unknown>).__projectSession = session;
 (window as unknown as Record<string, unknown>).__desktopGateway = gateway;
@@ -381,9 +381,9 @@ window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
 
 const isMac = window.desktopProject?.platform === "darwin";
 
-function PalmierDesktopApp() {
-  const [agentModelId, setAgentModelId] = useState(() => localStorage.getItem("palmier.agent.model") ?? defaultLLMModel());
-  const [imageModelId, setImageModelId] = useState(() => localStorage.getItem("palmier.image.model") ?? defaultImageModel());
+function FrontstageDesktopApp() {
+  const [agentModelId, setAgentModelId] = useState(() => localStorage.getItem("frontstage.agent.model") ?? defaultLLMModel());
+  const [imageModelId, setImageModelId] = useState(() => localStorage.getItem("frontstage.image.model") ?? defaultImageModel());
   const [hasKey, setHasKey] = useState(false);
   const [falHasKey, setFalHasKey] = useState(false);
   const [confirmThreshold, setConfirmThreshold] = useState(() => readConfirmThreshold());
@@ -396,13 +396,13 @@ function PalmierDesktopApp() {
   function onAgentModelChange(id: string) {
     setAgentModelId(id);
     agentSession.setModel(id);
-    localStorage.setItem("palmier.agent.model", id);
+    localStorage.setItem("frontstage.agent.model", id);
   }
 
   function onImageModelChange(id: string) {
     setImageModelId(id);
     imageGenerator.setModel(id);
-    localStorage.setItem("palmier.image.model", id);
+    localStorage.setItem("frontstage.image.model", id);
   }
 
   function onConfirmThresholdChange(value: number) {
@@ -483,9 +483,9 @@ function PalmierDesktopApp() {
       onReady={(cmds) => {
         window.desktopProject?.onMenuCommand((c, arg) => {
           if (c === "open-recent") {
-            cmds.openRecent(arg as import("@palmier/core").ProjectRef);
+            cmds.openRecent(arg as import("@frontstage/core").ProjectRef);
           } else if (c === "export") {
-            cmds.export(arg as import("@palmier/ui").ExportKind | undefined);
+            cmds.export(arg as import("@frontstage/ui").ExportKind | undefined);
           } else {
             const m: Record<string, () => void> = {
               "new": cmds.newProject,
@@ -506,6 +506,6 @@ if (!root) throw new Error("No #root element");
 
 createRoot(root).render(
   <StrictMode>
-    <PalmierDesktopApp />
+    <FrontstageDesktopApp />
   </StrictMode>,
 );

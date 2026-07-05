@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Clip, FrameRange, MediaManifestEntry, TimelineWord, TranscriptionResult } from "@palmier/core";
+import type { Clip, FrameRange, MediaManifestEntry, TimelineWord, TranscriptionResult } from "@frontstage/core";
 import {
   assembleTimelineWords,
   clipEndFrame,
@@ -9,7 +9,7 @@ import {
   keptGapFrames,
   rippleDeleteRangesOnTrack,
   transcriptTargets,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { ToolContext, ToolResult, ToolSpec } from "./types.js";
 import { asUndoStep, errorResult, ok } from "./executor.js";
 import { LOCAL_MODEL_UNAVAILABLE_MESSAGE } from "../transcription/transcription-service.js";

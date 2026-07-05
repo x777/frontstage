@@ -3,7 +3,7 @@ import {
   type CubeLUT,
   type Size,
   timelineTotalFrames,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { MediaByteSource } from "./media/media-source.js";
 import { AudioGraph } from "./audio/audio-graph.js";
 import { AudioMixer } from "./audio/audio-mixer.js";

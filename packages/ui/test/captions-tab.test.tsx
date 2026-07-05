@@ -10,8 +10,8 @@ import {
   type Timeline,
   type Track,
   type TranscriptionResult,
-} from "@palmier/core";
-import type { ToolResult } from "@palmier/ai";
+} from "@frontstage/core";
+import type { ToolResult } from "@frontstage/ai";
 import { CaptionsTab } from "../src/media/CaptionsTab.js";
 import { MediaPanel } from "../src/media/MediaPanel.js";
 

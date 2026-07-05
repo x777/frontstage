@@ -31,7 +31,7 @@ import {
   type Track,
   type Timeline,
   type ProjectSession,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   ToolExecutor,
   buildCatalog,
@@ -41,7 +41,7 @@ import {
   type StreamEvent,
   type AgentSessionDeps,
   type ToolContext,
-} from "@palmier/ai";
+} from "@frontstage/ai";
 import { Layout } from "../src/layout/Layout.js";
 import { Editor } from "../src/editor/Editor.js";
 
@@ -134,7 +134,7 @@ function makeStore() { return new EditorStore(makeTimeline()); }
 // Minimal stubs to render Editor without a real media/library/canvas
 function makeMinimalEditorProps() {
   const store = makeStore();
-  const media = {} as import("@palmier/engine").MediaByteSource;
+  const media = {} as import("@frontstage/engine").MediaByteSource;
   const library: import("../src/editor/Editor.js").EditorLibrary = {
     getSnapshot: () => ({ entries: [], folders: [] }),
     subscribe: () => () => {},

@@ -1,5 +1,5 @@
 {
-  "name": "@palmier/engine",
+  "name": "@frontstage/engine",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "./audio/wav-encode.js": "./src/audio/wav-encode.ts"
   },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@palmier/core": "workspace:*", "mp4box": "^0.5.2", "mp4-muxer": "^5" },
+  "dependencies": { "@frontstage/core": "workspace:*", "mp4box": "^0.5.2", "mp4-muxer": "^5" },
   "devDependencies": {
     "@webgpu/types": "^0.1.40",
     "@types/node": "^22",

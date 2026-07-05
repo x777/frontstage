@@ -41,7 +41,7 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
   // Make a timeline edit to make it dirty
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void; getSnapshot(): { timeline: { fps: number; tracks: unknown[] } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     const snap = store.getSnapshot();
     // dispatch a no-op that still produces a new timeline ref
     store.dispatch({
@@ -97,7 +97,7 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
   // Make another edit to dirty it again
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({
       label: "test edit 2",
       apply: (t: unknown) => ({ ...(t as object) }),
@@ -130,7 +130,7 @@ test("round-trip: save-as → dirty → new(discard) → open(recent)", async ({
   const afterNew = await page.evaluate(() => {
     const s = (window as unknown as { __projectSession: Session }).__projectSession;
     type Store = { getSnapshot(): { timeline: { tracks: Array<{ clips: unknown[] }> } } };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     return {
       ref: s.getState().ref,
       clips: store.getSnapshot().timeline.tracks.reduce((n: number, t) => n + t.clips.length, 0),
@@ -169,7 +169,7 @@ test("guard cancel: dirty + file-new → discard-cancel → nothing changes", as
   // Make a save first to have a ref, then dirty it
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({ label: "edit", apply: (t: unknown) => ({ ...(t as object) }) });
   });
 
@@ -182,7 +182,7 @@ test("guard cancel: dirty + file-new → discard-cancel → nothing changes", as
   // Dirty again
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({ label: "edit2", apply: (t: unknown) => ({ ...(t as object) }) });
   });
 
@@ -215,7 +215,7 @@ test("Ctrl+N on dirty project shows discard-dialog; cancel leaves timeline uncha
   // Dirty the project + save to get a ref
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({ label: "edit", apply: (t: unknown) => ({ ...(t as object) }) });
   });
 
@@ -228,7 +228,7 @@ test("Ctrl+N on dirty project shows discard-dialog; cancel leaves timeline uncha
   // Dirty again
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({ label: "edit2", apply: (t: unknown) => ({ ...(t as object) }) });
   });
 
@@ -262,7 +262,7 @@ test("Ctrl+S saves when ref exists", async ({ page }) => {
   // Dirty + save-as to get a ref
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({ label: "edit", apply: (t: unknown) => ({ ...(t as object) }) });
   });
 
@@ -275,7 +275,7 @@ test("Ctrl+S saves when ref exists", async ({ page }) => {
   // Dirty again
   await page.evaluate(() => {
     type Store = { dispatch(c: unknown): void };
-    const store = (window as unknown as { __palmierStore: Store }).__palmierStore;
+    const store = (window as unknown as { __frontstageStore: Store }).__frontstageStore;
     store.dispatch({ label: "edit2", apply: (t: unknown) => ({ ...(t as object) }) });
   });
 

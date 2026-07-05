@@ -4,7 +4,7 @@ import {
   ASPECT_RATIO_PRESETS,
   QUALITY_PRESET_SHORT_EDGE,
   qualityResolution,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 

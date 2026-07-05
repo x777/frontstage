@@ -5,9 +5,9 @@ import {
   trackAtY,
   trimClipCommand,
   rippleTrimClipCommand,
-} from "@palmier/core";
-import type { TimelineGeometry, Command, SelectForwardScope } from "@palmier/core";
-import type { EditorState } from "@palmier/core";
+} from "@frontstage/core";
+import type { TimelineGeometry, Command, SelectForwardScope } from "@frontstage/core";
+import type { EditorState } from "@frontstage/core";
 
 export type HitResult =
   | { kind: "ruler" }

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { HueCurvesSection } from "../src/inspector/adjust/index.js";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, parseHueCurves } from "@palmier/core";
-import type { Clip, Track } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, parseHueCurves } from "@frontstage/core";
+import type { Clip, Track } from "@frontstage/core";
 
 function makeClip(id: string): Clip {
   return {

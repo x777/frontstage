@@ -9,7 +9,7 @@ import {
   type Timeline,
   type MediaManifest,
   type Clip,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { setProjectSettingsTool, ToolExecutor, type ToolContext } from "../src/index.js";
 
 // ── fixtures ─────────────────────────────────────────────────────────────────

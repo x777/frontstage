@@ -5,10 +5,10 @@ import os from "node:os";
 import path from "node:path";
 
 test("DesktopExportGateway: real FFmpeg export to picked path + unauthorized reject", async () => {
-  const tempDir = mkdtempSync(join(os.tmpdir(), "palmier-export-e2e-"));
+  const tempDir = mkdtempSync(join(os.tmpdir(), "frontstage-export-e2e-"));
   const outFile = join(tempDir, "out.mp4");
   // Use a non-tmpdir path for unauthorized security check (tmpdir is allowed for test harnesses)
-  const unauthorizedDir = join(os.homedir(), ".palmier-test-unauth-" + Date.now());
+  const unauthorizedDir = join(os.homedir(), ".frontstage-test-unauth-" + Date.now());
   const unauthorizedOut = join(unauthorizedDir, "evil.mp4");
   try { mkdirSync(unauthorizedDir, { recursive: true }); } catch { /* ignore */ }
 
@@ -18,7 +18,7 @@ test("DesktopExportGateway: real FFmpeg export to picked path + unauthorized rej
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
     },
   });
 
@@ -35,7 +35,7 @@ test("DesktopExportGateway: real FFmpeg export to picked path + unauthorized rej
     await page.waitForFunction(
       () =>
         (window as any).__projectSession &&
-        (window as any).__palmierStore &&
+        (window as any).__frontstageStore &&
         (window as any).__mediaLibrary,
       { timeout: 15_000 },
     );
@@ -67,7 +67,7 @@ test("DesktopExportGateway: real FFmpeg export to picked path + unauthorized rej
       await lib.seed("e2e-frame", url, entry);
 
       // Load a timeline with this image clip
-      const store = (window as any).__palmierStore;
+      const store = (window as any).__frontstageStore;
       store.load({
         fps: FPS,
         width: W,

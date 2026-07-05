@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { ReadPixelFn } from "@palmier/engine";
+import type { ReadPixelFn } from "@frontstage/engine";
 
 test("FrameRenderer letterboxes a 16:9 red frame into a 1:1 canvas", async ({ page }) => {
   await page.goto("/renderer.html");

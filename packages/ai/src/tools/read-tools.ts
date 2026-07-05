@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Clip, EmbeddingRow } from "@palmier/core";
-import { rankVisualMatches } from "@palmier/core";
+import type { Clip, EmbeddingRow } from "@frontstage/core";
+import { rankVisualMatches } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 

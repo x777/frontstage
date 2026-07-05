@@ -10,7 +10,7 @@ import {
   type ApplyColorInput,
   type Effect,
   type Timeline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import type { ToolBlock, ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 

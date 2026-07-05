@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, planAgentResolutionAdoption, type FrameRange, type RippleInsertSpec } from "@palmier/core";
+import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, planAgentResolutionAdoption, type FrameRange, type RippleInsertSpec } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 

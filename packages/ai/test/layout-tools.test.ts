@@ -9,7 +9,7 @@ import {
   type MediaManifestEntry,
   type Timeline,
   type Track,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { applyLayoutTool } from "../src/tools/layout-tools.js";
 import type { ToolContext } from "../src/index.js";
 

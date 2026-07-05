@@ -7,7 +7,7 @@ import {
   type MediaManifest,
   type Track,
   type Timeline,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   ToolExecutor,
   buildCatalog,
@@ -17,10 +17,10 @@ import {
   type StreamEvent,
   type AgentSessionDeps,
   type ToolContext,
-} from "@palmier/ai";
+} from "@frontstage/ai";
 import { AgentPanel } from "../src/agent/AgentPanel.js";
 
-// ── fixtures (mirrored from @palmier/ai session.test.ts) ─────────────────────
+// ── fixtures (mirrored from @frontstage/ai session.test.ts) ─────────────────────
 
 function makeClip(id: string, startFrame: number, durationFrames = 60) {
   return {

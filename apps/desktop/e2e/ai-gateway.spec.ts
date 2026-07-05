@@ -39,7 +39,7 @@ test("DesktopAiGateway: setKey/hasKey/streamChat/clearKey + key attached in main
     env: {
       ...process.env,
       RENDERER_PORT: "5190",
-      PALMIER_E2E: "1",
+      FRONTSTAGE_E2E: "1",
       OPENROUTER_BASE_URL: `http://127.0.0.1:${fakePort}`,
     },
   });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { PlaybackEngine } from "@palmier/engine";
+import type { PlaybackEngine } from "@frontstage/engine";
 
 type MaxLumaFn = (x0: number, y0: number, x1: number, y1: number) => Promise<number>;
 

@@ -1,11 +1,11 @@
 import { useState } from "react";
-import type { EditorStore, Clip } from "@palmier/core";
+import type { EditorStore, Clip } from "@frontstage/core";
 import {
   findClip,
   resetSection,
   setSectionEnabled,
   setClipEffectsCommand,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { theme } from "../../theme/theme.js";
 import { AdjustSection } from "./AdjustSection.js";

@@ -1,4 +1,4 @@
-import { fitLongestEdge } from "@palmier/core";
+import { fitLongestEdge } from "@frontstage/core";
 
 // Canvas-backed RGBA -> JPEG encode for renderFrame's optional opts (inspect_timeline). Thin host
 // glue, verified interactively like renderMattePng — jsdom has no canvas 2D context to unit test.

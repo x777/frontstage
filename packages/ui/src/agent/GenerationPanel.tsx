@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { GenerationInput, MediaManifestEntry } from "@palmier/core";
-import { createPlaceholderEntry } from "@palmier/core";
-import type { GenModelEntry, GenModelKind, GenToolParams, StartJobArgs } from "@palmier/ai";
-import { genModel, listGenModels, validateGenParams, estimateCredits, formatCredits } from "@palmier/ai";
+import type { GenerationInput, MediaManifestEntry } from "@frontstage/core";
+import { createPlaceholderEntry } from "@frontstage/core";
+import type { GenModelEntry, GenModelKind, GenToolParams, StartJobArgs } from "@frontstage/ai";
+import { genModel, listGenModels, validateGenParams, estimateCredits, formatCredits } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { Select, Button, IconButton, Icon, SegmentedTabs, TextInput, Checkbox } from "../primitives/index.js";
 import { isMediaDrag, readMediaDragPayload } from "../media/FolderTile.js";

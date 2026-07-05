@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { EditorStore, MediaManifestEntry } from "@palmier/core";
+import type { EditorStore, MediaManifestEntry } from "@frontstage/core";
 import {
   findClip,
   transformAt,
@@ -12,9 +12,9 @@ import {
   setClipTextStyleCommand,
   defaultTextStyle,
   rgbaFromHex,
-} from "@palmier/core";
-import type { Clip, Transform, Crop, TextStyle } from "@palmier/core";
-import type { PlaybackEngine } from "@palmier/engine";
+} from "@frontstage/core";
+import type { Clip, Transform, Crop, TextStyle } from "@frontstage/core";
+import type { PlaybackEngine } from "@frontstage/engine";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
 import { SegmentedTabs } from "../primitives/index.js";

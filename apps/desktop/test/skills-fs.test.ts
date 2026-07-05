@@ -26,8 +26,8 @@ import {
 let root: string;
 let home: string;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "palmier-skills-"));
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "palmier-home-"));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "frontstage-skills-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "frontstage-home-"));
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
@@ -41,8 +41,8 @@ function writeSkillMd(dir: string, id: string, text: string) {
 }
 
 describe("skillsRootPath", () => {
-  test("joins homeDir with .palmier/skills", () => {
-    expect(skillsRootPath("/x")).toBe(path.join("/x", ".palmier", "skills"));
+  test("joins homeDir with .frontstage/skills", () => {
+    expect(skillsRootPath("/x")).toBe(path.join("/x", ".frontstage", "skills"));
   });
 });
 
@@ -187,16 +187,16 @@ describe("isAllowedExportAgent — the export allowlist", () => {
   });
 });
 
-describe("exportDestDir — the ~/.<agent>/skills/palmier-<id>/ prefix", () => {
+describe("exportDestDir — the ~/.<agent>/skills/frontstage-<id>/ prefix", () => {
   test("builds the expected path verbatim", () => {
-    expect(exportDestDir("/home/u", "claude", "foo")).toBe(path.join("/home/u", ".claude", "skills", "palmier-foo"));
-    expect(exportDestDir("/home/u", "codex", "bar")).toBe(path.join("/home/u", ".codex", "skills", "palmier-bar"));
-    expect(exportDestDir("/home/u", "cursor", "baz")).toBe(path.join("/home/u", ".cursor", "skills", "palmier-baz"));
+    expect(exportDestDir("/home/u", "claude", "foo")).toBe(path.join("/home/u", ".claude", "skills", "frontstage-foo"));
+    expect(exportDestDir("/home/u", "codex", "bar")).toBe(path.join("/home/u", ".codex", "skills", "frontstage-bar"));
+    expect(exportDestDir("/home/u", "cursor", "baz")).toBe(path.join("/home/u", ".cursor", "skills", "frontstage-baz"));
   });
 });
 
 describe("exportSkillToAgent", () => {
-  test("copies the skill folder to the palmier-<id> prefixed dest and returns the path", () => {
+  test("copies the skill folder to the frontstage-<id> prefixed dest and returns the path", () => {
     writeSkill(root, "my-skill", "---\nname: X\ndescription: Y\n---\nbody");
     const dest = exportSkillToAgent(root, home, "my-skill", "claude");
     expect(dest).toBe(exportDestDir(home, "claude", "my-skill"));
@@ -246,7 +246,7 @@ describe("exportSkillToAgent", () => {
 // above via a mock asserting the exact options object instead.
 describe("removeSkill — symlinked <id> folder (non-dereferencing rm)", () => {
   test("unlinks the symlinked folder itself; the real target directory is untouched", (ctx) => {
-    const targetDir = fs.mkdtempSync(path.join(os.tmpdir(), "palmier-symlink-target-"));
+    const targetDir = fs.mkdtempSync(path.join(os.tmpdir(), "frontstage-symlink-target-"));
     fs.writeFileSync(path.join(targetDir, "marker.txt"), "must-survive");
     const linkPath = path.join(root, "linked-skill");
     try {

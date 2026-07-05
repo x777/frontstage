@@ -1,5 +1,5 @@
-import type { GenerationInput, GenerationLogEntry, MediaManifestEntry } from "@palmier/core";
-import { scanResumableGenerations, serializeGenerationStatus } from "@palmier/core";
+import type { GenerationInput, GenerationLogEntry, MediaManifestEntry } from "@frontstage/core";
+import { scanResumableGenerations, serializeGenerationStatus } from "@frontstage/core";
 import type { GenJobGateway } from "./gen-gateway.js";
 import { nextPollDelay } from "./poll-schedule.js";
 

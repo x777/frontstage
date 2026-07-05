@@ -19,7 +19,7 @@ import {
 
 let dir: string;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "palmier-registry-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "frontstage-registry-"));
 });
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });

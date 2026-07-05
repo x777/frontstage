@@ -6,7 +6,7 @@
     <effect id="titleBasic" name="Basic Title" uid=".../Titles.localized/Bumper:Opener.localized/Basic Title.localized/Basic Title.moti"/>
   </resources>
   <library>
-    <event name="Palmier Export">
+    <event name="Frontstage Export">
       <project name="Timeline Export">
         <sequence format="r1" duration="2s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
           <spine>

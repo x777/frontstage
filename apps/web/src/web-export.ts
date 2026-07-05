@@ -1,7 +1,7 @@
-import type { ExportGateway, ExportTarget, ExportProgressFn } from "@palmier/ui";
-import type { Timeline } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
-import { runExport, WebCodecsMp4Sink } from "@palmier/engine";
+import type { ExportGateway, ExportTarget, ExportProgressFn } from "@frontstage/ui";
+import type { Timeline } from "@frontstage/core";
+import type { MediaByteSource } from "@frontstage/engine";
+import { runExport, WebCodecsMp4Sink } from "@frontstage/engine";
 
 interface WebExportTarget extends ExportTarget {
   handle: FileSystemFileHandle;

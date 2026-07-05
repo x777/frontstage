@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import type { PlaybackEngine } from "@palmier/engine";
-import type { EditorStore } from "@palmier/core";
+import type { PlaybackEngine } from "@frontstage/engine";
+import type { EditorStore } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Icon, IconButton } from "../primitives/index.js";
 

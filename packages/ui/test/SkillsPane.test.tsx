@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { SkillStore, SkillCatalog, sha12 } from "@palmier/ai";
-import type { SkillStorage, SkillCatalogDeps, SkillCatalogEntry } from "@palmier/ai";
+import { SkillStore, SkillCatalog, sha12 } from "@frontstage/ai";
+import type { SkillStorage, SkillCatalogDeps, SkillCatalogEntry } from "@frontstage/ai";
 import { SkillsPane } from "../src/skills/SkillsPane.js";
 
 function skillText(name: string, description: string, body: string): string {
@@ -310,7 +310,7 @@ test("desktop-only affordances are present, and Add-to-agent shows the copied-pa
   storage.files.set("my-skill", skillText("My Skill", "d", "b"));
   storage.revealSkill = vi.fn().mockResolvedValue(undefined);
   storage.openRoot = vi.fn().mockResolvedValue(undefined);
-  storage.exportToAgent = vi.fn().mockResolvedValue({ path: "/home/.claude/skills/palmier-my-skill" });
+  storage.exportToAgent = vi.fn().mockResolvedValue({ path: "/home/.claude/skills/frontstage-my-skill" });
   const store = new SkillStore(storage);
   const catalog = new SkillCatalog(makeCatalogDeps([]));
 

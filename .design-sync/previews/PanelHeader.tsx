@@ -1,4 +1,4 @@
-import { Icon, IconButton, PanelHeader } from "@palmier/ui";
+import { Icon, IconButton, PanelHeader } from "@frontstage/ui";
 
 const dark: React.CSSProperties = { background: "var(--bg-base)", width: 320, display: "flex", flexDirection: "column" };
 

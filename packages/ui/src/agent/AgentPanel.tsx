@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext, ToolBlock, ModelEntry } from "@palmier/ai";
-import { toolResultToText } from "@palmier/ai";
+import type { AgentSession, AgentMessage, AgentContentBlock, ChatSessionStore, MentionContext, ToolBlock, ModelEntry } from "@frontstage/ai";
+import { toolResultToText } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { useAgentSession } from "./use-agent-session.js";
 import { SessionSwitcher } from "./SessionSwitcher.js";

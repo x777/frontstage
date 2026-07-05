@@ -1,4 +1,4 @@
-import type { EditorStore } from "@palmier/core";
+import type { EditorStore } from "@frontstage/core";
 import {
   splitAtPlayheadCommand,
   trimStartToPlayheadCommand,
@@ -8,7 +8,7 @@ import {
   ZOOM_MIN,
   ZOOM_MAX,
   ZOOM_TOOLBAR_STEP,
-} from "@palmier/core";
+} from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { Icon, IconButton } from "../primitives/index.js";
 import { useStore } from "../store/use-store.js";

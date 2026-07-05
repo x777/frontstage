@@ -3,8 +3,8 @@ import { AdjustmentRow } from "../src/inspector/adjust/index.js";
 import { AdjustSection } from "../src/inspector/adjust/index.js";
 import { ScrubbableNumberField } from "../src/inspector/adjust/index.js";
 import { BasicCorrectionSection } from "../src/inspector/adjust/index.js";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
-import type { Clip, Track } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@frontstage/core";
+import type { Clip, Track } from "@frontstage/core";
 
 function makeClip(id: string): Clip {
   return {

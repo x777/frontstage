@@ -1,7 +1,7 @@
-import { runExport } from "@palmier/engine";
-import type { Timeline } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
-import type { ExportGateway, ExportTarget, ExportProgressFn } from "@palmier/ui";
+import { runExport } from "@frontstage/engine";
+import type { Timeline } from "@frontstage/core";
+import type { MediaByteSource } from "@frontstage/engine";
+import type { ExportGateway, ExportTarget, ExportProgressFn } from "@frontstage/ui";
 import { FfmpegIpcSink } from "./ffmpeg-sink.js";
 
 interface DesktopExportTarget extends ExportTarget {

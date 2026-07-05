@@ -9,7 +9,7 @@
     </asset>
   </resources>
   <library>
-    <event name="Palmier Export">
+    <event name="Frontstage Export">
       <project name="Timeline Export">
         <sequence format="r1" duration="3s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
           <spine>

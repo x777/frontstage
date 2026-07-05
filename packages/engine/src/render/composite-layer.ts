@@ -1,4 +1,4 @@
-import type { Mat2d, Crop, Effect, BlendMode } from "@palmier/core";
+import type { Mat2d, Crop, Effect, BlendMode } from "@frontstage/core";
 
 export interface CompositeLayer {
   frame: VideoFrame;

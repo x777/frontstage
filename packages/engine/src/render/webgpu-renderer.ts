@@ -1,6 +1,6 @@
-import type { Mat2d, Size, Effect, BlendMode, CubeLUT } from "@palmier/core";
-import { canonicalSort, resolveParam, parseGradeCurve, evalCurve, parseHueCurves, evalHueCurve, BLEND_MODES } from "@palmier/core";
-import type { GradeCurve, HueCurves } from "@palmier/core";
+import type { Mat2d, Size, Effect, BlendMode, CubeLUT } from "@frontstage/core";
+import { canonicalSort, resolveParam, parseGradeCurve, evalCurve, parseHueCurves, evalHueCurve, BLEND_MODES } from "@frontstage/core";
+import type { GradeCurve, HueCurves } from "@frontstage/core";
 import type { CompositeLayer } from "./composite-layer.js";
 
 // Uniforms layout (all f32, 64 bytes / 16 floats):

@@ -1,5 +1,5 @@
-import type { ProjectStore } from "@palmier/core";
-import type { MediaGateway } from "@palmier/core";
+import type { ProjectStore } from "@frontstage/core";
+import type { MediaGateway } from "@frontstage/core";
 
 export function dirHandleProjectStore(dir: FileSystemDirectoryHandle): ProjectStore {
   return {

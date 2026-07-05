@@ -1,5 +1,5 @@
-import { EditorStore, defaultTimeline } from "@palmier/core";
-import type { MediaManifest, MediaManifestEntry, MediaGateway, ProjectGateway, BoundProject, ProjectRef } from "@palmier/core";
+import { EditorStore, defaultTimeline } from "@frontstage/core";
+import type { MediaManifest, MediaManifestEntry, MediaGateway, ProjectGateway, BoundProject, ProjectRef } from "@frontstage/core";
 import type { EditorMediaHost } from "../src/editor/editor-host.js";
 import { createEditorHost } from "../src/editor/editor-host.js";
 

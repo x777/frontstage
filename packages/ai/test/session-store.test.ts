@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { MemoryProjectStore } from "@palmier/core";
+import { MemoryProjectStore } from "@frontstage/core";
 import { AgentSession, type AgentSessionDeps } from "../src/agent/session.js";
 import { ChatSessionStore, type ChatSessionDoc } from "../src/agent/session-store.js";
 import type { AiGateway, ChatRequest, StreamEvent } from "../src/agent/wire.js";
 import { ToolExecutor, buildCatalog, type ToolContext } from "../src/index.js";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@palmier/core";
-import type { MediaManifest } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop } from "@frontstage/core";
+import type { MediaManifest } from "@frontstage/core";
 
 // ── minimal fake deps for AgentSession ───────────────────────────────────────
 

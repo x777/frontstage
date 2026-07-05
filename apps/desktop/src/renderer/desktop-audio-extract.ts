@@ -13,7 +13,7 @@ export interface ImportScanResult {
 }
 
 // One raw ffprobe reading per path — { tag, fps } — that the renderer turns into a SourceTimecode
-// via @palmier/core's parseTimecodeTag (main.cjs stays free of the @palmier/core ESM dependency).
+// via @frontstage/core's parseTimecodeTag (main.cjs stays free of the @frontstage/core ESM dependency).
 export interface RawTimecodeProbe {
   tag: string;
   fps: number;

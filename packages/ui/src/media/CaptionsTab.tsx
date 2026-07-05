@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import type { EditorStore, MediaManifestEntry, RGBA } from "@palmier/core";
+import type { EditorStore, MediaManifestEntry, RGBA } from "@frontstage/core";
 import {
   DEFAULT_HIGHLIGHT_COLOR,
   transcriptTargets,
   timelineTrackDisplayLabel,
   defaultTextStyle,
   type TextAnimationPreset,
-} from "@palmier/core";
-import type { ToolContext, ToolResult } from "@palmier/ai";
-import { canTranscribe, classifyRefsByCache, formatCredits } from "@palmier/ai";
+} from "@frontstage/core";
+import type { ToolContext, ToolResult } from "@frontstage/ai";
+import { canTranscribe, classifyRefsByCache, formatCredits } from "@frontstage/ai";
 import { theme } from "../theme/theme.js";
 import { useStore } from "../store/use-store.js";
 import { Select } from "../primitives/Select.js";

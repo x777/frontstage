@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@frontstage/core";
 import { trimTickCommand, selectForwardScopeForKey } from "../src/timeline/pointer.js";
 
 function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {

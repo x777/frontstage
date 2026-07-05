@@ -1,5 +1,5 @@
 {
-  "name": "@palmier/web",
+  "name": "@frontstage/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@palmier/ai": "workspace:*",
-    "@palmier/core": "workspace:*",
-    "@palmier/engine": "workspace:*",
-    "@palmier/ui": "workspace:*"
+    "@frontstage/ai": "workspace:*",
+    "@frontstage/core": "workspace:*",
+    "@frontstage/engine": "workspace:*",
+    "@frontstage/ui": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

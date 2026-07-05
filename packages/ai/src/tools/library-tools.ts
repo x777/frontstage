@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { collectFolderCascade, referencingClipIds, removeClipCommand, matteSize, matteName, MATTE_ASPECTS } from "@palmier/core";
-import type { ClipType, MediaFolder, MatteAspect } from "@palmier/core";
+import { collectFolderCascade, referencingClipIds, removeClipCommand, matteSize, matteName, MATTE_ASPECTS } from "@frontstage/core";
+import type { ClipType, MediaFolder, MatteAspect } from "@frontstage/core";
 import type { ToolContext, ToolResult, ToolSpec } from "./types.js";
 import { asUndoStep, errorResult, ok } from "./executor.js";
 

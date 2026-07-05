@@ -1,5 +1,5 @@
-import { FrameRenderer, readPixelFactory, ImageSource, type ReadPixelFn, type CompositeLayer } from "@palmier/engine";
-import { affineTransform, defaultTransform, defaultCrop } from "@palmier/core";
+import { FrameRenderer, readPixelFactory, ImageSource, type ReadPixelFn, type CompositeLayer } from "@frontstage/engine";
+import { affineTransform, defaultTransform, defaultCrop } from "@frontstage/core";
 
 const W = 200, H = 200;
 

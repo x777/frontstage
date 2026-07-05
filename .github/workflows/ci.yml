@@ -48,18 +48,18 @@ jobs:
         run: pnpm typecheck
 
       - name: Build web
-        run: pnpm -F @palmier/web build
+        run: pnpm -F @frontstage/web build
 
       - name: Syntax-check desktop main process (.cjs/.mjs)
         run: |
           find apps/desktop/src/main -type f \( -name '*.cjs' -o -name '*.mjs' \) -print0 \
             | xargs -0 -n1 node --check
 
-  # GPU harness (@palmier/engine-harness): its Playwright specs require a real GPU adapter
+  # GPU harness (@frontstage/engine-harness): its Playwright specs require a real GPU adapter
   # and run headed (see apps/engine-harness/playwright.config.ts) — no GitHub-hosted runner
   # provides this, so it is NOT part of the required push/PR matrix above. This job is a
   # manual-only stub; run the suite locally with:
-  #   pnpm -F @palmier/engine-harness test:headed
+  #   pnpm -F @frontstage/engine-harness test:headed
   # A future self-hosted GPU runner could replace the "echo" step below with the real command.
   gpu-harness:
     name: GPU harness (manual, not required)
@@ -70,4 +70,4 @@ jobs:
         run: |
           echo "engine-harness's headed WebGPU Playwright suite needs a local GPU."
           echo "GitHub-hosted runners have none, so this job intentionally does not run it."
-          echo "Run locally: pnpm -F @palmier/engine-harness test:headed"
+          echo "Run locally: pnpm -F @frontstage/engine-harness test:headed"

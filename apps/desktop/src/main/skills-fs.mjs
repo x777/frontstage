@@ -1,5 +1,5 @@
 // Pure(ish) fs helpers backing the skills:* IPC (M15 T2) — the desktop half of SkillStorage, over
-// ~/.palmier/skills/<id>/SKILL.md (SHARED with the Swift app's SkillStore.swift layout). No
+// ~/.frontstage/skills/<id>/SKILL.md (SHARED with the Swift app's SkillStore.swift layout). No
 // `electron` import — every function takes skillsRoot/homeDir explicitly, so this loads under
 // plain Node (vitest) the same way it loads via index.cjs's dynamic import() — mirrors
 // project-registry.mjs's convention.
@@ -11,7 +11,7 @@ const SKILL_MD = "SKILL.md";
 const LEDGER_FILENAME = ".installed.json";
 
 export function skillsRootPath(homeDir) {
-  return path.join(homeDir, ".palmier", "skills");
+  return path.join(homeDir, ".frontstage", "skills");
 }
 
 // Mirrors SkillStore.swift's isValidSkillId: a single safe path component, never empty/"."/"..".
@@ -97,10 +97,10 @@ export function isAllowedExportAgent(agent) {
   return typeof agent === "string" && EXPORT_AGENTS.has(agent);
 }
 
-// ~/.<agent>/skills/palmier-<id>/ — the "palmier-" prefix so we only ever overwrite our own prior
+// ~/.<agent>/skills/frontstage-<id>/ — the "frontstage-" prefix so we only ever overwrite our own prior
 // copy (Swift's SkillStore.copy).
 export function exportDestDir(homeDir, agent, id) {
-  return path.join(homeDir, `.${agent}`, "skills", `palmier-${id}`);
+  return path.join(homeDir, `.${agent}`, "skills", `frontstage-${id}`);
 }
 
 export function exportSkillToAgent(skillsRoot, homeDir, id, agent) {

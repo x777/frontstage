@@ -1,7 +1,7 @@
 {
   "projectId": "d5c36439-b293-4cfb-afa1-c0949eb01b26",
   "shape": "package",
-  "pkg": "@palmier/ui",
+  "pkg": "@frontstage/ui",
   "globalName": "FrontstageUI",
   "srcDir": "src/primitives",
   "cssEntry": "src/theme/tokens.css",

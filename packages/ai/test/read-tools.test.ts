@@ -10,7 +10,7 @@ import {
   type Track,
   type Timeline,
   type TranscriptionResult,
-} from "@palmier/core";
+} from "@frontstage/core";
 import {
   ToolExecutor,
   getTimelineTool,

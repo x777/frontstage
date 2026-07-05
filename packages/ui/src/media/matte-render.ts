@@ -1,4 +1,4 @@
-import { rgbaFromHex } from "@palmier/core";
+import { rgbaFromHex } from "@frontstage/core";
 
 // Ported from Swift Models/Matte.swift's Matte.png — a solid fill at FULL alpha (alpha hex chars,
 // if present, are parsed but ignored for the fill) rasterized to PNG bytes via canvas.

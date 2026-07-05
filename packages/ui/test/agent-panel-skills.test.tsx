@@ -18,7 +18,7 @@ vi.mock("../src/media/MediaPanel.js", () => ({
 }));
 
 import { render, screen, fireEvent } from "@testing-library/react";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Track, type Timeline } from "@palmier/core";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Track, type Timeline } from "@frontstage/core";
 import {
   ToolExecutor,
   buildCatalog,
@@ -33,7 +33,7 @@ import {
   type SkillStorage,
   type SkillCatalogDeps,
   type ModelEntry,
-} from "@palmier/ai";
+} from "@frontstage/ai";
 import { AgentPanel } from "../src/agent/AgentPanel.js";
 import { Editor } from "../src/editor/Editor.js";
 
@@ -129,7 +129,7 @@ function makeSettingsProps(skills: { store: SkillStore; catalog: SkillCatalog })
 
 function makeMinimalEditorProps() {
   const store = new EditorStore(makeTimeline());
-  const media = {} as import("@palmier/engine").MediaByteSource;
+  const media = {} as import("@frontstage/engine").MediaByteSource;
   const library: import("../src/editor/Editor.js").EditorLibrary = {
     getSnapshot: () => ({ entries: [], folders: [] }),
     subscribe: () => () => {},

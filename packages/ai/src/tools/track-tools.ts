@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { removeTrackCommand } from "@palmier/core";
+import { removeTrackCommand } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 

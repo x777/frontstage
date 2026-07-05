@@ -1,5 +1,5 @@
-import type { Timeline } from "@palmier/core";
-import type { EditorStore } from "@palmier/core";
+import type { Timeline } from "@frontstage/core";
+import type { EditorStore } from "@frontstage/core";
 import type { ToolResult, ToolSpec, ToolContext } from "./types.js";
 
 export function ok(text: string): ToolResult {

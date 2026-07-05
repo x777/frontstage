@@ -1,5 +1,5 @@
 // Host-agnostic port of Swift's @MainActor SkillCatalog — fetches the community skill catalog
-// from the palmier-skills repo (raw GitHub CDN by default), cache-first.
+// from the frontstage-skills repo (raw GitHub CDN by default), cache-first.
 
 import { z } from "zod";
 
@@ -35,7 +35,7 @@ export interface SkillCatalogDeps {
   baseUrl?: string;
 }
 
-const DEFAULT_BASE_URL = "https://raw.githubusercontent.com/palmier-io/palmier-skills/main";
+const DEFAULT_BASE_URL = "https://raw.githubusercontent.com/x777/frontstage-skills/main";
 
 export class SkillCatalog {
   private readonly deps: SkillCatalogDeps;

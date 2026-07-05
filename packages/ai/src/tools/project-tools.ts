@@ -112,7 +112,7 @@ export function newProjectTool(): ToolSpec {
   return {
     name: "new_project",
     description:
-      "Create a new empty project in the user's Palmier Pro folder and make it active. Fails if a project with that name already exists — pick another name. The current project is saved first if it has unsaved changes. Returns the new project's name and path.",
+      "Create a new empty project in the user's Frontstage folder and make it active. Fails if a project with that name already exists — pick another name. The current project is saved first if it has unsaved changes. Returns the new project's name and path.",
     inputSchema: z.object({
       name: z.string().optional(),
     }),

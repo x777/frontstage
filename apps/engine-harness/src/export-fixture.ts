@@ -2,8 +2,8 @@ import {
   fitTransform, defaultCrop,
   timelineTotalFrames,
   type Timeline, type Clip,
-} from "@palmier/core";
-import { demuxMp4, runExport, WebCodecsMp4Sink, type MediaByteSource } from "@palmier/engine";
+} from "@frontstage/core";
+import { demuxMp4, runExport, WebCodecsMp4Sink, type MediaByteSource } from "@frontstage/engine";
 
 declare global {
   interface Window {

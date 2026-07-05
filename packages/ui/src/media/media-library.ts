@@ -1,8 +1,8 @@
-import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry, sniffIsoBmff } from "@palmier/core";
-import type { ClipType, MediaFolder, MediaManifest, MediaManifestEntry } from "@palmier/core";
-import type { MediaGateway } from "@palmier/core";
-import type { MediaByteSource } from "@palmier/engine";
-import { extensionForImportMime, importTypeForExtension } from "@palmier/ai";
+import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry, sniffIsoBmff } from "@frontstage/core";
+import type { ClipType, MediaFolder, MediaManifest, MediaManifestEntry } from "@frontstage/core";
+import type { MediaGateway } from "@frontstage/core";
+import type { MediaByteSource } from "@frontstage/engine";
+import { extensionForImportMime, importTypeForExtension } from "@frontstage/ai";
 
 interface LibrarySnapshot {
   entries: MediaManifestEntry[];
