@@ -11,6 +11,19 @@ import { setClipPropertyCommand } from "./commands.js";
 // One Command per action: apply() folds per-clip work; dispatch() = one undo entry, and an
 // all-skip apply returns the input timeline so no undo entry is created (Swift no-op parity).
 
+// True when at least one selected clip strictly contains `frame` — the shared precondition of
+// split/trim-to-playhead. Drives the toolbar's disabled states (deliberate super-Swift: Swift's
+// buttons stay enabled and silently no-op, which reads as broken).
+export function playheadInsideSelection(timeline: Timeline, selectedIds: readonly string[], frame: number): boolean {
+  for (const id of selectedIds) {
+    const loc = findClip(timeline, id);
+    if (!loc) continue;
+    const clip = timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+    if (frame > clip.startFrame && frame < clipEndFrame(clip)) return true;
+  }
+  return false;
+}
+
 export function splitAtPlayheadCommand(
   selectedIds: readonly string[],
   frame: number,

@@ -75,6 +75,23 @@ test("tool-mode buttons rest at tertiary tone (ToolbarView.toolModeButton)", () 
   expect(screen.getByTestId("toolbar-razor").style.color).toBe("var(--text-tertiary)");
 });
 
+test("split/trim buttons disable when the action would no-op", () => {
+  const store = new EditorStore(tlWithClip());
+  render(<Toolbar store={store} />);
+  // no selection → disabled
+  expect(screen.getByTestId("toolbar-split")).toBeDisabled();
+  expect(screen.getByTestId("toolbar-trim-start")).toBeDisabled();
+  expect(screen.getByTestId("toolbar-trim-end")).toBeDisabled();
+  // selected but playhead at the clip edge (0) → still disabled (strictly-inside rule)
+  act(() => store.select(["a"]));
+  expect(screen.getByTestId("toolbar-split")).toBeDisabled();
+  // playhead strictly inside → enabled
+  act(() => store.setPlayhead(15));
+  expect(screen.getByTestId("toolbar-split")).toBeEnabled();
+  expect(screen.getByTestId("toolbar-trim-start")).toBeEnabled();
+  expect(screen.getByTestId("toolbar-trim-end")).toBeEnabled();
+});
+
 test("split button dispatches at store.playhead for the selection", () => {
   const store = new EditorStore(tlWithClip());
   store.select(["a"]);

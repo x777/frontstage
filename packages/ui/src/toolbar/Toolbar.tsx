@@ -4,6 +4,7 @@ import {
   trimStartToPlayheadCommand,
   trimEndToPlayheadCommand,
   addTextClipAtPlayhead,
+  playheadInsideSelection,
   ZOOM_MIN,
   ZOOM_MAX,
   ZOOM_TOOLBAR_STEP,
@@ -29,6 +30,9 @@ export function Toolbar({ store }: { store: EditorStore }) {
   const snap = useStore(store, (s) => s);
   const { toolMode, playhead, selection, view, timeline } = snap;
   const zoom = view.zoom;
+  // Split/trim would silently no-op otherwise (needs a selected clip strictly containing the
+  // playhead) — disable instead (deliberate super-Swift affordance).
+  const canActOnSelection = playheadInsideSelection(timeline, [...selection], playhead);
 
   function handleSplit() {
     store.dispatch(splitAtPlayheadCommand([...selection], playhead));
@@ -103,15 +107,15 @@ export function Toolbar({ store }: { store: EditorStore }) {
 
       <ToolbarDivider />
 
-      <IconButton testid="toolbar-split" title="Split at Playhead (⌘K)" frame="mdLg" onClick={handleSplit}>
+      <IconButton testid="toolbar-split" title="Split at Playhead (⌘K)" frame="mdLg" disabled={!canActOnSelection} onClick={handleSplit}>
         <Icon name="split-clip" size={TOOLBAR_ICON_SIZE} />
       </IconButton>
-      <IconButton testid="toolbar-trim-start" title="Trim Start to Playhead (Q)" frame="mdLg" onClick={handleTrimStart}>
+      <IconButton testid="toolbar-trim-start" title="Trim Start to Playhead (Q)" frame="mdLg" disabled={!canActOnSelection} onClick={handleTrimStart}>
         <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: theme.fontWeight.semibold, fontSize: theme.fontSize.toolbarBracket }}>
           [
         </span>
       </IconButton>
-      <IconButton testid="toolbar-trim-end" title="Trim End to Playhead (W)" frame="mdLg" onClick={handleTrimEnd}>
+      <IconButton testid="toolbar-trim-end" title="Trim End to Playhead (W)" frame="mdLg" disabled={!canActOnSelection} onClick={handleTrimEnd}>
         <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: theme.fontWeight.semibold, fontSize: theme.fontSize.toolbarBracket }}>
           ]
         </span>
