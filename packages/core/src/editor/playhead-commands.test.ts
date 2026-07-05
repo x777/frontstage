@@ -3,7 +3,12 @@ import type { Clip } from "../clip.js";
 import type { Track } from "../timeline.js";
 import type { Timeline } from "../timeline.js";
 import { EditorStore } from "./editor-store.js";
-import { splitAtPlayheadCommand, trimStartToPlayheadCommand, trimEndToPlayheadCommand } from "./playhead-commands.js";
+import {
+  splitAtPlayheadCommand,
+  trimStartToPlayheadCommand,
+  trimEndToPlayheadCommand,
+  addTextClipAtPlayhead,
+} from "./playhead-commands.js";
 
 // --- Test fixture helpers (mirrors timeline-commands.test.ts) ---
 
@@ -174,5 +179,68 @@ describe("trimEndToPlayheadCommand", () => {
 
     store.dispatch(trimEndToPlayheadCommand(["c1"], 30)); // frame === endFrame
     expect(store.canUndo()).toBe(false);
+  });
+});
+
+// --- addTextClipAtPlayhead ---
+
+describe("addTextClipAtPlayhead", () => {
+  it("adds a text clip on a new topmost track at frame with 3s duration", () => {
+    const tl = makeTimeline([makeTrack({ id: "t1", clips: [makeClip({ id: "existing" })] })]);
+    const store = new EditorStore(tl);
+
+    const { command, clipId } = addTextClipAtPlayhead(45, 30, idGen("text"));
+    store.dispatch(command);
+
+    const tracks = store.getSnapshot().timeline.tracks;
+    expect(tracks).toHaveLength(2);
+    const newTrack = tracks[0]!;
+    expect(newTrack.clips).toHaveLength(1);
+    const clip = newTrack.clips[0]!;
+    expect(clip.id).toBe(clipId);
+    expect(clip.startFrame).toBe(45);
+    expect(clip.durationFrames).toBe(90);
+    expect(clip.textContent).toBe("Text");
+    // the pre-existing track/clip is untouched and pushed down to index 1
+    expect(tracks[1]!.id).toBe("t1");
+  });
+
+  it("negative frame clamps to 0", () => {
+    const tl = makeTimeline([]);
+    const store = new EditorStore(tl);
+
+    const { command } = addTextClipAtPlayhead(-10, 30, idGen("text"));
+    store.dispatch(command);
+
+    const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(clip.startFrame).toBe(0);
+  });
+
+  it("returns the clip id and dispatch is one undo step", () => {
+    const tl = makeTimeline([]);
+    const store = new EditorStore(tl);
+    const prior = store.getSnapshot().timeline;
+
+    const { command, clipId } = addTextClipAtPlayhead(0, 30, idGen("text"));
+    expect(typeof clipId).toBe("string");
+    expect(clipId.length).toBeGreaterThan(0);
+
+    store.dispatch(command);
+    expect(store.canUndo()).toBe(true);
+
+    store.undo();
+    expect(store.getSnapshot().timeline).toBe(prior);
+  });
+
+  it("mints a distinct id for the new track (Bug-#1 class: newId is called twice)", () => {
+    const tl = makeTimeline([]);
+    const store = new EditorStore(tl);
+
+    const { command, clipId } = addTextClipAtPlayhead(0, 30, idGen("text"));
+    store.dispatch(command);
+
+    const track = store.getSnapshot().timeline.tracks[0]!;
+    expect(track.id).not.toBe(clipId);
+    expect(track.clips[0]!.id).toBe(clipId);
   });
 });
