@@ -279,8 +279,20 @@ export function addTextsTool(): ToolSpec {
             ? { kind: "existing" as const, index: text.trackIndex }
             : { kind: "new" as const, index: 0 };
 
-        const addCmd = addClipCommand(entry, target, text.startFrame, fps, undefined, () => clipId);
-        reducers.push(addCmd.apply.bind(addCmd));
+        // addClipCommand mints one id PER ENTITY — clip, then a new track for {kind:"new"}
+        // targets. A constant thunk collides the track id with the clip id (Bug-#1 class);
+        // only the first call may return clipId, later calls mint fresh.
+        reducers.push((t: ReturnType<typeof ctx.store.getSnapshot>["timeline"]) => {
+          let clipIdConsumed = false;
+          const perEntityNewId = (): string => {
+            if (!clipIdConsumed) {
+              clipIdConsumed = true;
+              return clipId;
+            }
+            return ctx.newId();
+          };
+          return addClipCommand(entry, target, text.startFrame, fps, undefined, perEntityNewId).apply(t);
+        });
 
         const contentCmd = setClipPropertyCommand(clipId, "textContent", text.content);
         reducers.push(contentCmd.apply.bind(contentCmd));

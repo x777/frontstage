@@ -68,6 +68,13 @@ test("pointer/razor buttons switch toolMode with active state", () => {
   expect(screen.getByTestId("toolbar-pointer")).toHaveAttribute("aria-pressed", "false");
 });
 
+test("tool-mode buttons rest at tertiary tone (ToolbarView.toolModeButton)", () => {
+  const store = new EditorStore(defaultTimeline());
+  render(<Toolbar store={store} />);
+  // pointer is active (primary); razor rests at the tertiary tone
+  expect(screen.getByTestId("toolbar-razor").style.color).toBe("var(--text-tertiary)");
+});
+
 test("split button dispatches at store.playhead for the selection", () => {
   const store = new EditorStore(tlWithClip());
   store.select(["a"]);

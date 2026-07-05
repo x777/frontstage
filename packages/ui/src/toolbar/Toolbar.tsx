@@ -82,6 +82,7 @@ export function Toolbar({ store }: { store: EditorStore }) {
         testid="toolbar-pointer"
         title="Pointer (V)"
         frame="mdLg"
+        tone="tertiary"
         active={toolMode === "pointer"}
         ariaPressed={toolMode === "pointer"}
         onClick={() => store.setToolMode("pointer")}
@@ -92,6 +93,7 @@ export function Toolbar({ store }: { store: EditorStore }) {
         testid="toolbar-razor"
         title="Razor (C)"
         frame="mdLg"
+        tone="tertiary"
         active={toolMode === "razor"}
         ariaPressed={toolMode === "razor"}
         onClick={() => store.setToolMode("razor")}
@@ -130,6 +132,7 @@ export function Toolbar({ store }: { store: EditorStore }) {
           testid="toolbar-zoom-out"
           title="Zoom Out"
           frame="mdLg"
+          tone="tertiary"
           disabled={zoom <= ZOOM_MIN}
           onClick={handleZoomOut}
         >
@@ -149,6 +152,7 @@ export function Toolbar({ store }: { store: EditorStore }) {
           testid="toolbar-zoom-in"
           title="Zoom In"
           frame="mdLg"
+          tone="tertiary"
           disabled={zoom >= ZOOM_MAX}
           onClick={handleZoomIn}
         >

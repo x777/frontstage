@@ -303,6 +303,19 @@ describe("add_texts", () => {
     expect(clip.textContent).toBe("Hello World");
   });
 
+  test("new-track text mints a distinct track id (no clip/track collision)", async () => {
+    const store = new EditorStore({ ...defaultTimeline() });
+    const ctx = makeCtx(store);
+    const result = await addTextsTool().run({
+      texts: [{ content: "Solo", startFrame: 0, durationFrames: 30 }],
+    }, ctx);
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    const track = tl.tracks[0]!;
+    const clip = track.clips[0]!;
+    expect(track.id).not.toBe(clip.id);
+  });
+
   test("text clip has style when provided", async () => {
     const store = new EditorStore({ ...defaultTimeline() });
     const ctx = makeCtx(store);

@@ -11,8 +11,10 @@ export function IconButton(props: {
   title?: string;
   testid?: string;
   fontSize?: string;
+  // Resting color — Swift's ToolbarView rests tool-mode/zoom buttons at tertiary, not secondary.
+  tone?: "secondary" | "tertiary";
 }) {
-  const { children, onClick, frame = "mdLg", active, ariaPressed, disabled, title, testid, fontSize } = props;
+  const { children, onClick, frame = "mdLg", active, ariaPressed, disabled, title, testid, fontSize, tone = "secondary" } = props;
   const { hovered, hoverProps } = useHover();
 
   const background =
@@ -24,7 +26,7 @@ export function IconButton(props: {
           ? `rgba(255, 255, 255, ${theme.opacity.faint})`
           : "transparent";
 
-  const color = disabled ? theme.text.muted : active ? theme.text.primary : theme.text.secondary;
+  const color = disabled ? theme.text.muted : active ? theme.text.primary : theme.text[tone];
   const dim = theme.iconSize[frame];
 
   return (
