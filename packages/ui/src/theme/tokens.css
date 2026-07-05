@@ -153,6 +153,8 @@
   --size-composer-input-max-h: 64px;
   --size-generation-panel-min: 320px;
   --size-settings-panel-min: 320px;
+  --size-settings-panel-w: 640px;
+  --size-settings-sidebar: 176px;
   --size-activity-max: 420px;
   --size-activity-cost: 68px; /* Editor/ProjectActivityView.swift row's Text(cost).frame(width: 68) verbatim — was wrongly 56px */
   --size-activity-w: 340px; /* Editor/ProjectActivityView.swift .frame(width: 340) verbatim */

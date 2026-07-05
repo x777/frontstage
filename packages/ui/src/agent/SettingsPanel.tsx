@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { ModelEntry } from "@palmier/ai";
 import { theme } from "../theme/theme.js";
-import { Button, IconButton, TextInput, Checkbox, Icon } from "../primitives/index.js";
+import { Button, IconButton, TextInput, Checkbox, Icon, type IconName } from "../primitives/index.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { DEFAULT_CONFIRM_THRESHOLD } from "./generation-settings.js";
 import { SkillsPane, type SkillsPaneProps } from "../skills/SkillsPane.js";
@@ -9,11 +9,11 @@ import { SkillsPane, type SkillsPaneProps } from "../skills/SkillsPane.js";
 // Icon-in-capsule sizing — same family as GenerationPanel's close/submit glyphs (M16E T2).
 const CLOSE_ICON_SIZE = 14;
 const REMOVE_ICON_SIZE = 14;
+const TAB_ICON_SIZE = 15;
 
 // Canonical row language (M16D InspectorView.sectionTitleLabel / fields.tsx Section; reused by
 // M16E T2's GenerationPanel): eyebrow section headers xxs/semibold/wide-tracking/muted/uppercase,
-// field labels sm/medium/primary. Applied here to fal.ai / MCP Server / Skills section headers
-// and the confirm-threshold field label — the single row authority for this pane too.
+// field labels sm/medium/primary. The single row authority for this pane too.
 const sectionHeaderStyle: React.CSSProperties = {
   fontSize: theme.fontSize.xxs,
   fontWeight: theme.fontWeight.semibold,
@@ -27,6 +27,16 @@ const fieldLabelStyle: React.CSSProperties = {
   color: theme.text.primary,
 };
 const fullWidthInput: React.CSSProperties = { width: "100%", boxSizing: "border-box" };
+
+// An eyebrow-headed block inside a pane (SwiftUI Settings sections: OpenRouter / fal.ai / MCP Server).
+function PaneSection({ header, children }: { header: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
+      <span style={sectionHeaderStyle}>{header}</span>
+      {children}
+    </div>
+  );
+}
 
 export type KeyConfig =
   | { kind: "keychain"; hasKey: boolean; onSetKey: (k: string) => Promise<void>; onClearKey: () => Promise<void> }
@@ -241,13 +251,7 @@ function ConfirmThresholdField({ value, onChange }: { value: number; onChange: (
   return (
     <section
       data-testid="settings-generation"
-      style={{
-        borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-        paddingTop: theme.spacing.sm,
-        display: "flex",
-        flexDirection: "column",
-        gap: theme.spacing.xxs,
-      }}
+      style={{ display: "flex", flexDirection: "column", gap: theme.spacing.xxs }}
     >
       <span style={fieldLabelStyle}>Generation confirm threshold (credits)</span>
       <TextInput
@@ -273,6 +277,43 @@ function ConfirmThresholdField({ value, onChange }: { value: number; onChange: (
   );
 }
 
+// SwiftUI SettingsView.SidebarRowButton — icon + label; HoverHighlight language (idle transparent,
+// hover white@faint, selected white@soft, selected+hover white@muted; radius-sm).
+function SidebarRow({ label, icon, selected, onClick }: { label: string; icon: IconName; selected: boolean; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const bgOpacity = selected
+    ? (hovered ? theme.opacity.muted : theme.opacity.soft)
+    : (hovered ? theme.opacity.faint : "0");
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: theme.spacing.sm,
+        width: "100%",
+        padding: `${theme.spacing.xs} ${theme.spacing.smMd}`,
+        border: "none",
+        borderRadius: theme.radius.sm,
+        background: `rgba(255, 255, 255, ${bgOpacity})`,
+        color: selected ? theme.text.primary : theme.text.secondary,
+        fontSize: theme.fontSize.sm,
+        fontWeight: selected ? theme.fontWeight.medium : theme.fontWeight.regular,
+        textAlign: "left",
+        cursor: "pointer",
+        transition: `background ${theme.anim.hover} ease-out`,
+      }}
+    >
+      <Icon name={icon} size={TAB_ICON_SIZE} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+type SettingsTab = "agent" | "generation" | "skills";
+
 export function SettingsPanel({
   keyConfig,
   falKeyConfig,
@@ -288,6 +329,21 @@ export function SettingsPanel({
   mcp,
   skills,
 }: SettingsPanelProps) {
+  const [tab, setTab] = useState<SettingsTab>("agent");
+
+  const tabs: { id: SettingsTab; label: string; icon: IconName }[] = [
+    { id: "agent", label: "Agent", icon: "paperplane" },
+    { id: "generation", label: "Generation", icon: "sparkles" },
+    ...(skills ? [{ id: "skills" as const, label: "Skills", icon: "book" as IconName }] : []),
+  ];
+  const activeLabel = tabs.find((t) => t.id === tab)?.label ?? "Settings";
+  // Every pane is mounted; only the active one is shown (display:none keeps testids/effects live).
+  const paneStyle = (id: SettingsTab): React.CSSProperties => ({
+    display: tab === id ? "flex" : "none",
+    flexDirection: "column",
+    gap: theme.spacing.lg,
+  });
+
   return (
     <div
       data-testid="settings-panel"
@@ -306,109 +362,119 @@ export function SettingsPanel({
           background: theme.bg.raised,
           border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
           borderRadius: theme.radius.md,
-          padding: theme.spacing.lg,
-          minWidth: theme.size.settingsPanelMin,
+          width: theme.size.settingsPanelW,
+          maxWidth: "92vw",
+          maxHeight: "85vh",
           boxShadow: theme.shadow.lg,
           display: "flex",
-          flexDirection: "column",
-          gap: theme.spacing.md,
+          overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.semibold, color: theme.text.primary }}>
-            Settings
-          </span>
-          {onClose && (
-            <IconButton testid="settings-close" onClick={onClose} title="Close" frame="smMd">
-              <Icon name="x" size={CLOSE_ICON_SIZE} />
-            </IconButton>
-          )}
-        </div>
-
-        {keyConfig.kind === "keychain" ? (
-          <KeychainConfig cfg={keyConfig} />
-        ) : (
-          <ProxyConfig cfg={keyConfig} />
-        )}
-
-        {falKeyConfig && (
-          <section
-            data-testid="settings-fal"
-            style={{
-              borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-              paddingTop: theme.spacing.sm,
-              display: "flex",
-              flexDirection: "column",
-              gap: theme.spacing.sm,
-            }}
-          >
-            <span style={sectionHeaderStyle}>fal.ai</span>
-            {falKeyConfig.kind === "keychain" ? (
-              <KeychainConfig cfg={falKeyConfig} testidPrefix="settings-fal-key" placeholder="Paste fal.ai key…" />
-            ) : (
-              <FalProxyInfo cfg={falKeyConfig} />
-            )}
-          </section>
-        )}
-
+        {/* Sidebar */}
         <div
           style={{
-            borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-            paddingTop: theme.spacing.sm,
+            width: theme.size.settingsSidebar,
+            flexShrink: 0,
+            borderRight: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
             display: "flex",
             flexDirection: "column",
-            gap: theme.spacing.sm,
+            gap: theme.spacing.xxs,
+            padding: `${theme.spacing.md} ${theme.spacing.smMd}`,
           }}
         >
-          <ModelPicker
-            testid="settings-agent-model"
-            label="Agent model"
-            models={llmModels}
-            value={agentModel}
-            onChange={onAgentModelChange}
-          />
-          <ModelPicker
-            testid="settings-image-model"
-            label="Image model"
-            models={imageModels}
-            value={imageModel}
-            onChange={onImageModelChange}
-          />
+          <span style={{ ...sectionHeaderStyle, padding: `0 ${theme.spacing.smMd}`, marginBottom: theme.spacing.xs }}>
+            Settings
+          </span>
+          {tabs.map((t) => (
+            <SidebarRow key={t.id} label={t.label} icon={t.icon} selected={tab === t.id} onClick={() => setTab(t.id)} />
+          ))}
         </div>
 
-        <ConfirmThresholdField value={confirmThreshold} onChange={onConfirmThresholdChange} />
-
-        {mcp && (
-          <section
-            data-testid="settings-mcp"
+        {/* Detail */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <div
             style={{
-              borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-              paddingTop: theme.spacing.sm,
               display: "flex",
-              flexDirection: "column",
-              gap: theme.spacing.sm,
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: `${theme.spacing.lg} ${theme.spacing.xlXxl} ${theme.spacing.md}`,
             }}
           >
-            <span style={sectionHeaderStyle}>MCP Server</span>
-            <McpConfig cfg={mcp} />
-          </section>
-        )}
+            <span
+              style={{
+                fontSize: theme.fontSize.title2,
+                fontWeight: theme.fontWeight.light,
+                letterSpacing: theme.letterSpacing.tight,
+                color: theme.text.primary,
+              }}
+            >
+              {activeLabel}
+            </span>
+            {onClose && (
+              <IconButton testid="settings-close" onClick={onClose} title="Close" frame="smMd">
+                <Icon name="x" size={CLOSE_ICON_SIZE} />
+              </IconButton>
+            )}
+          </div>
 
-        {skills && (
-          <section
-            data-testid="settings-skills"
+          <div
             style={{
-              borderTop: `${theme.borderWidth.hairline} solid ${theme.border.subtle}`,
-              paddingTop: theme.spacing.sm,
-              display: "flex",
-              flexDirection: "column",
-              gap: theme.spacing.sm,
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+              padding: `0 ${theme.spacing.xlXxl} ${theme.spacing.xlXxl}`,
             }}
           >
-            <span style={sectionHeaderStyle}>Skills</span>
-            <SkillsPane {...skills} />
-          </section>
-        )}
+            {/* Agent: OpenRouter key · agent model · MCP server */}
+            <div style={paneStyle("agent")}>
+              <PaneSection header="OpenRouter">
+                {keyConfig.kind === "keychain" ? <KeychainConfig cfg={keyConfig} /> : <ProxyConfig cfg={keyConfig} />}
+              </PaneSection>
+              <ModelPicker
+                testid="settings-agent-model"
+                label="Agent model"
+                models={llmModels}
+                value={agentModel}
+                onChange={onAgentModelChange}
+              />
+              {mcp && (
+                <section data-testid="settings-mcp" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
+                  <span style={sectionHeaderStyle}>MCP Server</span>
+                  <McpConfig cfg={mcp} />
+                </section>
+              )}
+            </div>
+
+            {/* Generation: fal.ai key · image model · confirm threshold */}
+            <div style={paneStyle("generation")}>
+              {falKeyConfig && (
+                <section data-testid="settings-fal" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.sm }}>
+                  <span style={sectionHeaderStyle}>fal.ai</span>
+                  {falKeyConfig.kind === "keychain" ? (
+                    <KeychainConfig cfg={falKeyConfig} testidPrefix="settings-fal-key" placeholder="Paste fal.ai key…" />
+                  ) : (
+                    <FalProxyInfo cfg={falKeyConfig} />
+                  )}
+                </section>
+              )}
+              <ModelPicker
+                testid="settings-image-model"
+                label="Image model"
+                models={imageModels}
+                value={imageModel}
+                onChange={onImageModelChange}
+              />
+              <ConfirmThresholdField value={confirmThreshold} onChange={onConfirmThresholdChange} />
+            </div>
+
+            {/* Skills */}
+            {skills && (
+              <section data-testid="settings-skills" style={paneStyle("skills")}>
+                <SkillsPane {...skills} />
+              </section>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -150,6 +150,8 @@ export const theme = {
     composerInputMaxH: "var(--size-composer-input-max-h)",
     generationPanelMin: "var(--size-generation-panel-min)",
     settingsPanelMin: "var(--size-settings-panel-min)",
+    settingsPanelW: "var(--size-settings-panel-w)",
+    settingsSidebar: "var(--size-settings-sidebar)",
     activityMax: "var(--size-activity-max)",
     activityCost: "var(--size-activity-cost)",
     activityW: "var(--size-activity-w)",

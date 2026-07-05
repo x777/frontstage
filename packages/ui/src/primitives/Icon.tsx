@@ -27,6 +27,7 @@ export type IconName =
   | "diamond-filled"
   | "book"
   | "send"
+  | "paperplane"
   | "image"
   | "trash"
   | "file"
@@ -204,6 +205,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <line x1="12" y1="19" x2="12" y2="5" />
       <path d="M6 11l6-6 6 6" />
+    </>
+  ),
+  // "paperplane" — the Agent settings tab (SettingsTab.agent.systemImage).
+  paperplane: (
+    <>
+      <path d="M21 3L10.5 13.5" />
+      <path d="M21 3l-6.5 18-4-8.5-8.5-4z" />
     </>
   ),
   // "photo" — GenerationView's refCard thumbnail fallback (Rectangle().fill(.quaternary) + sfSymbol).
