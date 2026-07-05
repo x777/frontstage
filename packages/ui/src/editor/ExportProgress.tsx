@@ -1,37 +1,20 @@
 import { theme } from "../theme/theme.js";
+import { Dialog } from "../primitives/Dialog.js";
 import type { ExportState } from "./use-export-command.js";
 
+// ExportView.swift's progress state has no options-sheet analog to restyle here (M16F T1 scope) —
+// it's just `ProgressView(value:).progressViewStyle(.linear)` (system control, no AppTheme literal)
+// plus an `Int(progress*100)%` readout below it (xs/secondary/.monospacedDigit()). This card keeps
+// the done/total count (existing test-bound content) but gives it that same readout treatment,
+// below the bar, per Swift.
 export function ExportProgress({ state }: { state: ExportState | null }) {
   if (!state) return null;
 
   const pct = Math.round((state.done / state.total) * 100);
 
   return (
-    <div
-      data-testid="export-progress"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: theme.bg.scrim,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: theme.z.dialog,
-      }}
-    >
-      <div
-        style={{
-          background: theme.bg.raised,
-          border: `${theme.borderWidth.thin} solid ${theme.border.primary}`,
-          borderRadius: theme.radius.md,
-          padding: theme.spacing.lg,
-          minWidth: theme.size.dialogMin,
-          boxShadow: theme.shadow.lg,
-          display: "flex",
-          flexDirection: "column",
-          gap: theme.spacing.md,
-        }}
-      >
+    <Dialog>
+      <div data-testid="export-progress" style={{ display: "flex", flexDirection: "column", gap: theme.spacing.xs }}>
         <span
           data-testid="export-progress-label"
           style={{
@@ -42,17 +25,9 @@ export function ExportProgress({ state }: { state: ExportState | null }) {
         >
           {state.label}
         </span>
-        <span
-          style={{
-            fontSize: theme.fontSize.xs,
-            color: theme.text.secondary,
-          }}
-        >
-          {state.done}/{state.total}
-        </span>
         <div
           style={{
-            height: theme.borderWidth.medium,
+            height: theme.borderWidth.thick,
             background: theme.border.divider,
             borderRadius: theme.radius.xs,
             overflow: "hidden",
@@ -68,7 +43,16 @@ export function ExportProgress({ state }: { state: ExportState | null }) {
             }}
           />
         </div>
+        <span
+          style={{
+            fontSize: theme.fontSize.xs,
+            color: theme.text.secondary,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {state.done}/{state.total}
+        </span>
       </div>
-    </div>
+    </Dialog>
   );
 }
