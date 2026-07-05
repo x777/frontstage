@@ -1,0 +1,22 @@
+name = "frontstage-relay"
+main = "src/index.ts"
+compatibility_date = "2026-07-06"
+workers_dev = false
+
+routes = [
+  { pattern = "frontstage.studio/api/*", zone_name = "frontstage.studio" }
+]
+
+# Real namespace id is set at deploy time (wrangler kv namespace create + wrangler secret/vars
+# update) — never committed here. See README/deploy notes for the one-time setup steps.
+kv_namespaces = [
+  { binding = "RATE", id = "TBD-at-deploy" }
+]
+
+[observability]
+enabled = true
+
+# Secrets (never committed — set via `wrangler secret put <NAME>` or apps/relay/.dev.vars locally):
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+#   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+#   JWT_SECRET

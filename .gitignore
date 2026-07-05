@@ -2,6 +2,9 @@ node_modules/
 dist/
 .turbo/
 *.tsbuildinfo
+# Cloudflare Workers (apps/relay) — local secrets and wrangler's local dev state
+.dev.vars
+.wrangler/
 # design-sync machine state (staged scripts, build output, caches)
 .ds-sync/
 ds-bundle/
