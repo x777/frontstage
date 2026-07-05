@@ -33,9 +33,12 @@ import { FOLDER_DROP_ROOT } from "../media/FolderTile.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { LutReconciler } from "../inspector/adjust/lut-reconciler.js";
 import { FileMenu } from "./FileMenu.js";
+import { RelayAuthControl } from "./RelayAuthControl.js";
+import type { RelayAuthProps } from "./RelayAuthControl.js";
 import { AgentPanel } from "../agent/AgentPanel.js";
 import { GenerationPanel } from "../agent/GenerationPanel.js";
 import type { GenerationFacade } from "../agent/GenerationPanel.js";
+import type { RelayGate } from "../agent/relay-gate.js";
 import { useStore } from "../store/use-store.js";
 import { useExportCommand } from "./use-export-command.js";
 import type { ExportKind } from "./use-export-command.js";
@@ -73,6 +76,9 @@ export interface EditorProps {
   getGenerationLog?: () => GenerationLogEntry[];
   indexing?: MediaIndexingFacade;
   onReady?: (commands: { newProject: () => void; open: () => void; save: () => void; saveAs: () => void; export: (kind?: ExportKind) => void; openRecent: (ref: ProjectRef) => void }) => void;
+  // Relay mode's top-bar sign-in affordance (M18C T3) — omits onOpenSettings (Editor wires that
+  // itself to its own Settings-visibility state, the same state the gear icon toggles).
+  relayAuth?: Omit<RelayAuthProps, "onOpenSettings">;
   agent?: {
     session: AgentSession;
     model?: string;
@@ -97,6 +103,8 @@ export interface EditorProps {
       skills?: SkillsPaneProps;
       relay?: RelayConfig;
     };
+    // Relay mode (M18C T3) — gates the GenerationPanel/AgentPanel composer when signed out.
+    relayGate?: RelayGate;
   };
 }
 
@@ -106,7 +114,7 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog, indexing }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog, indexing, relayAuth }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
 
   const [agentVisible, setAgentVisible] = useState(() => {
@@ -399,7 +407,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
       <Layout
         store={store}
         topBarSlot={
-          (session || agent) ? (
+          (session || agent || relayAuth) ? (
             <>
               {session && !nativeFileMenu && (
                 <FileMenu
@@ -442,6 +450,11 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             </>
           ) : undefined
         }
+        topBarTrailing={
+          relayAuth ? (
+            <RelayAuthControl {...relayAuth} onOpenSettings={() => setSettingsVisible(true)} />
+          ) : undefined
+        }
         title={title}
         agent={agent ? (
           <AgentPanel
@@ -452,6 +465,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             llmModels={agent.settings?.llmModels}
             onModelChange={agent.settings?.onAgentModelChange}
             onOpenSkills={agent.settings?.skills ? () => setSettingsVisible(true) : undefined}
+            relayGate={agent.relayGate}
           />
         ) : undefined}
         agentVisible={agentVisible}
@@ -489,6 +503,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
           newId={agent.newId ?? (() => crypto.randomUUID())}
           entries={() => library.getSnapshot().entries}
           onClose={() => setGenerateVisible(false)}
+          relayGate={agent.relayGate}
         />
       )}
 

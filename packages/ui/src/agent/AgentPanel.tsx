@@ -7,6 +7,7 @@ import { SessionSwitcher } from "./SessionSwitcher.js";
 import { MentionInput, type MentionItem } from "./MentionInput.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { Button, Icon, IconButton } from "../primitives/index.js";
+import { RelayGateRow, type RelayGate } from "./relay-gate.js";
 
 export interface AgentPanelProps {
   session: AgentSession;
@@ -16,6 +17,8 @@ export interface AgentPanelProps {
   llmModels?: ModelEntry[];
   onModelChange?: (id: string) => void;
   onOpenSkills?: () => void;
+  // Relay mode (M18C T3) — present && !signedIn disables the composer with a sign-in prompt.
+  relayGate?: RelayGate;
 }
 
 // Icon glyph sizes — small glyphs inside larger hit boxes, matching TransportBar's precedent.
@@ -134,10 +137,11 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   );
 }
 
-export function AgentPanel({ session, model, sessionStore, mentionItems, llmModels, onModelChange, onOpenSkills }: AgentPanelProps) {
+export function AgentPanel({ session, model, sessionStore, mentionItems, llmModels, onModelChange, onOpenSkills, relayGate }: AgentPanelProps) {
   const state = useAgentSession(session);
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const gated = relayGate != null && !relayGate.signedIn;
 
   // Auto-scroll to bottom when messages or streaming update
   useEffect(() => {
@@ -296,12 +300,16 @@ export function AgentPanel({ session, model, sessionStore, mentionItems, llmMode
             </Button>
           </div>
         )}
+        {gated && (
+          <RelayGateRow testid="agent-relay-gate" copy="Sign in to use the agent." onSignIn={relayGate!.onSignIn} />
+        )}
         <MentionInput
           value={inputText}
           onChange={setInputText}
           onSend={handleSend}
-          disabled={isBusy}
+          disabled={isBusy || gated}
           mentionItems={mentionItems ?? []}
+          placeholder={gated ? "Sign in to use the agent" : undefined}
         />
       </div>
     </div>

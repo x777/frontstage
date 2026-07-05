@@ -64,6 +64,7 @@ interface LayoutProps {
   timeline: ReactNode;
   inspector: ReactNode;
   topBarSlot?: ReactNode;
+  topBarTrailing?: ReactNode;
   title?: string;
   agent?: ReactNode;
   agentVisible?: boolean;
@@ -91,7 +92,7 @@ const panelSectionStyle: React.CSSProperties = {
   background: theme.bg.surface,
 };
 
-export function Layout({ store, media, preview, timeline, inspector, topBarSlot, title, agent, agentVisible }: LayoutProps) {
+export function Layout({ store, media, preview, timeline, inspector, topBarSlot, topBarTrailing, title, agent, agentVisible }: LayoutProps) {
   const layout = useStore(store, (s) => s.layout);
 
   function handleFocus(p: FocusedPanel) {
@@ -134,7 +135,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
         fontSize: theme.fontSize.md,
       }}
     >
-      <TopBar slot={topBarSlot} title={title} />
+      <TopBar slot={topBarSlot} title={title} trailing={topBarTrailing} />
       {isMaximized ? (
         // Maximized mode: the active panel fills the content area; all others are display:none but stay mounted.
         <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
@@ -297,7 +298,7 @@ export function Layout({ store, media, preview, timeline, inspector, topBarSlot,
   );
 }
 
-function TopBar({ slot, title }: { slot?: ReactNode; title?: string }) {
+function TopBar({ slot, title, trailing }: { slot?: ReactNode; title?: string; trailing?: ReactNode }) {
   return (
     <div
       style={{
@@ -318,6 +319,11 @@ function TopBar({ slot, title }: { slot?: ReactNode; title?: string }) {
       >
         {title ?? "Frontstage"}
       </span>
+      {trailing && (
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: theme.spacing.sm }}>
+          {trailing}
+        </div>
+      )}
     </div>
   );
 }

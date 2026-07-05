@@ -6,6 +6,7 @@ import { genModel, listGenModels, validateGenParams, estimateCredits, formatCred
 import { theme } from "../theme/theme.js";
 import { Select, Button, IconButton, Icon, SegmentedTabs, TextInput, Checkbox } from "../primitives/index.js";
 import { isMediaDrag, readMediaDragPayload } from "../media/FolderTile.js";
+import { RelayGateRow, type RelayGate } from "./relay-gate.js";
 
 const IMAGE_DURATION_SECONDS = 5; // mirrors generate-image-tool.ts
 
@@ -60,6 +61,8 @@ export interface GenerationPanelProps {
   newId: () => string;
   entries?: () => MediaManifestEntry[];
   onClose?: () => void;
+  // Relay mode (M18C T3) — present && !signedIn replaces the cost/submit row with a sign-in prompt.
+  relayGate?: RelayGate;
 }
 
 // Builds the full-sentinel GenerationInput placeholder(s) the SAME way generate-tools.ts does —
@@ -128,7 +131,8 @@ function buildPlaceholders(entry: GenModelEntry, params: GenToolParams, newId: (
   return [];
 }
 
-export function GenerationPanel({ generation, newId, entries, onClose }: GenerationPanelProps) {
+export function GenerationPanel({ generation, newId, entries, onClose, relayGate }: GenerationPanelProps) {
+  const gated = relayGate != null && !relayGate.signedIn;
   const [kind, setKind] = useState<GenModelKind>("video");
   const [modelId, setModelId] = useState<string>(() => listGenModels("video")[0]!.id);
 
@@ -243,7 +247,7 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
   const estimate = entry ? estimateCredits(entry, params) : 0;
 
   const hasRequiredText = kind === "audio" ? prompt.trim().length > 0 || lyrics.trim().length > 0 : prompt.trim().length > 0;
-  const canSubmit = entry != null && kind !== "upscale" && hasKey === true && hasRequiredText && !busy;
+  const canSubmit = entry != null && kind !== "upscale" && hasKey === true && hasRequiredText && !busy && !gated;
 
   async function handleGenerate() {
     if (!entry || busy) return;
@@ -616,7 +620,7 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
           </>
         )}
 
-        {entry && (
+        {entry && !gated && (
           <div
             data-testid="gen-cost"
             title="Estimated cost. Actual billing may differ slightly."
@@ -626,7 +630,7 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
           </div>
         )}
 
-        {hasKey === false && kind !== "upscale" && (
+        {hasKey === false && kind !== "upscale" && !gated && (
           <div data-testid="gen-key-hint" style={mutedStyle}>
             Set your fal.ai key in Settings to generate.
           </div>
@@ -655,30 +659,34 @@ export function GenerationPanel({ generation, newId, entries, onClose }: Generat
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          {/* Solid accent, circular — GenerationView.submitButton (.tint(Accent.primary)), NOT
-              the aiGradient (that belongs to the agent composer's shimmer text, not this CTA).
-              Same family as MentionInput's "agent-send" (M16E T1). */}
-          <Button
-            testid="gen-submit"
-            variant="accent"
-            shape="capsule"
-            disabled={!canSubmit}
-            onClick={handleGenerate}
-            title="Generate"
-            style={{
-              width: theme.iconSize.xl,
-              height: theme.iconSize.xl,
-              padding: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <Icon name="send" size={SUBMIT_ICON_SIZE} />
-          </Button>
-        </div>
+        {gated ? (
+          <RelayGateRow testid="gen-relay-gate" copy="Sign in to generate — uses your fal.ai key." onSignIn={relayGate!.onSignIn} />
+        ) : (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            {/* Solid accent, circular — GenerationView.submitButton (.tint(Accent.primary)), NOT
+                the aiGradient (that belongs to the agent composer's shimmer text, not this CTA).
+                Same family as MentionInput's "agent-send" (M16E T1). */}
+            <Button
+              testid="gen-submit"
+              variant="accent"
+              shape="capsule"
+              disabled={!canSubmit}
+              onClick={handleGenerate}
+              title="Generate"
+              style={{
+                width: theme.iconSize.xl,
+                height: theme.iconSize.xl,
+                padding: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="send" size={SUBMIT_ICON_SIZE} />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

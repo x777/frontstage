@@ -295,3 +295,51 @@ test("send is disabled while session is streaming (busy guard)", async () => {
   // After send completes, Send button is enabled again (input is still empty so disabled)
   expect(screen.getByTestId("agent-send")).toBeDisabled();
 });
+
+// ── relayGate (M18C T3: relay-mode login gate) ──────────────────────────────
+
+test("relayGate omitted: composer enabled, default placeholder, no sign-in row", () => {
+  const store = new EditorStore(makeTimeline());
+  const session = new AgentSession(makeDeps([], store));
+  render(<AgentPanel session={session} />);
+
+  expect(screen.queryByTestId("agent-relay-gate")).not.toBeInTheDocument();
+  const input = screen.getByTestId("agent-input") as HTMLTextAreaElement;
+  expect(input).not.toBeDisabled();
+  expect(input.placeholder).toBe("Ask, or type @ to reference media");
+});
+
+test("relayGate signedIn=true: renders exactly as without relayGate", () => {
+  const store = new EditorStore(makeTimeline());
+  const session = new AgentSession(makeDeps([], store));
+  render(<AgentPanel session={session} relayGate={{ signedIn: true, onSignIn: () => {} }} />);
+
+  expect(screen.queryByTestId("agent-relay-gate")).not.toBeInTheDocument();
+  expect(screen.getByTestId("agent-input")).not.toBeDisabled();
+});
+
+test("relayGate signedIn=false: composer disabled with the sign-in placeholder and prompt", () => {
+  const store = new EditorStore(makeTimeline());
+  const session = new AgentSession(makeDeps([], store));
+  render(<AgentPanel session={session} relayGate={{ signedIn: false, onSignIn: () => {} }} />);
+
+  const input = screen.getByTestId("agent-input") as HTMLTextAreaElement;
+  expect(input).toBeDisabled();
+  expect(input.placeholder).toBe("Sign in to use the agent");
+
+  const gate = screen.getByTestId("agent-relay-gate");
+  expect(gate.textContent).toContain("Sign in to use the agent");
+});
+
+test("relayGate signedIn=false: Google/GitHub buttons call onSignIn with the right provider", () => {
+  const store = new EditorStore(makeTimeline());
+  const session = new AgentSession(makeDeps([], store));
+  const onSignIn = vi.fn();
+  render(<AgentPanel session={session} relayGate={{ signedIn: false, onSignIn }} />);
+
+  fireEvent.click(screen.getByTestId("agent-relay-gate-google"));
+  expect(onSignIn).toHaveBeenCalledWith("google");
+
+  fireEvent.click(screen.getByTestId("agent-relay-gate-github"));
+  expect(onSignIn).toHaveBeenCalledWith("github");
+});

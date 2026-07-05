@@ -146,3 +146,30 @@ test("MentionInput: Enter key sends; Shift+Enter inserts newline", async () => {
   });
   expect(sent).toBe(true);
 });
+
+test("MentionInput: placeholder prop overrides the default composer copy", () => {
+  render(
+    <MentionInput
+      value=""
+      onChange={() => {}}
+      onSend={() => {}}
+      disabled
+      mentionItems={sampleItems}
+      placeholder="Sign in to use the agent"
+    />,
+  );
+  expect((screen.getByTestId("agent-input") as HTMLTextAreaElement).placeholder).toBe("Sign in to use the agent");
+});
+
+test("MentionInput: omitting placeholder falls back to the default composer copy", () => {
+  render(
+    <MentionInput
+      value=""
+      onChange={() => {}}
+      onSend={() => {}}
+      disabled={false}
+      mentionItems={sampleItems}
+    />,
+  );
+  expect((screen.getByTestId("agent-input") as HTMLTextAreaElement).placeholder).toBe("Ask, or type @ to reference media");
+});

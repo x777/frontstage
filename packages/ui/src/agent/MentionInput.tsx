@@ -16,6 +16,7 @@ interface MentionInputProps {
   onSend: (text: string, context?: MentionContext) => void;
   disabled?: boolean;
   mentionItems: MentionItem[];
+  placeholder?: string;
 }
 
 // AgentInputBox.sendStopButton renders its glyph at IconSize.sm (18) inside a circular chrome —
@@ -72,7 +73,7 @@ function MentionOption({
   );
 }
 
-export function MentionInput({ value, onChange, onSend, disabled, mentionItems }: MentionInputProps) {
+export function MentionInput({ value, onChange, onSend, disabled, mentionItems, placeholder }: MentionInputProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [chosenItems, setChosenItems] = useState<MentionItem[]>([]);
   const [focused, setFocused] = useState(false);
@@ -187,7 +188,7 @@ export function MentionInput({ value, onChange, onSend, disabled, mentionItems }
           onBlur={() => setFocused(false)}
           disabled={disabled}
           rows={1}
-          placeholder="Ask, or type @ to reference media"
+          placeholder={placeholder ?? "Ask, or type @ to reference media"}
           style={{
             background: "none",
             color: theme.text.primary,

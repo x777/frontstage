@@ -198,3 +198,43 @@ describe("references: not supported by any current model (M14C follow-up)", () =
     expect(facade.startJob.mock.calls[0]![0].input).not.toHaveProperty("image_url");
   });
 });
+
+// ── relayGate (M18C T3: relay-mode login gate) ──────────────────────────────
+
+test("relayGate omitted: no sign-in row, cost + submit render as before", async () => {
+  render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} />);
+  await waitFor(() => expect(screen.getByTestId("gen-cost")).toBeInTheDocument());
+  expect(screen.queryByTestId("gen-relay-gate")).not.toBeInTheDocument();
+  expect(screen.getByTestId("gen-submit")).toBeInTheDocument();
+});
+
+test("relayGate signedIn=true: renders exactly as without relayGate", async () => {
+  render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} relayGate={{ signedIn: true, onSignIn: () => {} }} />);
+  await waitFor(() => expect(screen.getByTestId("gen-cost")).toBeInTheDocument());
+  expect(screen.queryByTestId("gen-relay-gate")).not.toBeInTheDocument();
+  expect(screen.getByTestId("gen-submit")).toBeInTheDocument();
+});
+
+test("relayGate signedIn=false: replaces the cost/submit row with a sign-in prompt", async () => {
+  render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} relayGate={{ signedIn: false, onSignIn: () => {} }} />);
+  fireEvent.change(screen.getByTestId("gen-prompt"), { target: { value: "a foggy harbor" } });
+
+  const gate = await screen.findByTestId("gen-relay-gate");
+  expect(gate.textContent).toContain("Sign in to generate");
+  expect(screen.queryByTestId("gen-cost")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("gen-submit")).not.toBeInTheDocument();
+  // No double-messaging with the keyless hint even though hasKey resolves false while gated.
+  expect(screen.queryByTestId("gen-key-hint")).not.toBeInTheDocument();
+});
+
+test("relayGate signedIn=false: Google/GitHub buttons call onSignIn with the right provider", async () => {
+  const onSignIn = vi.fn();
+  render(<GenerationPanel generation={makeFacade()} newId={makeNewId()} relayGate={{ signedIn: false, onSignIn }} />);
+
+  await screen.findByTestId("gen-relay-gate");
+  fireEvent.click(screen.getByTestId("gen-relay-gate-google"));
+  expect(onSignIn).toHaveBeenCalledWith("google");
+
+  fireEvent.click(screen.getByTestId("gen-relay-gate-github"));
+  expect(onSignIn).toHaveBeenCalledWith("github");
+});

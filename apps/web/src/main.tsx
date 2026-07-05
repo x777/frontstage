@@ -67,6 +67,12 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
     fetchMe().then(setRelayUser).catch(() => setRelayUser(null));
   }, []);
 
+  // Shared by the top-bar affordance and the AI-panel login gates — a full-page redirect into the
+  // OAuth consent flow (mirrors SettingsPanel's RelayAuthPane).
+  function handleRelaySignIn(provider: "google" | "github") {
+    window.location.href = loginUrl(provider);
+  }
+
   function handleSaveRelayKeys(keys: { falKey?: string; openRouterKey?: string }) {
     setUserKeys(keys);
     if (keys.falKey !== undefined) setRelayFalKey(keys.falKey);
@@ -121,6 +127,13 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
       }
     : undefined;
 
+  // Visible sign-in (M18C T3): the top-bar affordance and the AI panels' login gates, both driven
+  // by the same fetchMe() state as relayConfig above.
+  const relayAuth = RELAY_MODE
+    ? { user: relayUser ? { name: relayUser.name, provider: relayUser.provider } : null, onSignIn: handleRelaySignIn }
+    : undefined;
+  const relayGate = RELAY_MODE ? { signedIn: relayUser !== null, onSignIn: handleRelaySignIn } : undefined;
+
   return (
     <App
       store={store}
@@ -132,6 +145,7 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
       engineRef={engineRef}
       getGenerationLog={getGenerationLog}
       indexing={indexing}
+      relayAuth={relayAuth}
       agent={{
         session: agentSession,
         model: agentModel,
@@ -155,6 +169,7 @@ function FrontstageApp({ store, session, library, exportGateway, interopExport, 
           onConfirmThresholdChange,
           skills: { store: skillStore, catalog: skillCatalog },
         },
+        relayGate,
       }}
     />
   );

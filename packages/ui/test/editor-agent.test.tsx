@@ -200,6 +200,28 @@ test("Layout: panel-agent absent when agent prop omitted", () => {
   expect(screen.queryByTestId("panel-agent")).not.toBeInTheDocument();
 });
 
+test("Layout: topBarTrailing renders alongside the title, absent by default", () => {
+  const store = makeStore();
+  const { rerender } = render(
+    <Layout store={store} media={stubNode} preview={stubNode} timeline={stubNode} inspector={stubNode} title="Untitled" />,
+  );
+  expect(screen.getByTestId("top-bar-title")).toBeInTheDocument();
+  expect(screen.queryByTestId("trailing-content")).not.toBeInTheDocument();
+
+  rerender(
+    <Layout
+      store={store}
+      media={stubNode}
+      preview={stubNode}
+      timeline={stubNode}
+      inspector={stubNode}
+      title="Untitled"
+      topBarTrailing={<div data-testid="trailing-content">Sign in</div>}
+    />,
+  );
+  expect(screen.getByTestId("trailing-content")).toBeInTheDocument();
+});
+
 test("Layout: existing panels (media/preview/timeline/inspector) unchanged when agent present", () => {
   const store = makeStore();
   render(
@@ -326,4 +348,69 @@ test("Editor: in-app FileMenu hidden when nativeFileMenu (desktop macOS native m
   );
 
   expect(screen.queryByTestId("file-menu")).not.toBeInTheDocument();
+});
+
+// ── relayAuth (M18C T3: visible sign-in, relay-mode only) ───────────────────
+
+test("Editor: no relay-auth control when relayAuth prop omitted (desktop/web-proxy unaffected)", () => {
+  const { store, media, library } = makeMinimalEditorProps();
+
+  render(<Editor store={store} media={media} library={library} session={makeFakeSession()} />);
+
+  expect(screen.queryByTestId("relay-auth-signin")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("relay-auth-user")).not.toBeInTheDocument();
+});
+
+test("Editor: relayAuth signed out shows Sign in in the top bar; picking Google calls onSignIn", () => {
+  const { store, media, library } = makeMinimalEditorProps();
+  const onSignIn = vi.fn();
+
+  render(
+    <Editor
+      store={store}
+      media={media}
+      library={library}
+      session={makeFakeSession()}
+      relayAuth={{ user: null, onSignIn }}
+    />,
+  );
+
+  expect(screen.getByTestId("relay-auth-signin")).toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("relay-auth-signin"));
+  fireEvent.click(screen.getByTestId("relay-auth-signin-google"));
+  expect(onSignIn).toHaveBeenCalledWith("google");
+});
+
+test("Editor: relayAuth signed in shows the user's name; clicking it opens Settings", () => {
+  const { store, media, library } = makeMinimalEditorProps();
+  const agentSession = new AgentSession(makeDeps(makeStore()));
+
+  render(
+    <Editor
+      store={store}
+      media={media}
+      library={library}
+      session={makeFakeSession()}
+      relayAuth={{ user: { name: "Ada Lovelace", provider: "google" }, onSignIn: () => {} }}
+      agent={{
+        session: agentSession,
+        model: "test-model",
+        settings: {
+          keyConfig: { kind: "proxy", proxyUrl: "http://localhost:8787", onSave: () => {} },
+          llmModels: [],
+          imageModels: [],
+          agentModel: "test-model",
+          imageModel: "test-model",
+          onAgentModelChange: () => {},
+          onImageModelChange: () => {},
+          confirmThreshold: 50,
+          onConfirmThresholdChange: () => {},
+        },
+      }}
+    />,
+  );
+
+  expect(screen.queryByTestId("settings-panel")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("relay-auth-user"));
+  expect(screen.getByTestId("settings-panel")).toBeInTheDocument();
 });
