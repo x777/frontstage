@@ -1,0 +1,73 @@
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep in sync with the "packageManager" field in package.json.
+  PNPM_VERSION: "10.33.0"
+
+jobs:
+  build-and-test:
+    name: build, test, typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Root turbo pipeline: covers core/ai/ui/engine/proxy/web/desktop test+typecheck.
+      # engine-harness's GPU-dependent suite is excluded (see gpu-harness job below) —
+      # its "test" script is a turbo-safe no-op; the real suite is "test:headed".
+      - name: Test (turbo)
+        run: pnpm test
+
+      - name: Typecheck (turbo)
+        run: pnpm typecheck
+
+      - name: Build web
+        run: pnpm -F @palmier/web build
+
+      - name: Syntax-check desktop main process (.cjs/.mjs)
+        run: |
+          find apps/desktop/src/main -type f \( -name '*.cjs' -o -name '*.mjs' \) -print0 \
+            | xargs -0 -n1 node --check
+
+  # GPU harness (@palmier/engine-harness): its Playwright specs require a real GPU adapter
+  # and run headed (see apps/engine-harness/playwright.config.ts) — no GitHub-hosted runner
+  # provides this, so it is NOT part of the required push/PR matrix above. This job is a
+  # manual-only stub; run the suite locally with:
+  #   pnpm -F @palmier/engine-harness test:headed
+  # A future self-hosted GPU runner could replace the "echo" step below with the real command.
+  gpu-harness:
+    name: GPU harness (manual, not required)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stub
+        run: |
+          echo "engine-harness's headed WebGPU Playwright suite needs a local GPU."
+          echo "GitHub-hosted runners have none, so this job intentionally does not run it."
+          echo "Run locally: pnpm -F @palmier/engine-harness test:headed"
