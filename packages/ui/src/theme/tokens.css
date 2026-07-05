@@ -193,6 +193,7 @@
   --color-timeline-failed-scrim: rgba(229, 79, 79, 0.55);
   --color-timeline-playhead: rgb(255, 69, 58); /* NSColor.systemRed, dark appearance — PlayheadOverlay.Playhead.color */
   --color-timeline-snap: rgb(255, 214, 10); /* NSColor.systemYellow, dark appearance — SnapIndicatorOverlay */
+  --color-timeline-razor: rgba(255, 159, 10, 0.8); /* NSColor.systemOrange @ 0.8, dark appearance — TimelineView.swift:252 */
 
   /* Shadows (CSS blur = 2 x SwiftUI shadow radius; offsets/colors verbatim from AppTheme.Shadow) */
   --shadow-sm: 0 0.5px 2px rgba(0, 0, 0, 0.3);

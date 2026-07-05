@@ -102,6 +102,7 @@ function resolvePalette(el: Element): TimelinePalette {
     rulerLabelFontPx: get("--font-xs") || "10px",
     playhead: get("--color-timeline-playhead") || "rgb(255,69,58)",
     snapIndicator: get("--color-timeline-snap") || "rgb(255,214,10)",
+    razorLine: get("--color-timeline-razor") || "rgba(255,159,10,0.8)",
     clipDetailMinWidth: getPx("--size-clip-detail-min", 32),
     clipLabelMinWidth: getPx("--size-clip-label-min", 56),
   };
@@ -170,7 +171,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       const statusByRef = libraryEntries ? generationStatusByRef(libraryEntries) : undefined;
       const nameByRef = libraryEntries ? mediaNameByRef(libraryEntries) : undefined;
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef);
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef, null);
     }
 
     function scheduleDraw() {

@@ -39,6 +39,8 @@ export interface TimelinePalette {
   playhead: string;
   /** NSColor.systemYellow (dark appearance) — SnapIndicatorOverlay's dashed line. */
   snapIndicator: string;
+  /** NSColor.systemOrange @ 0.8 (dark appearance) — TimelineView.swift:250-259 razor preview line. */
+  razorLine: string;
   /** Resolved `--size-clip-detail-min` (px, parsed to number) — AppTheme.ComponentSize.timelineClipDetailMinWidth (32). */
   clipDetailMinWidth: number;
   /** Resolved `--size-clip-label-min` (px, parsed to number) — AppTheme.ComponentSize.timelineClipLabelMinWidth (56). */
@@ -261,7 +263,8 @@ export function drawTimeline(
   dropIndicator: DropIndicator | null = null,
   overlays?: TimelineOverlays,
   statusByRef?: Map<string, string>,
-  nameByRef?: Map<string, string>
+  nameByRef?: Map<string, string>,
+  razorLineX: number | null = null
 ): void {
   const { width, height, dpr } = size;
 
@@ -482,6 +485,20 @@ export function drawTimeline(
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  // ── Razor preview line ─────────────────────────────────────────────────────────
+  // Port of TimelineView.swift:250-259 — the razor preview: dashed systemOrange line.
+  if (razorLineX !== null) {
+    const rx = Math.round(razorLineX);
+    ctx.strokeStyle = palette.razorLine;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(rx, RULER_HEIGHT);
+    ctx.lineTo(rx, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // ── Drop indicator ────────────────────────────────────────────────────────────

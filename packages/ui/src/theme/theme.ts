@@ -237,6 +237,7 @@ export const theme = {
     failedScrim: "var(--color-timeline-failed-scrim)",
     playhead: "var(--color-timeline-playhead)",
     snap: "var(--color-timeline-snap)",
+    razor: "var(--color-timeline-razor)",
   },
   generating: {
     overlayBg: "var(--color-generating-overlay-bg)",
