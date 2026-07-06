@@ -36,7 +36,7 @@ Or just tell the agent what you want and watch it edit.**
 
 - **Web** — [frontstage.studio](https://frontstage.studio): the full editor in your browser, no account, no keys needed for editing
 - **Windows** — [download the installer](https://github.com/x777/frontstage/releases/latest) (unsigned: SmartScreen will warn — "More info → Run anyway")
-- **macOS** — use the [web editor](https://frontstage.studio), or the native upstream [Palmier Pro](https://github.com/palmier-io/palmier-pro) (macOS 26+, Apple Silicon). Building the Electron app from source works but is untested on Mac hardware
+- **macOS / Linux** — use the [web editor](https://frontstage.studio) (no install, full functionality)
 - **From source** (Node 18+, pnpm 10):
 
   ```sh
