@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  rgbToHsv, hsvToRgb, applyExposure, applyContrast, applySaturation, chromaOffset,
+  rgbToHsv, hsvToRgb, applyExposure, applyContrast, applySaturation, applyInvert, chromaOffset,
   applyColorWheels, applyCurves, applyHueCurves, applyChromaKey, type RGB,
 } from "../src/color/color-math.js";
 
@@ -29,6 +29,10 @@ describe("basic ops", () => {
   it("saturation 0 desaturates to luma grey", () => {
     const r = applySaturation(rgb(0.8, 0.2, 0.2), 0);
     expect(close(r.r, r.g) && close(r.g, r.b)).toBe(true);
+  });
+  it("invert is 1 minus rgb", () => {
+    const i = applyInvert(rgb(0.2, 0.4, 0.8));
+    expect(close(i.r, 0.8) && close(i.g, 0.6) && close(i.b, 0.2)).toBe(true);
   });
 });
 

@@ -89,12 +89,15 @@ test("Ctrl+K splits selection at playhead", () => {
   expect(store.getSnapshot().timeline.tracks[0]!.clips.length).toBe(2);
 });
 
-test("V/C switch toolMode", () => {
+test("V/C/T switch toolMode", () => {
   const store = new EditorStore(defaultTimeline());
   expect(store.getSnapshot().toolMode).toBe("pointer");
 
   expect(handleEditorKeydown(key({ key: "c" }), store)).toBe(true);
   expect(store.getSnapshot().toolMode).toBe("razor");
+
+  expect(handleEditorKeydown(key({ key: "t" }), store)).toBe(true);
+  expect(store.getSnapshot().toolMode).toBe("trim");
 
   expect(handleEditorKeydown(key({ key: "v" }), store)).toBe(true);
   expect(store.getSnapshot().toolMode).toBe("pointer");

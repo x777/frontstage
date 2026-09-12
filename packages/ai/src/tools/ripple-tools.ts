@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, planAgentResolutionAdoption, type FrameRange, type RippleInsertSpec } from "@frontstage/core";
+import { findClip, rippleDeleteRangesOnTrack, rippleInsertClipsSpecs, resolvePlacement, planAgentResolutionAdoption, subtitleNotPlaceableMessage, type FrameRange, type RippleInsertSpec } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
@@ -89,6 +89,7 @@ export function insertClipsTool(): ToolSpec {
         const c = a.clips[idx]!;
         const entry = manifest.entries.find((e) => e.id === c.mediaId);
         if (!entry) return errorResult(`unknown media: ${c.mediaId}`);
+        if (entry.type === "subtitle") return errorResult(subtitleNotPlaceableMessage(c.mediaId));
         const sourceLen = Math.round(entry.duration * fps);
         const place = resolvePlacement(sourceLen, c.trimStartFrame ?? 0, c.durationFrames, c.trimEndFrame);
         if ("error" in place) return errorResult(`clips[${idx}]: ${place.error}`);

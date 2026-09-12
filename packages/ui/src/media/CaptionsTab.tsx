@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { EditorStore, MediaManifestEntry, RGBA } from "@frontstage/core";
 import {
   DEFAULT_HIGHLIGHT_COLOR,
+  DEFAULT_SILENCE_REMOVAL_SETTINGS,
   transcriptTargets,
   timelineTrackDisplayLabel,
   defaultTextStyle,
@@ -102,6 +103,8 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [minPause, setMinPause] = useState(String(DEFAULT_SILENCE_REMOVAL_SETTINGS.minimumPauseSeconds));
+  const [speechPad, setSpeechPad] = useState(String(DEFAULT_SILENCE_REMOVAL_SETTINGS.speechPaddingSeconds));
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
@@ -371,6 +374,60 @@ export function CaptionsTab({ store, executor, transcription, library }: Caption
             style={{ width: "100%" }}
           >
             Generate
+          </Button>
+        </div>
+
+        <div style={fieldGap}>
+          <span style={labelStyle}>Remove silence</span>
+          <div style={rowStyle}>
+            <span style={mutedStyle}>Min pause</span>
+            <TextInput
+              testid="silence-min-pause"
+              type="number"
+              step={0.05}
+              min={0.25}
+              max={3}
+              value={minPause}
+              onChange={setMinPause}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div style={rowStyle}>
+            <span style={mutedStyle}>Speech pad</span>
+            <TextInput
+              testid="silence-speech-padding"
+              type="number"
+              step={0.05}
+              min={0}
+              max={0.5}
+              value={speechPad}
+              onChange={setSpeechPad}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <Button
+            testid="captions-remove-silence"
+            shape="rect"
+            size="regular"
+            disabled={busy}
+            onClick={() => {
+              setError(null);
+              setBusy(true);
+              void executor
+                .execute("remove_silence", {
+                  minimumPauseSeconds: Number(minPause),
+                  speechPaddingSeconds: Number(speechPad),
+                })
+                .then((result) => {
+                  const text = textBlock(result);
+                  if (result.isError) setError(text);
+                  else setSuccess(text);
+                })
+                .finally(() => setBusy(false));
+            }}
+            style={{ width: "100%" }}
+          >
+            Remove Silence
           </Button>
         </div>
       </div>

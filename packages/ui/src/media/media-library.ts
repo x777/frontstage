@@ -1,4 +1,4 @@
-import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry, sniffIsoBmff } from "@frontstage/core";
+import { clipTypeFromFileExtension, serializeGenerationStatus, makeMediaFolder, buildFolderIndex, canMoveFolder, collectFolderCascade, createImportPlaceholderEntry, sniffIsoBmff, parseSubtitleBytes, subtitleDurationSeconds } from "@frontstage/core";
 import type { ClipType, MediaFolder, MediaManifest, MediaManifestEntry } from "@frontstage/core";
 import type { MediaGateway } from "@frontstage/core";
 import type { MediaByteSource } from "@frontstage/engine";
@@ -91,6 +91,15 @@ export class MediaLibrary {
   async readMedia(relativePath: string): Promise<Uint8Array> {
     if (!this._gateway) throw new Error("no gateway configured");
     return this._gateway.readMedia(relativePath);
+  }
+
+  async readEntryBytes(id: string): Promise<Uint8Array> {
+    const entry = this.entry(id);
+    if (!entry) throw new Error("media not found: " + id);
+    const mem = this.bytesFor(entry);
+    if (mem && mem.length > 0) return mem;
+    if (entry.source.kind === "project") return this.readMedia(entry.source.relativePath);
+    throw new Error("offline: " + id);
   }
 
   // Derived-data write (transcripts, etc.): rides the same _bytes/pending-persist flow as real
@@ -427,6 +436,7 @@ function defaultExtForType(type: string): string {
   if (type === "video") return "mp4";
   if (type === "audio") return "mp3";
   if (type === "lottie") return "json";
+  if (type === "subtitle") return "srt";
   return "png";
 }
 
@@ -450,6 +460,11 @@ export interface ProbedMedia {
 // implementation, reused everywhere a raw Blob needs duration/dimensions/thumbnail before an entry
 // can be finalized.
 export async function probeMediaBlob(blob: Blob, type: ClipType): Promise<ProbedMedia> {
+  if (type === "subtitle") {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const cues = parseSubtitleBytes(bytes, guessSubtitleFormat(bytes));
+    return { duration: subtitleDurationSeconds(cues) };
+  }
   if (type === "video" || type === "audio") {
     const result = await withVideoElement(blob, type, async (el) => {
       const probed = await probeMediaElement(el, type);
@@ -473,6 +488,11 @@ export async function probeMediaBlob(blob: Blob, type: ClipType): Promise<Probed
     }
   }
   return { duration: 5 };
+}
+
+function guessSubtitleFormat(bytes: Uint8Array): "srt" | "webvtt" {
+  const head = new TextDecoder("utf-8").decode(bytes.slice(0, 16)).replace(/^\uFEFF/, "");
+  return head.startsWith("WEBVTT") ? "webvtt" : "srt";
 }
 
 async function withVideoElement<T>(

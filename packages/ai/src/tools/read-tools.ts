@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Clip, EmbeddingRow } from "@frontstage/core";
-import { rankVisualMatches } from "@frontstage/core";
+import { rankVisualMatches, timelineTrackDisplayLabel } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 
@@ -20,17 +20,43 @@ export function getTimelineTool(): ToolSpec {
     description: "Returns a JSON summary of the current timeline: fps, dimensions, tracks, and clips.",
     inputSchema: z.object({}),
     run(_args, ctx) {
-      const { timeline } = ctx.store.getSnapshot();
+      const snap = ctx.store.getSnapshot();
+      const { timeline } = snap;
       const manifest = ctx.getManifest();
       const entryMap = new Map(manifest.entries.map((e) => [e.id, e]));
 
       const summary = {
+        timelineId: timeline.id,
+        name: timeline.name,
         fps: timeline.fps,
         width: timeline.width,
         height: timeline.height,
-        tracks: timeline.tracks.map((track) => ({
+        ...(timeline.markers && timeline.markers.length
+          ? {
+              markers: timeline.markers.map((m) => ({
+                markerId: m.id,
+                name: m.name,
+                startFrame: m.startFrame,
+                durationFrames: m.durationFrames,
+                comment: m.comment,
+                status: m.status,
+              })),
+            }
+          : {}),
+        ...(snap.timelines.length > 1
+          ? {
+              timelines: snap.timelines.map((t) => ({
+                timelineId: t.id,
+                name: t.name,
+                ...(t.id === snap.activeTimelineId ? { active: true } : {}),
+              })),
+            }
+          : {}),
+        tracks: timeline.tracks.map((track, i) => ({
           id: track.id,
           type: track.type,
+          label: timelineTrackDisplayLabel(timeline, i),
+          ...(track.name ? { name: track.name } : {}),
           clips: track.clips.map((clip) => ({
             id: clip.id,
             mediaType: clip.mediaType,
@@ -62,6 +88,7 @@ export function getMediaTool(): ToolSpec {
     inputSchema: z.object({}),
     run(_args, ctx) {
       const manifest = ctx.getManifest();
+      const snap = ctx.store.getSnapshot();
       const entries = manifest.entries.map((e) => ({
         id: e.id,
         name: e.name,
@@ -69,7 +96,18 @@ export function getMediaTool(): ToolSpec {
         duration: e.duration,
         folderId: e.folderId ?? null,
       }));
-      return ok(JSON.stringify(entries, null, 2));
+      const payload =
+        snap.timelines.length > 1
+          ? {
+              media: entries,
+              timelines: snap.timelines.map((t) => ({
+                timelineId: t.id,
+                name: t.name,
+                ...(t.id === snap.activeTimelineId ? { active: true } : {}),
+              })),
+            }
+          : entries;
+      return ok(JSON.stringify(payload, null, 2));
     },
   };
 }

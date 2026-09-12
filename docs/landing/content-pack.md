@@ -75,7 +75,7 @@ above it (these don't need a key):
 
 ```
 Transcription and visual search run free, on-device. No keys.
-Point Claude at your project via MCP — 43 tools, edit it from outside.
+Point Claude at your project via MCP — 51 tools, edit it from outside.
 ```
 
 ### Trust block

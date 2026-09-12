@@ -32,6 +32,18 @@ function makeTimeline(clips: Clip[]) {
 
 const SUBGROUP_TITLES = ["Detail", "Blur", "Motion Blur", "Vignette", "Film Grain", "Glow", "Chroma Key"];
 
+test("EffectsSection Invert Colors toggle adds and removes stylize.invert", () => {
+  const store = new EditorStore(makeTimeline([makeClip("c1")]));
+  render(<EffectsSection store={store} clipIds={["c1"]} />);
+  const toggle = screen.getByTestId("inspector-invert-colors-input");
+  act(() => { fireEvent.click(toggle); });
+  const after = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  expect(after.effects?.some((e) => e.type === "stylize.invert" && e.enabled)).toBe(true);
+  act(() => { fireEvent.click(toggle); });
+  const off = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+  expect(off.effects?.some((e) => e.type === "stylize.invert")).toBeFalsy();
+});
+
 test("EffectsSection renders all 7 subgroup titles", () => {
   const store = new EditorStore(makeTimeline([makeClip("c1")]));
   render(<EffectsSection store={store} clipIds={["c1"]} />);

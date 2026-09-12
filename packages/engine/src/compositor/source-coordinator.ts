@@ -1,4 +1,4 @@
-import { affineTransform, applyTextLayerAnim, buildRenderPlan, defaultCrop, frameToSeconds, type Clip, type Size, type Timeline } from "@frontstage/core";
+import { affineTransform, applyTextLayerAnim, buildRenderPlan, defaultCrop, frameToSeconds, textRasterAppearance, type Clip, type Size, type Timeline, type TimelineResolver } from "@frontstage/core";
 import { demuxMp4 } from "../demux/mp4-demuxer.js";
 import { buildVideoChunks, VideoDecodeManager } from "../decode/video-decoder.js";
 import { ImageSource } from "../media/image-source.js";
@@ -26,8 +26,23 @@ interface ImageEntry {
 
 type SourceEntry = VideoEntry | ImageEntry;
 
+function collectVisualClips(timeline: Timeline, resolve: TimelineResolver | undefined, depth = 0, into: Clip[] = []): Clip[] {
+  for (const track of timeline.tracks) {
+    if (track.hidden) continue;
+    for (const clip of track.clips) {
+      if (clip.mediaType === "video" || clip.mediaType === "image") into.push(clip);
+      if (clip.mediaType === "sequence" && resolve && depth < 8) {
+        const child = resolve(clip.mediaRef);
+        if (child) collectVisualClips(child, resolve, depth + 1, into);
+      }
+    }
+  }
+  return into;
+}
+
 export class SourceCoordinator {
   private readonly textRasterizer: TextRasterizer;
+  private resolveTimeline: TimelineResolver | undefined;
 
   private constructor(
     private timeline: Timeline,
@@ -41,7 +56,11 @@ export class SourceCoordinator {
     this.textRasterizer = new TextRasterizer();
   }
 
-  static async create(timeline: Timeline, media: MediaByteSource): Promise<SourceCoordinator> {
+  setResolveTimeline(resolve: TimelineResolver | undefined): void {
+    this.resolveTimeline = resolve;
+  }
+
+  static async create(timeline: Timeline, media: MediaByteSource, resolveTimeline?: TimelineResolver): Promise<SourceCoordinator> {
     const sources = new Map<string, SourceEntry>();
     const clipById = new Map<string, Clip>();
     const sourceSizes = new Map<string, Size>();
@@ -51,13 +70,9 @@ export class SourceCoordinator {
     const demuxCache = new Map<string, { track: DemuxVideo; fileBytes: ArrayBuffer }>();
 
     try {
-      for (const track of timeline.tracks) {
-        if (track.hidden) continue;
-        for (const clip of track.clips) {
-          if (clip.mediaType !== "video" && clip.mediaType !== "image") continue;
-          clipById.set(clip.id, clip);
-          await SourceCoordinator._tryAddClipSource(clip, media, demuxCache, sources, sourceSizes, failedRefs);
-        }
+      for (const clip of collectVisualClips(timeline, resolveTimeline)) {
+        clipById.set(clip.id, clip);
+        await SourceCoordinator._tryAddClipSource(clip, media, demuxCache, sources, sourceSizes, failedRefs);
       }
     } catch (e) {
       for (const entry of sources.values()) {
@@ -67,7 +82,9 @@ export class SourceCoordinator {
       throw e;
     }
 
-    return new SourceCoordinator(timeline, sources, clipById, sourceSizes, demuxCache, media, failedRefs);
+    const coord = new SourceCoordinator(timeline, sources, clipById, sourceSizes, demuxCache, media, failedRefs);
+    coord.resolveTimeline = resolveTimeline;
+    return coord;
   }
 
   // Missing media for one clip must not sink the whole load — skip it, warn once, and let
@@ -125,12 +142,8 @@ export class SourceCoordinator {
 
   async reconcile(timeline: Timeline): Promise<void> {
     const newClips = new Map<string, Clip>();
-    for (const track of timeline.tracks) {
-      if (track.hidden) continue;
-      for (const clip of track.clips) {
-        if (clip.mediaType !== "video" && clip.mediaType !== "image") continue;
-        newClips.set(clip.id, clip);
-      }
+    for (const clip of collectVisualClips(timeline, this.resolveTimeline)) {
+      newClips.set(clip.id, clip);
     }
 
     // Collect clips to remove, then dispose + delete in a second pass
@@ -173,7 +186,7 @@ export class SourceCoordinator {
   }
 
   async layersForScrub(frame: number): Promise<{ layers: CompositeLayer[]; cleanup: () => void }> {
-    const plan = buildRenderPlan(this.timeline, frame, this._sourceSizes);
+    const plan = buildRenderPlan(this.timeline, frame, this._sourceSizes, this.resolveTimeline);
     const renderSize: Size = { width: this.timeline.width, height: this.timeline.height };
     const tagged: Array<{ layer: CompositeLayer; zIndex: number }> = [];
     const owned: Array<{ mgr: VideoDecodeManager; vf: VideoFrame }> = [];
@@ -202,8 +215,17 @@ export class SourceCoordinator {
     for (const textLayer of plan.textLayers) {
       const { transform, opacity } = applyTextLayerAnim(textLayer);
       const tf = affineTransform(transform, renderSize, renderSize);
+      const look = textRasterAppearance(textLayer.style, textLayer.fillMode, renderSize.height);
       tagged.push({
-        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity, crop: defaultCrop() },
+        layer: {
+          frame: this.textRasterizer.rasterize(textLayer, renderSize),
+          transform: tf,
+          opacity,
+          crop: defaultCrop(),
+          blendMode: look.blendMode,
+          stencil: look.stencil,
+          matteColor: look.stencil ? look.matte : undefined,
+        },
         zIndex: textLayer.zIndex,
       });
     }
@@ -250,7 +272,7 @@ export class SourceCoordinator {
   }
 
   layersForPlayback(frame: number): CompositeLayer[] {
-    const plan = buildRenderPlan(this.timeline, frame, this._sourceSizes);
+    const plan = buildRenderPlan(this.timeline, frame, this._sourceSizes, this.resolveTimeline);
     const renderSize: Size = { width: this.timeline.width, height: this.timeline.height };
     const tagged: Array<{ layer: CompositeLayer; zIndex: number }> = [];
 
@@ -274,8 +296,17 @@ export class SourceCoordinator {
     for (const textLayer of plan.textLayers) {
       const { transform, opacity } = applyTextLayerAnim(textLayer);
       const tf = affineTransform(transform, renderSize, renderSize);
+      const look = textRasterAppearance(textLayer.style, textLayer.fillMode, renderSize.height);
       tagged.push({
-        layer: { frame: this.textRasterizer.rasterize(textLayer, renderSize), transform: tf, opacity, crop: defaultCrop() },
+        layer: {
+          frame: this.textRasterizer.rasterize(textLayer, renderSize),
+          transform: tf,
+          opacity,
+          crop: defaultCrop(),
+          blendMode: look.blendMode,
+          stencil: look.stencil,
+          matteColor: look.stencil ? look.matte : undefined,
+        },
         zIndex: textLayer.zIndex,
       });
     }

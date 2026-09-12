@@ -10,10 +10,13 @@ import {
   setClipEffectsCommand,
   formatParam,
   effectParamLabel,
+  defaultEffect,
+  canonicalSort,
 } from "@frontstage/core";
 import { useStore } from "../../store/use-store.js";
 import { AdjustSection } from "./AdjustSection.js";
 import { AdjustmentRow } from "./AdjustmentRow.js";
+import { ToggleField } from "../fields.js";
 
 interface SubgroupDef {
   title: string;
@@ -128,6 +131,25 @@ export function EffectsSection({ store, clipIds }: EffectsSectionProps) {
           </AdjustSection>
         );
       })}
+      <ToggleField
+        label="Invert Colors"
+        value={clips.length > 0 && clips.every((c) => (c.effects ?? []).some((e) => e.type === "stylize.invert" && e.enabled))}
+        onChange={(applied) =>
+          store.dispatch(
+            setClipEffectsCommand(clipIds, (c) => {
+              const current = c.effects ?? [];
+              if (applied) {
+                if (current.some((e) => e.type === "stylize.invert")) {
+                  return current.map((e) => (e.type === "stylize.invert" ? { ...e, enabled: true } : e));
+                }
+                const fx = defaultEffect("stylize.invert", () => crypto.randomUUID());
+                return fx ? canonicalSort([...current, fx]) : current;
+              }
+              return current.filter((e) => e.type !== "stylize.invert");
+            }, "stylize.invert"),
+          )
+        }
+      />
     </>
   );
 }

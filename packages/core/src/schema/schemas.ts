@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const uuid = () => crypto.randomUUID();
 
-export const ClipTypeSchema = z.enum(["video", "audio", "image", "text", "lottie"]);
+export const ClipTypeSchema = z.enum(["video", "audio", "image", "text", "lottie", "subtitle", "sequence"]);
 export const InterpolationSchema = z.enum(["linear", "hold", "smooth"]);
 export const FadeInterpolationSchema = z.enum(["linear", "smooth"]);
 
@@ -68,10 +68,14 @@ export const FillSchema = z.object({
   enabled: z.boolean().default(false),
   color: RGBASchema.default({ r: 0, g: 0, b: 0, a: 1 }),
 });
+export const TextFillModeSchema = z.enum(["color", "footage", "inverted"]);
 export const TextStyleSchema = z.object({
   fontName: z.string().default("Helvetica-Bold"),
   fontSize: z.number().default(96),
   fontScale: z.number().default(1),
+  widthScale: z.number().default(1),
+  heightScale: z.number().default(1),
+  blur: z.number().default(0),
   color: RGBASchema.default({ r: 1, g: 1, b: 1, a: 1 }),
   alignment: z.enum(["left", "center", "right"]).default("center"),
   shadow: ShadowSchema.default({}),
@@ -210,6 +214,7 @@ export const ClipSchema = z.object({
   captionGroupId: z.string().optional(),
   textContent: z.string().optional(),
   textStyle: TextStyleSchema.optional(),
+  textFillMode: TextFillModeSchema.optional(),
   textAnimation: TextAnimationSchema.optional(),
   wordTimings: z.array(WordTimingSchema).optional(),
   effects: z.array(EffectSchema).optional(),
@@ -225,6 +230,7 @@ export const ClipSchema = z.object({
 export const TrackSchema = z.object({
   id: z.string().default(uuid),
   type: ClipTypeSchema,
+  name: z.string().optional(),
   muted: z.boolean().default(false),
   hidden: z.boolean().default(false),
   syncLocked: z.boolean().default(true),
@@ -232,10 +238,38 @@ export const TrackSchema = z.object({
   clips: z.array(ClipSchema).default([]),
 });
 
+export const TimelineMarkerStatusSchema = z.enum(["open", "review", "resolved"]);
+export const TimelineMarkerSchema = z.object({
+  id: z.string().default(uuid),
+  name: z.string(),
+  startFrame: z.number().int(),
+  durationFrames: z.number().int().default(0),
+  color: RGBASchema.default({ r: 0, g: 0.478, b: 1, a: 1 }),
+  comment: z.string().default(""),
+  status: TimelineMarkerStatusSchema.default("open"),
+});
+
 export const TimelineSchema = z.object({
+  id: z.string().default(uuid),
+  name: z.string().default("Timeline 1"),
+  folderId: z.string().optional(),
   fps: z.number().int().default(30),
   width: z.number().int().default(1920),
   height: z.number().int().default(1080),
   settingsConfigured: z.boolean().default(false),
   tracks: z.array(TrackSchema).default([]),
+  markers: z.array(TimelineMarkerSchema).default([]),
+});
+
+export const TimelineViewStateSchema = z.object({
+  playheadFrame: z.number().int().default(0),
+  zoomScale: z.number().default(1),
+  scrollOffsetX: z.number().default(0),
+});
+
+export const ProjectFileSchema = z.object({
+  timelines: z.array(TimelineSchema).min(1),
+  activeTimelineId: z.string().optional(),
+  openTimelineIds: z.array(z.string()).optional(),
+  viewStates: z.record(TimelineViewStateSchema).optional(),
 });

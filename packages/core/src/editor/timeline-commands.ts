@@ -1,7 +1,7 @@
 import { clipEndFrame } from "../clip.js";
 import type { Clip } from "../clip.js";
 import { clampFadesToDuration, setDuration } from "../clip-mutations.js";
-import { clipTypesCompatible } from "../clip-type.js";
+import { clipTypeCanLinkAudio, clipTypesCompatible } from "../clip-type.js";
 import { sampleTrack, lerpNumber, lerpAnimPair } from "../keyframe.js";
 import type { KeyframeTrack, Keyframe } from "../keyframe.js";
 import { lerpCrop } from "../transform.js";
@@ -357,7 +357,7 @@ export function addClipCommand(
     coalesceKey,
     apply(timeline: Timeline): Timeline {
       const clampedStart = Math.max(0, startFrame);
-      const shouldLink = entry.type === "video" && entry.hasAudio === true;
+      const shouldLink = clipTypeCanLinkAudio(entry.type) && entry.hasAudio === true;
       const base = clipFromAsset(entry, fps, clampedStart, newId, durationFramesOverride); // newId() #1 = visual clip id
       const linkGroupId = shouldLink ? newId() : undefined;        // newId() #2 = linkGroupId
       const clip: Clip = { ...base, linkGroupId };

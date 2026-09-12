@@ -8,12 +8,14 @@ import {
   setClipTransformCommand,
   setClipCropCommand,
   setClipPropertyCommand,
+  setFadeCommand,
   setKeyframeCommand,
   setClipTextStyleCommand,
+  setClipTextFillModeCommand,
   defaultTextStyle,
   rgbaFromHex,
 } from "@frontstage/core";
-import type { Clip, Transform, Crop, TextStyle } from "@frontstage/core";
+import type { Clip, Transform, Crop, TextStyle, TextFillMode } from "@frontstage/core";
 import type { PlaybackEngine } from "@frontstage/engine";
 import { useStore } from "../store/use-store.js";
 import { theme } from "../theme/theme.js";
@@ -46,7 +48,7 @@ export interface InspectorPanelProps {
 
 type Histogram = { y: number[]; r: number[]; g: number[]; b: number[] };
 
-const VISUAL_TYPES = new Set(["video", "image", "text", "lottie"]);
+const VISUAL_TYPES = new Set(["video", "image", "text", "lottie", "sequence"]);
 const AUDIO_TYPES = new Set(["audio", "video"]);
 
 function rgbaToHex(r: number, g: number, b: number): string {
@@ -321,7 +323,7 @@ export function InspectorPanel({ store, library, engineRef, lutReconciler }: Ins
             step={1}
             min={0}
             onChange={(v) =>
-              store.dispatch(setClipPropertyCommand(clip.id, "fadeInFrames", Math.round(v), `fadein-${clip.id}`))
+              store.dispatch(setFadeCommand(clip.id, "left", Math.round(v), `fadein-${clip.id}`))
             }
           />
           <NumberField
@@ -330,8 +332,17 @@ export function InspectorPanel({ store, library, engineRef, lutReconciler }: Ins
             step={1}
             min={0}
             onChange={(v) =>
-              store.dispatch(setClipPropertyCommand(clip.id, "fadeOutFrames", Math.round(v), `fadeout-${clip.id}`))
+              store.dispatch(setFadeCommand(clip.id, "right", Math.round(v), `fadeout-${clip.id}`))
             }
+          />
+          <ToggleField
+            label="Smooth fades"
+            value={clip.fadeInInterpolation === "smooth" && clip.fadeOutInterpolation === "smooth"}
+            onChange={(on) => {
+              const curve = on ? "smooth" : "linear";
+              store.dispatch(setClipPropertyCommand(clip.id, "fadeInInterpolation", curve, `fadeinterp-${clip.id}`));
+              store.dispatch(setClipPropertyCommand(clip.id, "fadeOutInterpolation", curve, `fadeinterp-${clip.id}`));
+            }}
           />
         </Section>
       )}
@@ -404,6 +415,44 @@ export function InspectorPanel({ store, library, engineRef, lutReconciler }: Ins
             value={style.alignment}
             onChange={(v) => {
               const next: TextStyle = { ...style, alignment: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+          <FillModeField
+            value={clip.textFillMode ?? "color"}
+            onChange={(v) =>
+              store.dispatch(setClipTextFillModeCommand(clip.id, v, undefined, `fillmode-${clip.id}`))
+            }
+          />
+          <NumberField
+            label="Width Scale"
+            value={style.widthScale ?? 1}
+            step={0.05}
+            min={0.1}
+            max={10}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, widthScale: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+          <NumberField
+            label="Height Scale"
+            value={style.heightScale ?? 1}
+            step={0.05}
+            min={0.1}
+            max={10}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, heightScale: v };
+              store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
+            }}
+          />
+          <NumberField
+            label="Blur"
+            value={style.blur ?? 0}
+            step={0.5}
+            min={0}
+            onChange={(v) => {
+              const next: TextStyle = { ...style, blur: v };
               store.dispatch(setClipTextStyleCommand(clip.id, next, `textstyle-${clip.id}`));
             }}
           />
@@ -484,6 +533,22 @@ function AlignmentField({ value, onChange }: { value: TextAlignment; onChange: (
       <span style={labelStyle}>Align</span>
       <span style={{ flex: 1 }} />
       <SegmentedTabs segments={alignmentSegments} active={value} onSelect={(id) => onChange(id as TextAlignment)} testid="inspector-align" />
+    </div>
+  );
+}
+
+const fillModeSegments: readonly { id: TextFillMode; label: string }[] = [
+  { id: "color", label: "Color" },
+  { id: "footage", label: "Footage" },
+  { id: "inverted", label: "Inverted" },
+];
+
+function FillModeField({ value, onChange }: { value: TextFillMode; onChange: (v: TextFillMode) => void }) {
+  return (
+    <div data-testid="inspector-fill-mode" style={rowStyle}>
+      <span style={labelStyle}>Fill</span>
+      <span style={{ flex: 1 }} />
+      <SegmentedTabs segments={fillModeSegments} active={value} onSelect={(id) => onChange(id as TextFillMode)} testid="inspector-fillmode" />
     </div>
   );
 }

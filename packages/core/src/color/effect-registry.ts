@@ -36,6 +36,7 @@ export const EFFECT_REGISTRY: readonly EffectDescriptor[] = [
   { type: "blur.sharpen", displayName: "Sharpen", category: "blur", params: [P("amount", 0, 2, 0.4)] },
   { type: "blur.noiseReduction", displayName: "Noise Reduction", category: "blur", params: [P("amount", 0, 1, 0)] },
   { type: "blur.motion", displayName: "Motion Blur", category: "blur", params: [P("radius", 0, 100, 0), P("angle", -180, 180, 0)] },
+  { type: "stylize.invert", displayName: "Invert", category: "stylize", params: [] },
   { type: "stylize.grain", displayName: "Film Grain", category: "stylize", params: [P("amount", 0, 1, 0), P("size", 0.5, 4, 1.5)] },
   { type: "stylize.vignette", displayName: "Vignette", category: "stylize", params: [P("amount", -1, 1, 0), P("midpoint", 0, 1, 0.5), P("roundness", -1, 1, 0), P("feather", 0, 1, 0.5)] },
   { type: "stylize.glow", displayName: "Glow", category: "stylize", params: [P("intensity", 0, 1, 0), P("radius", 0, 100, 20), P("threshold", 0, 1, 0.6), P("warmth", 0, 1, 0)] },
@@ -63,4 +64,17 @@ export function defaultEffect(type: string, newId: () => string): Effect | null 
   const params: Record<string, { value: number }> = {};
   for (const p of d.params) params[p.key] = { value: p.default };
   return { id: newId(), type, enabled: true, params };
+}
+
+/** Palmier `ToolDefinitions.effectCatalog` — one line per non-color effect for `apply_effect`. */
+export function nonColorEffectCatalog(): string {
+  const n = (v: number): string => (Number.isInteger(v) ? String(v) : String(v));
+  return EFFECT_REGISTRY.filter((d) => !d.type.startsWith("color."))
+    .map((d) => {
+      const params = d.params
+        .map((p) => `${p.key} (${n(p.min)}…${n(p.max)}, default ${n(p.default)})`)
+        .join(", ");
+      return `• ${d.type} — ${d.displayName}: ${params.length > 0 ? params : "no params"}`;
+    })
+    .join("\n");
 }

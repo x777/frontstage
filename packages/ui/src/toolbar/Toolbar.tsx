@@ -104,6 +104,17 @@ export function Toolbar({ store }: { store: EditorStore }) {
       >
         <Icon name="scissors" size={TOOLBAR_ICON_SIZE} />
       </IconButton>
+      <IconButton
+        testid="toolbar-trim"
+        title="Trim / Slip (T)"
+        frame="mdLg"
+        tone="tertiary"
+        active={toolMode === "trim"}
+        ariaPressed={toolMode === "trim"}
+        onClick={() => store.setToolMode("trim")}
+      >
+        <Icon name="slip" size={TOOLBAR_ICON_SIZE} />
+      </IconButton>
 
       <ToolbarDivider />
 

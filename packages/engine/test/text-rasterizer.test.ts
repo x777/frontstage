@@ -9,6 +9,14 @@ function layer(over: Partial<TextLayer> = {}): TextLayer {
 }
 
 describe("textRasterCacheKey", () => {
+  test("fillMode and glyph scale/blur are part of the raster input", () => {
+    const base = layer();
+    const scaled = layer({ style: { ...defaultTextStyle(), widthScale: 2, heightScale: 0.5, blur: 6 } });
+    const inverted = layer({ fillMode: "inverted" });
+    expect(textRasterCacheKey(scaled, size)).not.toBe(textRasterCacheKey(base, size));
+    expect(textRasterCacheKey(inverted, size)).not.toBe(textRasterCacheKey(base, size));
+  });
+
   test("no wordState -> unchanged [text, style, renderSize] shape, byte-identical to pre-M11C", () => {
     const l = layer();
     const key = textRasterCacheKey(l, size);

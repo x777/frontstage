@@ -1198,6 +1198,7 @@ const IMPORT_ALLOWED_EXTENSIONS = new Set([
   "mp4", "mov",
   "mp3", "wav", "aac", "m4a", "aiff", "aifc", "flac",
   "png", "jpg", "jpeg", "tiff", "heic",
+  "srt", "vtt",
 ]);
 
 const IMPORT_MAX_BYTES = 5 * 1024 * 1024 * 1024;

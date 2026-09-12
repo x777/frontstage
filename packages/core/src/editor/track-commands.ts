@@ -3,8 +3,9 @@ import type { ClipType } from "../clip-type.js";
 import { computeZones, partitionedInsertionIndex } from "../timeline/zones.js";
 import type { Command } from "./editor-store.js";
 import { TRACK_MIN_HEIGHT, TRACK_MAX_HEIGHT } from "../timeline/geometry.js";
+import { normalizeTrackName } from "../track-name.js";
 
-const TRACK_LABEL_PREFIX: Record<ClipType, string> = { video: "V", audio: "A", image: "I", text: "T", lottie: "L" };
+const TRACK_LABEL_PREFIX: Record<ClipType, string> = { video: "V", audio: "A", image: "I", text: "T", lottie: "L", subtitle: "S", sequence: "N" };
 
 // V1/A1-style label. Audio counts top-down; visual counts this track down to the V/A divider (so V1 sits just above audio).
 export function timelineTrackDisplayLabel(timeline: Timeline, trackIndex: number): string {
@@ -100,6 +101,84 @@ export function reorderTrackCommand(id: string, targetIndex: number, coalesceKey
     coalesceKey,
     apply(timeline: Timeline): Timeline {
       return reorderTrackLive(timeline, id, targetIndex);
+    },
+  };
+}
+
+function clearTrackName(track: Track): Track {
+  if (track.name === undefined) return track;
+  const { name: _name, ...rest } = track;
+  return rest;
+}
+
+export function setTrackNameCommand(trackId: string, rawName: string | undefined): Command {
+  return {
+    label: "Rename Track",
+    apply(timeline: Timeline): Timeline {
+      const parsed = normalizeTrackName(rawName ?? "");
+      if (!parsed.ok) return timeline;
+      let changed = false;
+      const tracks = timeline.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        const next = parsed.name === undefined ? clearTrackName(t) : { ...t, name: parsed.name };
+        if (next === t || next.name === t.name) return t;
+        changed = true;
+        return next;
+      });
+      return changed ? { ...timeline, tracks } : timeline;
+    },
+  };
+}
+
+export interface TrackSetUpdate {
+  id: string;
+  muted?: boolean;
+  hidden?: boolean;
+  syncLocked?: boolean;
+  name?: string;
+  includesName: boolean;
+}
+
+export interface ManageTracksPlan {
+  reorders: { id: string; to: number }[];
+  updates: TrackSetUpdate[];
+  removeIds: string[];
+}
+
+/** Palmier `manage_tracks` body: reorder → set → remove, one undo. */
+export function applyManageTracks(timeline: Timeline, plan: ManageTracksPlan): Timeline {
+  let next = timeline;
+  for (const r of plan.reorders) next = reorderTrackLive(next, r.id, r.to);
+  if (plan.updates.length > 0) {
+    const byId = new Map(plan.updates.map((u) => [u.id, u]));
+    next = {
+      ...next,
+      tracks: next.tracks.map((t) => {
+        const u = byId.get(t.id);
+        if (!u) return t;
+        let track = t;
+        if (u.muted !== undefined) track = { ...track, muted: u.muted };
+        if (u.hidden !== undefined) track = { ...track, hidden: u.hidden };
+        if (u.syncLocked !== undefined) track = { ...track, syncLocked: u.syncLocked };
+        if (u.includesName) {
+          track = u.name === undefined ? clearTrackName(track) : { ...track, name: u.name };
+        }
+        return track;
+      }),
+    };
+  }
+  if (plan.removeIds.length > 0) {
+    const drop = new Set(plan.removeIds);
+    next = { ...next, tracks: next.tracks.filter((t) => !drop.has(t.id)) };
+  }
+  return next;
+}
+
+export function manageTracksCommand(plan: ManageTracksPlan): Command {
+  return {
+    label: "Manage Tracks",
+    apply(timeline: Timeline): Timeline {
+      return applyManageTracks(timeline, plan);
     },
   };
 }

@@ -82,6 +82,31 @@ test("a pointermove while not the dragged track's own grip does not reorder", ()
   expect(store.canUndo()).toBe(false);
 });
 
+test("shows V1/A1 labels and a user-authored name when set", () => {
+  const store = new EditorStore(tl(["video", "audio"]));
+  render(<TrackHeaders store={store} />);
+  expect(screen.getByTestId("track-label-video0").textContent).toBe("V1");
+  expect(screen.getByTestId("track-label-audio1").textContent).toBe("A1");
+  act(() => {
+    store.dispatch({
+      label: "Rename Track",
+      apply: (t) => ({ ...t, tracks: t.tracks.map((tr) => (tr.id === "video0" ? { ...tr, name: "Dialogue" } : tr)) }),
+    });
+  });
+  expect(screen.getByTestId("track-label-video0").textContent).toBe("Dialogue");
+});
+
+test("double-clicking a label renames the track", () => {
+  const store = new EditorStore(tl(["video"]));
+  render(<TrackHeaders store={store} />);
+  act(() => { fireEvent.doubleClick(screen.getByTestId("track-label-video0")); });
+  const input = screen.getByTestId("track-rename-video0") as HTMLInputElement;
+  act(() => { fireEvent.change(input, { target: { value: "Main" } }); });
+  act(() => { fireEvent.keyDown(input, { key: "Enter" }); });
+  expect(store.getSnapshot().timeline.tracks[0]!.name).toBe("Main");
+  expect(screen.getByTestId("track-label-video0").textContent).toBe("Main");
+});
+
 test("starting a grip drag clears a selected gap (its trackIndex could go stale mid-reorder)", () => {
   const store = new EditorStore(tl(["video", "video"]));
   render(<TrackHeaders store={store} />);

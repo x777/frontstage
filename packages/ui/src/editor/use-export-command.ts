@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { FcpxmlTarget, FcpxmlVersion, MediaManifestEntry, Timeline } from "@frontstage/core";
+import type { FcpxmlTarget, FcpxmlVersion, MediaManifestEntry, Timeline, TimelineResolver } from "@frontstage/core";
 import { cuesFromCaptionClips, exportFcpxml, exportXmeml, formatSrt, formatVtt, timelineMediaRefs } from "@frontstage/core";
 import type { MediaByteSource } from "@frontstage/engine";
 import type { ToolContext } from "@frontstage/ai";
@@ -24,6 +24,7 @@ export function useExportCommand(opts: {
   exportGateway?: ExportGateway;
   interopExport?: ToolContext["interopExport"];
   getTimeline: () => Timeline;
+  getResolveTimeline?: () => TimelineResolver;
   getMediaEntries?: () => MediaManifestEntry[];
   media: MediaByteSource;
   suggestedName: () => string;
@@ -35,7 +36,7 @@ export function useExportCommand(opts: {
   canExportXml: boolean;
   canExportCaptions: boolean;
 } {
-  const { exportGateway, interopExport, getTimeline, getMediaEntries, media, suggestedName, runProjectCommand } = opts;
+  const { exportGateway, interopExport, getTimeline, getResolveTimeline, getMediaEntries, media, suggestedName, runProjectCommand } = opts;
   const [exportState, setExportState] = useState<ExportState | null>(null);
   // Sync re-entrancy guard: state update is async, so we need a ref too.
   const runningRef = useRef(false);
@@ -49,8 +50,12 @@ export function useExportCommand(opts: {
         if (!t) return;
         setExportState({ label: t.label, done: 0, total: 1 });
         try {
-          await exportGateway.run(getTimeline(), media, t, (done, total) =>
-            setExportState({ label: t.label, done, total })
+          await exportGateway.run(
+            getTimeline(),
+            media,
+            t,
+            (done, total) => setExportState({ label: t.label, done, total }),
+            getResolveTimeline ? { resolveTimeline: getResolveTimeline() } : undefined,
           );
         } finally {
           setExportState(null);

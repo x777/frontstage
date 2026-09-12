@@ -422,4 +422,68 @@ describe("add_texts", () => {
     const clip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
     expect(clip.textAnimation).toBeUndefined();
   });
+
+  test("fillMode inverted and footage (omit color / explicit color); undo restores", async () => {
+    const store = new EditorStore({ ...defaultTimeline() });
+    const ctx = makeCtx(store);
+    const inverted = await addTextsTool().run({
+      texts: [{ content: "Invert me", startFrame: 0, durationFrames: 60, fillMode: "inverted" }],
+    }, ctx);
+    expect(inverted.isError).toBe(false);
+    const invClip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(invClip.textFillMode).toBe("inverted");
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]?.clips[0]).toBeUndefined();
+
+    const footage = await addTextsTool().run({
+      texts: [{ content: "Stencil me", startFrame: 0, durationFrames: 60, fillMode: "footage" }],
+    }, ctx);
+    expect(footage.isError).toBe(false);
+    const fClip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(fClip.textFillMode).toBe("footage");
+    expect(fClip.textStyle?.color).toEqual({ r: 0, g: 0, b: 0, a: 1 });
+    store.undo();
+
+    const colored = await addTextsTool().run({
+      texts: [{
+        content: "Green stencil",
+        startFrame: 0,
+        durationFrames: 60,
+        fillMode: "footage",
+        style: {
+          fontName: "Helvetica-Bold",
+          fontSize: 96,
+          fontScale: 1,
+          color: { r: 0, g: 1, b: 0, a: 1 },
+          alignment: "center",
+          shadow: { enabled: false, color: { r: 0, g: 0, b: 0, a: 0.6 }, offsetX: 0, offsetY: -2, blur: 6 },
+          background: { enabled: false, color: { r: 0, g: 0, b: 0, a: 0.6 } },
+          border: { enabled: false, color: { r: 0, g: 0, b: 0, a: 1 } },
+          widthScale: 1.5,
+          heightScale: 0.8,
+          blur: 4,
+        },
+      }],
+    }, ctx);
+    expect(colored.isError).toBe(false);
+    const gClip = store.getSnapshot().timeline.tracks[0]!.clips[0]!;
+    expect(gClip.textFillMode).toBe("footage");
+    expect(gClip.textStyle?.color).toEqual({ r: 0, g: 1, b: 0, a: 1 });
+    expect(gClip.textStyle?.widthScale).toBe(1.5);
+    expect(gClip.textStyle?.heightScale).toBe(0.8);
+    expect(gClip.textStyle?.blur).toBe(4);
+  });
+
+  test("set_clip_properties fillMode footage then undo", async () => {
+    const store = new EditorStore({ ...defaultTimeline() });
+    const ctx = makeCtx(store);
+    await addTextsTool().run({ texts: [{ content: "Original", startFrame: 0, durationFrames: 60 }] }, ctx);
+    const id = store.getSnapshot().timeline.tracks[0]!.clips[0]!.id;
+    const result = await setClipPropertiesTool().run({ clipId: id, properties: { fillMode: "footage" } }, ctx);
+    expect(result.isError).toBe(false);
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.textFillMode).toBe("footage");
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.textStyle?.color).toEqual({ r: 0, g: 0, b: 0, a: 1 });
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks[0]!.clips[0]!.textFillMode).toBeUndefined();
+  });
 });

@@ -43,7 +43,9 @@ export type IconName =
   | "history"
   | "paintpalette"
   | "aspectratio"
-  | "ruler";
+  | "ruler"
+  | "slip"
+  | "viewfinder";
 
 // Hand-drawn line glyphs — the SF Symbols stand-in for cross-platform. New panels ADD names
 // here rather than inlining SVGs.
@@ -356,6 +358,21 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <line x1="7.5" y1="12.5" x2="9.3" y2="14.3" />
       <line x1="10.6" y1="9.4" x2="12" y2="10.8" />
       <line x1="13.7" y1="6.3" x2="15.5" y2="8.1" />
+    </>
+  ),
+  // Palmier trim tool (T) — drag clip body to slip source in/out.
+  slip: (
+    <>
+      <polyline points="7 8 3 12 7 16" />
+      <polyline points="17 8 21 12 17 16" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+    </>
+  ),
+  // Palmier PreviewContainerView canvas guides — SF Symbol "viewfinder".
+  viewfinder: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
 };

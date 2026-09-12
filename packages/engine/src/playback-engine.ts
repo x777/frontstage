@@ -2,6 +2,7 @@ import {
   type Timeline,
   type CubeLUT,
   type Size,
+  type TimelineResolver,
   timelineTotalFrames,
 } from "@frontstage/core";
 import type { MediaByteSource } from "./media/media-source.js";
@@ -33,6 +34,7 @@ export class PlaybackEngine {
 
   private media?: MediaByteSource;
   private _lastLayerCount = 0;
+  private resolveTimeline?: TimelineResolver;
 
   private constructor(private renderer: FrameRenderer, private canvas: HTMLCanvasElement) {}
 
@@ -47,7 +49,7 @@ export class PlaybackEngine {
     this.media = media;
     this.canvas.width = timeline.width;
     this.canvas.height = timeline.height;
-    this.coordinator = await SourceCoordinator.create(timeline, media);
+    this.coordinator = await SourceCoordinator.create(timeline, media, this.resolveTimeline);
     try {
       this.audioMixer = await AudioMixer.create(timeline, media);
       if (this.audioMixer) {
@@ -59,6 +61,11 @@ export class PlaybackEngine {
       this.audio = undefined;
     }
     await this.seek(0, "exact");
+  }
+
+  setResolveTimeline(resolve: TimelineResolver | undefined): void {
+    this.resolveTimeline = resolve;
+    this.coordinator?.setResolveTimeline(resolve);
   }
 
   async setTimeline(timeline: Timeline): Promise<void> {

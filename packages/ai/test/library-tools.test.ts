@@ -698,6 +698,19 @@ describe("import_media — bytes", () => {
     expect(textOf(result)).toMatch(/not valid non-empty base64/);
   });
 
+  test("subtitle mimeType application/x-subrip is accepted", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const srt = b64([...new TextEncoder().encode("1\n00:00:01,000 --> 00:00:02,000\nHi.\n")]);
+    const result = await importMediaTool().run(
+      { source: { bytes: srt, mimeType: "application/x-subrip" }, name: "captions" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls[0]?.kind).toBe("fromBytes");
+    expect(mediaImport.calls[0]?.args[1]).toBe("application/x-subrip");
+  });
+
   test("happy path: decodes bytes, calls facade.fromBytes, returns placeholder id", async () => {
     const mediaImport = new FakeMediaImport();
     const ctx = makeImportCtx(mediaImport);
@@ -780,6 +793,16 @@ describe("import_media — url", () => {
     const result = await importMediaTool().run({ source: { url: "https://example.com/a.json" } }, ctx);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(/Lottie.*not supported/);
+  });
+
+  test("srt URL extension infers subtitle type", async () => {
+    const mediaImport = new FakeMediaImport();
+    const ctx = makeImportCtx(mediaImport);
+    const result = await importMediaTool().run({ source: { url: "https://example.com/captions.srt" } }, ctx);
+    expect(result.isError).toBe(false);
+    expect(mediaImport.calls).toEqual([
+      { kind: "fromUrl", args: ["https://example.com/captions.srt", undefined, undefined, undefined] },
+    ]);
   });
 
   test("happy path (extension inferred from the URL): calls facade.fromUrl", async () => {

@@ -1,7 +1,7 @@
 import { runExport } from "@frontstage/engine";
 import type { Timeline } from "@frontstage/core";
 import type { MediaByteSource } from "@frontstage/engine";
-import type { ExportGateway, ExportTarget, ExportProgressFn } from "@frontstage/ui";
+import type { ExportGateway, ExportTarget, ExportProgressFn, ExportRunOptions } from "@frontstage/ui";
 import { FfmpegIpcSink } from "./ffmpeg-sink.js";
 
 interface DesktopExportTarget extends ExportTarget {
@@ -24,6 +24,7 @@ export class DesktopExportGateway implements ExportGateway {
     media: MediaByteSource,
     target: ExportTarget,
     onProgress: ExportProgressFn,
+    opts?: ExportRunOptions,
   ): Promise<void> {
     const t = target as DesktopExportTarget;
     await runExport(
@@ -31,6 +32,7 @@ export class DesktopExportGateway implements ExportGateway {
       media,
       new FfmpegIpcSink(window.desktopExport, { codec: t.codec, outPath: t.outPath }),
       onProgress,
+      opts?.resolveTimeline ? { resolveTimeline: opts.resolveTimeline } : undefined,
     );
   }
 }

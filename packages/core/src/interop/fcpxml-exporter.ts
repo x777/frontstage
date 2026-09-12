@@ -434,6 +434,8 @@ function storyNodes(clips: EmittableClip[], ctx: Ctx): XmlNode[] {
         case "image":
           return assetClipNode(item, ctx);
         case "lottie":
+        case "subtitle":
+        case "sequence":
           return undefined;
       }
     })
@@ -821,11 +823,14 @@ function isEmittable(clip: Clip, entriesById: Map<string, MediaManifestEntry>): 
     case "text":
       return !!clip.textContent && clip.textContent.length > 0;
     case "lottie":
+    case "subtitle":
       return false;
     case "audio":
     case "video":
     case "image":
       return entriesById.has(clip.mediaRef);
+    case "sequence":
+      return false;
   }
 }
 

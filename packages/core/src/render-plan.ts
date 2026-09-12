@@ -1,8 +1,9 @@
-import { affineTransform, mat2dApply, mat2dInvert, type Mat2d, type Size } from "./mat2d.js";
+import { affineTransform, mat2dApply, mat2dInvert, mat2dMultiply, type Mat2d, type Size } from "./mat2d.js";
 import { defaultCrop, type Crop, type Transform } from "./transform.js";
-import type { Timeline } from "./timeline.js";
+import type { Timeline, TimelineResolver } from "./timeline.js";
 import { clipTypeIsVisual } from "./clip-type.js";
 import { clipContains, cropAt, opacityAt, transformAt } from "./clip.js";
+import type { TextFillMode } from "./text-fill-mode.js";
 import { type TextStyle, type RGBA, defaultTextStyle } from "./text-style.js";
 import type { Effect } from "./color/effect.js";
 import type { BlendMode } from "./color/blend-mode.js";
@@ -43,6 +44,7 @@ export interface TextLayer {
    * `applyTextLayerAnim`, never baked into the raster. */
   layerAnim?: TextLayerAnim;
   highlightColor?: RGBA;
+  fillMode?: TextFillMode;
 }
 
 export interface RenderPlan {
@@ -67,7 +69,31 @@ export function applyTextLayerAnim(layer: TextLayer): { transform: Transform; op
   };
 }
 
-export function buildRenderPlan(timeline: Timeline, frame: number, sourceSizes: Map<string, Size>): RenderPlan {
+const MAX_NEST_DEPTH = 8;
+
+function nestChildFrame(clip: { startFrame: number; trimStartFrame: number; speed: number }, timelineFrame: number): number {
+  return clip.trimStartFrame + (timelineFrame - clip.startFrame) * clip.speed;
+}
+
+function composeNestTransform(child: Transform, nest: Transform): Transform {
+  return {
+    centerX: nest.centerX - nest.width / 2 + child.centerX * nest.width,
+    centerY: nest.centerY - nest.height / 2 + child.centerY * nest.height,
+    width: child.width * nest.width,
+    height: child.height * nest.height,
+    rotation: child.rotation + nest.rotation,
+    flipHorizontal: child.flipHorizontal !== nest.flipHorizontal,
+    flipVertical: child.flipVertical !== nest.flipVertical,
+  };
+}
+
+export function buildRenderPlan(
+  timeline: Timeline,
+  frame: number,
+  sourceSizes: Map<string, Size>,
+  resolveTimeline?: TimelineResolver,
+  depth = 0,
+): RenderPlan {
   const renderSize: Size = { width: timeline.width, height: timeline.height };
   const layers: RenderLayer[] = [];
   const textLayers: TextLayer[] = [];
@@ -108,7 +134,35 @@ export function buildRenderPlan(timeline: Timeline, frame: number, sourceSizes: 
           wordState,
           layerAnim,
           highlightColor: clip.textAnimation?.highlightColor,
+          fillMode: clip.textFillMode,
         });
+        continue;
+      }
+      if (clip.mediaType === "sequence") {
+        if (!clipContains(clip, frame) || !resolveTimeline || depth >= MAX_NEST_DEPTH) continue;
+        const child = resolveTimeline(clip.mediaRef);
+        if (!child) continue;
+        const childFrame = nestChildFrame(clip, frame);
+        const nested = buildRenderPlan(child, childFrame, sourceSizes, resolveTimeline, depth + 1);
+        const nestT = transformAt(clip, frame);
+        const nestOp = opacityAt(clip, frame);
+        const nestMat = affineTransform(nestT, { width: child.width, height: child.height }, renderSize);
+        for (const layer of nested.layers) {
+          layers.push({
+            ...layer,
+            transform: mat2dMultiply(layer.transform, nestMat),
+            opacity: layer.opacity * nestOp,
+            zIndex: ti + (layer.zIndex + 1) / 1000,
+          });
+        }
+        for (const tl of nested.textLayers) {
+          textLayers.push({
+            ...tl,
+            transform: composeNestTransform(tl.transform, nestT),
+            opacity: tl.opacity * nestOp,
+            zIndex: ti + (tl.zIndex + 1) / 1000,
+          });
+        }
         continue;
       }
       if (!clipTypeIsVisual(clip.mediaType)) continue; // skip audio

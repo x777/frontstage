@@ -13,6 +13,7 @@ export { TransformOverlay } from "./preview/TransformOverlay.js";
 export type { CanvasRect } from "./preview/TransformOverlay.js";
 export { CropOverlay } from "./preview/CropOverlay.js";
 export { TimelinePanel } from "./timeline/TimelinePanel.js";
+export { TimelineTabs } from "./timeline/TimelineTabs.js";
 export type { TimelinePanelProps } from "./timeline/TimelinePanel.js";
 export { drawTimeline } from "./timeline/draw-timeline.js";
 export type { TimelinePalette } from "./timeline/draw-timeline.js";
@@ -36,6 +37,7 @@ export type { CaptionsTabProps, CaptionsExecutor, CaptionsTranscriptionFacade } 
 export { MediaDragController } from "./media/media-drag.js";
 export type { MediaDragSnapshot } from "./media/media-drag.js";
 export { MediaLibrary, probeMediaBlob } from "./media/media-library.js";
+export { WaveformCache } from "./media/waveform-cache.js";
 export type { ProbedMedia } from "./media/media-library.js";
 export { MatteSheet } from "./media/MatteSheet.js";
 export type { MatteSheetProps, MatteSheetLibrary } from "./media/MatteSheet.js";
@@ -59,7 +61,7 @@ export { ProjectActivityView, ProjectActivityButton, relativeTime } from "./edit
 export type { ProjectActivityViewProps, ProjectActivityButtonProps } from "./editor/ProjectActivityView.js";
 export { createEditorHost } from "./editor/editor-host.js";
 export type { EditorMediaHost, EditorHostResult } from "./editor/editor-host.js";
-export type { ExportGateway, ExportTarget, ExportProgressFn } from "./editor/export-gateway.js";
+export type { ExportGateway, ExportTarget, ExportProgressFn, ExportRunOptions } from "./editor/export-gateway.js";
 export type { ExportState, ExportKind, FcpxmlExportOptions } from "./editor/use-export-command.js";
 export { AgentPanel } from "./agent/AgentPanel.js";
 export type { AgentPanelProps } from "./agent/AgentPanel.js";

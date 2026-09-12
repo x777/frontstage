@@ -3,7 +3,7 @@ import type { MediaManifestEntry } from "../media.js";
 import type { Timeline, Track } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { ClipShift, FrameRange, GapSelection } from "../timeline/ripple-types.js";
-import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges, computeRipplePush } from "../timeline/ripple-engine.js";
+import { validateShifts, computeRippleShifts, computeRippleShiftsForRanges, applyShifts, mergeRanges, computeRipplePush, applyMarkerRippleClosing, applyMarkerRippleOpening } from "../timeline/ripple-engine.js";
 import { computeOverwrite, applyOverwriteToClips } from "../timeline/overwrite.js";
 import { replaceTrackClips, clipFromAsset, splitClipCommand, addClipCommand } from "./timeline-commands.js";
 import { linkedPartnerIds } from "../timeline/link-group.js";
@@ -66,7 +66,17 @@ export function rippleDeleteSelectedClips(timeline: Timeline, selectedIds: Reado
     ...timeline,
     tracks: timeline.tracks.map((t) => ({ ...t, clips: t.clips.filter((c) => !selectedIds.has(c.id)) })),
   };
-  return { timeline: applyShifts(removed, shifts) };
+  const markerRanges: FrameRange[][] = [];
+  for (const track of timeline.tracks) {
+    if (track.clips.some((c) => selectedIds.has(c.id))) {
+      markerRanges.push(
+        track.clips.filter((c) => selectedIds.has(c.id)).map((c) => ({ start: c.startFrame, end: c.startFrame + c.durationFrames })),
+      );
+    } else if (track.syncLocked) {
+      markerRanges.push(globalRanges);
+    }
+  }
+  return { timeline: applyMarkerRippleClosing(applyShifts(removed, shifts), markerRanges) };
 }
 
 export function rippleDeleteRangesOnTrack(
@@ -136,7 +146,7 @@ export function rippleDeleteRangesOnTrack(
     if (!isClear && !isFollower) continue;
     shifts.push(...computeRippleShiftsForRanges(t.clips, merged));
   }
-  next = applyShifts(next, shifts);
+  next = applyMarkerRippleClosing(applyShifts(next, shifts), [merged]);
 
   const anchorAfter = next.tracks.find((t) => t.id === anchor.id)!;
   const removedClipIds = [...anchorBeforeIds].filter((id) => !anchorAfter.clips.some((c) => c.id === id));
@@ -178,7 +188,7 @@ export function rippleDeleteGap(timeline: Timeline, gap: GapSelection): RippleGa
       shifts.push(...s);
     }
   }
-  return { timeline: applyShifts(timeline, shifts) };
+  return { timeline: applyMarkerRippleClosing(applyShifts(timeline, shifts), [[gap.range]]) };
 }
 
 export function trimValues(clip: Clip, edge: "left" | "right", delta: number): { trimStart: number; trimEnd: number } {
@@ -208,7 +218,7 @@ export function syncLockedLeftRoom(track: Track, insertFrame: number): { room: n
 }
 
 export interface RippleTrimResize { clipId: string; trimStart: number; trimEnd: number; duration: number }
-export interface RippleTrimPlan { durationDelta: number; resizes: RippleTrimResize[]; shifts: ClipShift[]; blockedAtFrame: number | null }
+export interface RippleTrimPlan { durationDelta: number; resizes: RippleTrimResize[]; shifts: ClipShift[]; blockedAtFrame: number | null; leadEnd: number }
 
 export function planRippleTrim(
   timeline: Timeline,
@@ -236,7 +246,14 @@ export function planRippleTrim(
 
   let durationDelta = sourceDelta;
   let blockedAtFrame: number | null = null;
-  if (sourceDelta < 0) {
+  if (durationDelta < 0) {
+    const targetShrinkRoom = Math.min(
+      ...targetClips.map((c) => (c.durationFrames > 1 ? c.durationFrames - 1 : 0)),
+      Number.POSITIVE_INFINITY,
+    );
+    if (Number.isFinite(targetShrinkRoom)) durationDelta = Math.max(durationDelta, -targetShrinkRoom);
+  }
+  if (durationDelta < 0) {
     const limits: { room: number; obstacle: number }[] = [];
     for (const track of timeline.tracks) {
       if (!track.syncLocked || track.clips.some((c) => targetIds.has(c.id))) continue;
@@ -265,7 +282,7 @@ export function planRippleTrim(
     if (targetEnd === null && !track.syncLocked) continue;
     shifts.push(...computeRipplePush(track.clips, targetEnd ?? leadEnd, durationDelta, targetIds));
   }
-  return { durationDelta, resizes, shifts, blockedAtFrame };
+  return { durationDelta, resizes, shifts, blockedAtFrame, leadEnd };
 }
 
 export function applyRippleTrim(timeline: Timeline, plan: RippleTrimPlan): Timeline {
@@ -280,7 +297,7 @@ export function applyRippleTrim(timeline: Timeline, plan: RippleTrimPlan): Timel
       }),
     })),
   };
-  return applyShifts(resized, plan.shifts);
+  return applyMarkerRippleOpening(applyShifts(resized, plan.shifts), plan.leadEnd, plan.durationDelta);
 }
 
 export function rippleTrimClip(
@@ -332,7 +349,7 @@ export function rippleInsertClips(
     const t = timeline.tracks[ti]!;
     if (ti === trackIndex || t.syncLocked) shifts.push(...computeRipplePush(t.clips, atFrame, totalPush));
   }
-  let next = applyShifts(timeline, shifts);
+  let next = applyMarkerRippleOpening(applyShifts(timeline, shifts), atFrame, totalPush);
 
   let cursor = atFrame;
   for (const e of entries) {
@@ -473,7 +490,7 @@ export function rippleInsertClipsSpecs(
 
   const shifts: ClipShift[] = [];
   for (const ti of pushTracks) shifts.push(...computeRipplePush(next.tracks[ti]!.clips, atFrame, totalPush));
-  next = applyShifts(next, shifts);
+  next = applyMarkerRippleOpening(applyShifts(next, shifts), atFrame, totalPush);
 
   let cursor = atFrame;
   for (const sp of specs) {

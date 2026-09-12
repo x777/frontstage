@@ -41,8 +41,8 @@ to be.
 
 ## Tools
 
-43 tools, generated at build time from `packages/ai/src/tools/catalog.ts`'s
-`buildCatalog("mcp")` — the same 40 tools the in-app agent has, minus `read_skill`
+51 tools, generated at build time from `packages/ai/src/tools/catalog.ts`'s
+`buildCatalog("mcp")` — the in-app agent catalog minus `read_skill`
 (in-app-agent only), plus three project-navigation tools that only make sense
 from outside the running window (`get_projects`, `open_project`, `new_project`).
 
@@ -50,8 +50,11 @@ from outside the running window (`get_projects`, `open_project`, `new_project`).
 
 | Tool | Description |
 |---|---|
-| `get_timeline` | Returns a JSON summary of the current timeline: fps, dimensions, tracks, and clips. |
-| `get_media` | Returns the media manifest entries available in the project. |
+| `get_timeline` | Returns a JSON summary of the current timeline: fps, dimensions, tracks, clips, markers, and (when the project has more than one) the timeline list. |
+| `create_timeline` | Creates a timeline and switches to it. Optional `from` duplicates an existing timeline with new clip/track ids. |
+| `set_active_timeline` | Switches the active timeline every read and edit tool targets. |
+| `manage_markers` | Creates, updates, or deletes one timeline marker (`action`: create/update/delete). |
+| `get_media` | Returns the media manifest entries available in the project (and the timeline list when there is more than one). |
 | `inspect_media` | Returns full metadata for a single media entry by id. |
 | `inspect_timeline` | See the composited timeline — what the user actually sees in the preview at a given frame: all video tracks stacked with their transforms, opacity, crop, and keyframes applied, plus text and caption overlays baked in. Use this to verify your edits landed (a PIP's position, a title's placement, layer order) — `inspect_media` shows the raw source asset, not the cut. Frames are project frames (from `get_timeline`). Pass a single `startFrame` for one composited frame; add `endFrame` to sample `maxFrames` evenly across `[startFrame, endFrame)` for a transition or sequence. Frames past content render black. Returns frames downscaled for token efficiency, with the frame numbers sampled. Rendering seeks the preview to render each frame — the visible playhead may move as a result. |
 | `search_media` | Searches media manifest entries. `scope='visual'` matches by semantic similarity to the query over the indexed visual library (SigLIP embeddings of sampled frames), plus name matching (case-insensitive substring) which always runs over every entry regardless of visual-index status; if the visual model isn't downloaded yet, the first visual/both search asks for confirmation (`confirm: true`) before starting the one-time download. `scope='spoken'` matches cached transcript text (case/diacritic-insensitive, never transcribes); `scope='both'` (default) unions the two. |
@@ -63,10 +66,12 @@ from outside the running window (`get_projects`, `open_project`, `new_project`).
 | `add_clips` | Adds one or more clips to the timeline. Each clip references a media entry by id. All clips are added as a single undo step. |
 | `remove_clips` | Removes one or more clips from the timeline by id. All removals are one undo step. |
 | `remove_tracks` | Removes one or more tracks from the timeline by id. All removals are one undo step. |
+| `manage_tracks` | Reorders, names, mutes/hides/sync-locks, or removes tracks in one undoable action. Prefers stable `trackId` selectors; returns V1/A1 labels separately from user-authored names. |
 | `move_clips` | Moves one or more clips to new track/frame positions. All moves are one undo step. |
 | `split_clip` | Splits a clip at the given frame, producing two clips. This is one undo step. |
 | `split_clips` | Splits one or more clips, each at a given frame. Each split keeps the left half's id and creates a new right-half clip. All splits are a single undo step. |
 | `trim_clips` | Trims one or more clips by adjusting their left or right edge by `deltaFrames`. All trims are one undo step. |
+| `swap_clip_media` | Replaces a clip's library source (and linked partners that share it) while keeping timing, framing, effects, and keyframes. Refuses text and nested timelines. |
 | `ripple_delete_ranges` | Ripple-deletes frame ranges on a track: cuts the ranges and shifts later clips (and non-ignored sync-locked tracks) left to close the gaps. Refuses if a sync-locked track would collide. |
 | `insert_clips` | Ripple-inserts clips at a frame on a track: opens a gap (pushing later clips and sync-locked + linked-audio tracks right), then drops the clips in. Each references a media entry by id. `durationFrames` and `trimStartFrame`/`trimEndFrame` are optional and mutually constrained; omit all three to use the full source. Untrimmed source stays as headroom for later extension. |
 | `apply_layout` | Arranges multiple clips into a common multi-video layout (split screen, picture-in-picture, grid) in one undoable action. Pick a named layout and assign a clip to each of its slots; the tool computes every transform and crop so each clip fills its region edge-to-edge (cover-crop) or letterboxes (`fit='fit'`). Give each slot either a `mediaRef` (creates a new stacked track with linked audio) or `clipIds` (re-layouts existing clips into that slot) — don't mix modes across slots. Layouts: `full`; `side_by_side`; `top_bottom`; `pip_bottom_right`/`pip_bottom_left`/`pip_top_right`/`pip_top_left`; `grid_2x2`; `main_sidebar`; `three_up`. |
@@ -76,6 +81,7 @@ from outside the running window (`get_projects`, `open_project`, `new_project`).
 | Tool | Description |
 |---|---|
 | `set_clip_properties` | Sets one or more properties on a clip (opacity, volume, speed, transform, crop, textStyle). All property updates are a single undo step. |
+| `copy_clip_settings` | Copies one clip's static look (transform/crop/opacity/effects, or text style/fill, or audio volume) onto same-type targets. Placement, duration, trims, speed, fades, and top-level keyframes stay put. |
 | `set_keyframes` | Sets or removes keyframes on a clip's animation track. All keyframe changes are a single undo step. |
 | `add_texts` | Adds one or more text clips to the timeline. All additions are a single undo step. |
 
@@ -103,7 +109,8 @@ from outside the running window (`get_projects`, `open_project`, `new_project`).
 |---|---|
 | `get_transcript` | Returns the timeline's spoken-word transcript as project-frame words grouped by clip. Paged at 10,000 words; continue with `startFrame = nextStartFrame`. Read-only. |
 | `remove_words` | Word-precise ripple cut: removes the given transcript words (`get_transcript` index, an inclusive `[start, end]` span, or exact-text matches) from the timeline and closes the gap. One undo step. |
-| `add_captions` | Generates timed captions from the timeline's spoken-word transcript and places them as text clips on a new video track. Targets explicit clipIds, or auto-detects the dominant speech track. One undo step. |
+| `remove_silence` | Removes quiet, speech-free sections from timeline audio and ripple-closes the gaps. Cuts linked A/V partners in one undo. Optional `clipIds`, `minimumPauseSeconds`, `speechPaddingSeconds`. No transcript required. |
+| `add_captions` | Generates timed captions from the timeline's spoken-word transcript and places them as text clips on a new video track. Targets explicit clipIds, or auto-detects the dominant speech track. One undo step. Alternatively, pass `subtitleMediaRef` (a subtitle asset from `import_media`) to place that SRT/WebVTT file's cues at their authored timecodes — mutually exclusive with every other parameter. |
 
 ### Media library
 
@@ -116,7 +123,8 @@ from outside the running window (`get_projects`, `open_project`, `new_project`).
 | `rename_folder` | Renames folders in the media panel. One folder (`folderId`/`name`) or several (`entries`) — not both. |
 | `delete_media` | Deletes media assets from the library. Any clips referencing them are removed from the timeline in the same undoable action. |
 | `delete_folder` | Deletes folders and everything inside them (subfolders and assets). Clips referencing any deleted asset are removed from the timeline in the same undoable action. |
-| `import_media` | Imports external media into the project's library — the bridge for assets from other MCP servers (stock libraries, music services, web search) or local files. `source` sets exactly one of `url` (HTTPS, background download, max 5 GB), `path` (absolute local file or directory, desktop only, copied in the background — a directory imports recursively as folders), or `bytes` (base64 inline, ~15 MB max). Supported types: video (mp4, mov), audio (mp3, wav, aac, m4a, aiff, aifc, flac), image (png, jpg, jpeg, tiff, heic). Returns a placeholder asset id immediately; poll `get_media`. |
+| `import_media` | Imports external media into the project's library — the bridge for assets from other MCP servers (stock libraries, music services, web search) or local files. `source` sets exactly one of `url` (HTTPS, background download, max 5 GB), `path` (absolute local file or directory, desktop only, copied in the background — a directory imports recursively as folders), or `bytes` (base64 inline, ~15 MB max). Supported types: video (mp4, mov), audio (mp3, wav, aac, m4a, aiff, aifc, flac), image (png, jpg, jpeg, tiff, heic), subtitle (srt, vtt — place cues via `add_captions subtitleMediaRef`, not `add_clips`). Returns a placeholder asset id immediately; poll `get_media`. |
+| `extract_audio` | Extracts a video asset's soundtrack into a new audio library asset named `{source} (audio)`. Source video is unchanged. Desktop ffmpeg; not available on web. |
 | `create_matte` | Creates a solid-color PNG matte in the media library. |
 
 ### Export

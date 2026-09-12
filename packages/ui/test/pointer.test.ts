@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, type Timeline, type Track, type Clip } from "@frontstage/core";
-import { trimTickCommand, selectForwardScopeForKey } from "../src/timeline/pointer.js";
+import { EditorStore, defaultTimeline, defaultTransform, defaultCrop, makeGeometry, fadeHandleRenderX, type Timeline, type Track, type Clip } from "@frontstage/core";
+import { trimTickCommand, selectForwardScopeForKey, hitTest } from "../src/timeline/pointer.js";
 
 function clip(id: string, startFrame: number, durationFrames: number, over: Partial<Clip> = {}): Clip {
   return {
@@ -51,6 +51,20 @@ describe("trimTickCommand", () => {
     store.undo();
     expect(store.getSnapshot().timeline.tracks[0]!.clips.find((c) => c.id === "a")!.durationFrames).toBe(30);
     expect(store.canUndo()).toBe(false);
+  });
+});
+
+describe("hitTest fade knees", () => {
+  test("selected clip fade knee is a fade hit, not a trim edge", () => {
+    const c = clip("a", 0, 40, { fadeInFrames: 10 });
+    const tl = timeline([track("t", [c])]);
+    const store = new EditorStore(tl);
+    store.select(["a"]);
+    const geom = makeGeometry({ pixelsPerFrame: 2, trackHeights: [50] });
+    const kx = fadeHandleRenderX(0, 80, 10, 2);
+    const hit = hitTest(store.getSnapshot(), geom, kx, 24 + 16 + 4);
+    expect(hit.kind).toBe("fade");
+    if (hit.kind === "fade") expect(hit.edge).toBe("left");
   });
 });
 

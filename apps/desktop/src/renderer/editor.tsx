@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { EditorStore, ProjectSession, defaultTimeline, SAMPLER_VERSION } from "@frontstage/core";
 import type { MediaManifestEntry } from "@frontstage/core";
 import "@frontstage/ui/theme/tokens.css";
-import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold } from "@frontstage/ui";
+import { Editor, MediaLibrary, createEditorHost, localProjectStore, measureCaptionWidthFrac, MediaIndexingService, IndexingStatusRelay, createDomFrameTap, createDomOpenMedia, renderMattePng, encodeFrameJPEG, readConfirmThreshold, writeConfirmThreshold, WaveformCache } from "@frontstage/ui";
 import type { KeyConfig, FalKeyConfig, MediaIndexingHost, MediaIndexingFacade } from "@frontstage/ui";
 import { AgentSession, ChatSessionStore, ToolExecutor, buildCatalog, toolsToMcp, ImageGenerator, GenerationService, listLLMModels, listImageModels, defaultLLMModel, defaultImageModel, MODEL_CATALOG, makeEntryUrl, TranscriptionService, EmbeddingService, createTransformersPipelines, LocalAsrService, createTransformersAsrPipelines, SkillStore, SkillCatalog, skillsSection } from "@frontstage/ai";
 import type { GenerationHost, StartJobArgs, TranscriptionHost, ToolContext } from "@frontstage/ai";
@@ -41,6 +41,10 @@ import { renderSpanToMp4 } from "@frontstage/engine";
 const engineRef: { current: PlaybackEngine | null } = { current: null };
 const store = new EditorStore(defaultTimeline());
 const library = new MediaLibrary();
+const waveformCache = new WaveformCache();
+library.subscribe(() => {
+  waveformCache.ingestLibraryBytes(library.getSnapshot().entries, (e) => library.bytesFor(e));
+});
 const gateway = new DesktopGateway();
 const { host, wrappedGateway, appendGenerationLog, getGenerationLog } = createEditorHost(store, library, gateway);
 const session = new ProjectSession(host, wrappedGateway);
@@ -192,7 +196,12 @@ const generationFacade = {
   // generate_audio's video-to-audio span source (M14C T3) — the SAME headless export pipeline
   // the real export gateway drives (runExport), just silent (no audio) and shrunk to shortSide.
   renderSpanToMp4: (startFrame: number, frameCount: number, shortSide: number) =>
-    renderSpanToMp4(store.getSnapshot().timeline, library.byteSource, { startFrame, frameCount, shortSide }),
+    renderSpanToMp4(store.getSnapshot().timeline, library.byteSource, {
+      startFrame,
+      frameCount,
+      shortSide,
+      resolveTimeline: (id) => store.timelineById(id),
+    }),
   uploadFile: (bytes: Uint8Array, contentType: string, fileName: string) =>
     genGateway.uploadFile(bytes, contentType, fileName),
 };
@@ -231,6 +240,7 @@ const libraryFacade = {
   moveEntriesToFolder: (assetIds: string[], folderId: string | undefined) => library.moveEntriesToFolder(assetIds, folderId),
   deleteFolders: (ids: string[]) => library.deleteFolders(ids),
   deleteEntries: (ids: string[]) => library.deleteEntries(ids),
+  readEntryBytes: (id: string) => library.readEntryBytes(id),
 };
 
 // renderMatte (M13A T1, create_matte) is wired here rather than inside createDesktopMediaImport:
@@ -294,6 +304,17 @@ const toolContext: ToolContext = {
   embedding: embeddingFacade,
   library: libraryFacade,
   mediaImport: mediaImportFacade,
+  extractAudio: {
+    extract: async (mediaRef: string) => {
+      const r = await audioExtractor(mediaRef);
+      waveformCache.ingestWav(mediaRef, r.wav);
+      return { bytes: r.wav, durationSeconds: r.durationSeconds };
+    },
+  },
+  audioAnalysis: {
+    waveformSamples: (mediaRef) => waveformCache.samplesFor(mediaRef) as number[] | undefined,
+    quietNonSpeechMask: () => undefined,
+  },
   interopExport: interopExportFacade,
   projectName: () => session.getState().name,
   lut: createDesktopLut(library),
@@ -325,9 +346,8 @@ const mentionItems = library.getManifest().entries.map((e) => ({
   contextText: `@media ${e.name} (${e.type}, ${e.duration}s, id=${e.id})`,
 }));
 
-// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (43 tools: the 40 shared + the 3
-// project-nav) backs the MCP server; the in-app agent keeps the 41-tool executor above (the 40
-// shared + read_skill) — see catalog.ts's buildCatalog for the authoritative counts.
+// Register MCP bridge handler (main↔renderer IPC) — mcpExecutor (buildCatalog("mcp")) backs the
+// MCP server; the in-app agent keeps buildCatalog("inApp") — see catalog.ts.
 window.desktopMcp?.onBridgeRequest(async ({ id, kind, payload }) => {
   try {
     let result: unknown;
@@ -445,6 +465,7 @@ function FrontstageDesktopApp() {
       store={store}
       media={library.byteSource}
       library={library}
+      waveformCache={waveformCache}
       session={session}
       nativeFileMenu={isMac}
       exportGateway={exportGateway}

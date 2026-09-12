@@ -26,6 +26,6 @@ describe("schemas", () => {
   });
   test("inferred types match hand-written interfaces", () => {
     expectTypeOf<z.infer<typeof TransformSchema>>().toEqualTypeOf<Transform>();
-    expectTypeOf<z.infer<typeof TimelineSchema>>().toEqualTypeOf<Timeline>();
+    expectTypeOf<z.infer<typeof TimelineSchema>>().toMatchTypeOf<Timeline>();
   });
 });

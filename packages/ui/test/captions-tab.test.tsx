@@ -126,12 +126,27 @@ test("renders the source/style/preset controls", async () => {
   expect(screen.getByTestId("captions-centery-input")).toBeInTheDocument();
   expect(screen.getByTestId("captions-preset-gallery")).toBeInTheDocument();
   expect(screen.getByTestId("captions-generate")).toBeInTheDocument();
+  expect(screen.getByTestId("captions-remove-silence")).toBeInTheDocument();
+  expect(screen.getByTestId("silence-min-pause")).toBeInTheDocument();
+  expect(screen.getByTestId("silence-speech-padding")).toBeInTheDocument();
 
   const sourceSelect = screen.getByTestId("captions-source-select") as HTMLSelectElement;
   const optionLabels = Array.from(sourceSelect.options).map((o) => o.textContent);
   expect(optionLabels).toContain("Auto-detect");
   expect(optionLabels).toContain("Track V1");
   expect(optionLabels).not.toContain("Selected clips"); // no selection yet
+});
+
+test("Remove Silence calls executor.execute('remove_silence') with pause/padding", async () => {
+  const { store, library } = baseSetup();
+  const executor = makeExecutor();
+  render(<CaptionsTab store={store} executor={executor} transcription={makeTranscription()} library={library} />);
+  await waitFor(() => expect(screen.getByTestId("captions-remove-silence")).toBeInTheDocument());
+  await act(async () => { fireEvent.click(screen.getByTestId("captions-remove-silence")); });
+  expect(executor.execute).toHaveBeenCalledWith("remove_silence", expect.objectContaining({
+    minimumPauseSeconds: 0.5,
+    speechPaddingSeconds: 0.15,
+  }));
 });
 
 test("estimate: Cached — no credits used when every target ref is already cached", async () => {

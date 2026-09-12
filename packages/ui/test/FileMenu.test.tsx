@@ -21,6 +21,23 @@ test("no Export entries when onExport is omitted", () => {
   );
   openMenu();
   expect(screen.queryByTestId("file-export-video")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("file-import-captions")).not.toBeInTheDocument();
+});
+
+test("Import Captions shows when onImportCaptions is set, and invokes it", () => {
+  const onImportCaptions = vi.fn();
+  render(
+    <FileMenu
+      session={makeFakeSession()}
+      confirmDiscard={async () => true}
+      runProjectCommand={() => {}}
+      onImportCaptions={onImportCaptions}
+    />,
+  );
+  openMenu();
+  fireEvent.click(screen.getByTestId("file-import-captions"));
+  expect(onImportCaptions).toHaveBeenCalledTimes(1);
+  expect(screen.queryByTestId("file-import-captions")).not.toBeInTheDocument();
 });
 
 test("only the video export button shows when canExportXml and canExportCaptions are false", () => {

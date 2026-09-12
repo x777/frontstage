@@ -1,5 +1,7 @@
 import type { Clip } from "../clip.js";
 import { clipEndFrame } from "../clip.js";
+import type { TimelineMarker } from "../timeline-marker.js";
+import { markerEndFrame, markerIsRange } from "../timeline-marker.js";
 import type { Timeline } from "../timeline.js";
 import type { FrameRange, ClipShift } from "./ripple-types.js";
 import { rangeLength } from "./ripple-types.js";
@@ -70,6 +72,68 @@ export function validateShifts(trackClips: Clip[], shifts: ClipShift[]): string 
     }
   }
   return null;
+}
+
+function mapFrame(frame: number, ranges: FrameRange[]): number {
+  let mapped = frame;
+  for (const range of ranges) {
+    if (range.end <= frame) mapped -= rangeLength(range);
+    else if (range.start < frame) mapped -= frame - range.start;
+  }
+  return Math.max(0, mapped);
+}
+
+/** Close removed spans. One range list per shifting track; remap only tracks that still hold the marker. */
+export function rippleMarkersClosing(markers: TimelineMarker[], trackRanges: FrameRange[][]): TimelineMarker[] {
+  const mergedTracks = trackRanges
+    .map((ranges) => mergeRanges(ranges.filter((r) => rangeLength(r) > 0)))
+    .filter((ranges) => ranges.length > 0);
+  if (mergedTracks.length === 0) return markers;
+  return markers.flatMap((marker) => {
+    const surviving = mergedTracks.flatMap((ranges) => {
+      const start = mapFrame(marker.startFrame, ranges);
+      if (!markerIsRange(marker)) {
+        const removed = ranges.some((r) => r.start <= marker.startFrame && marker.startFrame < r.end);
+        return removed ? [] : [{ start, end: start }];
+      }
+      const end = mapFrame(markerEndFrame(marker), ranges);
+      return end > start ? [{ start, end }] : [];
+    });
+    const first = surviving[0];
+    if (!first) return [];
+    const startFrame = Math.min(...surviving.map((s) => s.start));
+    if (!markerIsRange(marker)) return [{ ...marker, startFrame }];
+    const newEnd = Math.min(...surviving.map((s) => s.end));
+    if (newEnd <= startFrame) return [];
+    return [{ ...marker, startFrame, durationFrames: newEnd - startFrame }];
+  });
+}
+
+/** Open a gap at `insertFrame`. Negative `pushAmount` closes `[insertFrame + pushAmount, insertFrame)`. */
+export function rippleMarkersOpening(markers: TimelineMarker[], insertFrame: number, pushAmount: number): TimelineMarker[] {
+  if (pushAmount === 0) return markers;
+  if (pushAmount < 0) {
+    return rippleMarkersClosing(markers, [[{ start: insertFrame + pushAmount, end: insertFrame }]]);
+  }
+  return markers.map((marker) => {
+    if (marker.startFrame >= insertFrame) return { ...marker, startFrame: marker.startFrame + pushAmount };
+    if (markerIsRange(marker) && markerEndFrame(marker) > insertFrame) {
+      return { ...marker, durationFrames: marker.durationFrames + pushAmount };
+    }
+    return marker;
+  });
+}
+
+export function applyMarkerRippleClosing(timeline: Timeline, trackRanges: FrameRange[][]): Timeline {
+  const markers = timeline.markers ?? [];
+  if (markers.length === 0) return timeline;
+  return { ...timeline, markers: rippleMarkersClosing(markers, trackRanges) };
+}
+
+export function applyMarkerRippleOpening(timeline: Timeline, insertFrame: number, pushAmount: number): Timeline {
+  const markers = timeline.markers ?? [];
+  if (markers.length === 0 || pushAmount === 0) return timeline;
+  return { ...timeline, markers: rippleMarkersOpening(markers, insertFrame, pushAmount) };
 }
 
 export function applyShifts(timeline: Timeline, shifts: ClipShift[]): Timeline {

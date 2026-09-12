@@ -38,6 +38,8 @@ export const theme = {
     image: "var(--track-image)",
     text: "var(--track-text)",
     lottie: "var(--track-lottie)",
+    subtitle: "var(--track-text)",
+    sequence: "var(--track-video)",
   },
   opacity: {
     subtle: "var(--opacity-subtle)",

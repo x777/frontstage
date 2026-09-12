@@ -10,6 +10,9 @@ import {
   addClipCommand,
   clipTypesCompatible,
   TEXT_ANIMATION_PRESETS,
+  TEXT_FILL_MODES,
+  setClipTextFillModeCommand,
+  parseTextFillMode,
   type KeyframeTrackKey,
 } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
@@ -29,6 +32,9 @@ const TextStyleSchema = z.object({
   fontName: z.string(),
   fontSize: z.number().finite(),
   fontScale: z.number().finite(),
+  widthScale: z.number().finite().min(0.1).max(10).optional(),
+  heightScale: z.number().finite().min(0.1).max(10).optional(),
+  blur: z.number().finite().min(0).optional(),
   color: RGBASchema,
   alignment: z.enum(["left", "center", "right"]),
   shadow: ShadowSchema,
@@ -65,7 +71,7 @@ const KEYFRAME_TRACK_KEYS = ["opacityTrack", "positionTrack", "scaleTrack", "rot
 export function setClipPropertiesTool(): ToolSpec {
   return {
     name: "set_clip_properties",
-    description: "Sets one or more properties on a clip (opacity, volume, speed, transform, crop, textStyle). All property updates are a single undo step.",
+    description: "Sets one or more properties on a clip (opacity, volume, speed, transform, crop, textStyle, fillMode). All property updates are a single undo step.",
     inputSchema: z.object({
       clipId: z.string(),
       properties: z.object({
@@ -75,6 +81,7 @@ export function setClipPropertiesTool(): ToolSpec {
         transform: TransformSchema.optional(),
         crop: CropSchema.optional(),
         textStyle: TextStyleSchema.optional(),
+        fillMode: z.enum(["color", "footage", "inverted"]).optional(),
       }),
     }),
     run(args, ctx) {
@@ -87,6 +94,7 @@ export function setClipPropertiesTool(): ToolSpec {
           transform?: z.infer<typeof TransformSchema>;
           crop?: z.infer<typeof CropSchema>;
           textStyle?: z.infer<typeof TextStyleSchema>;
+          fillMode?: (typeof TEXT_FILL_MODES)[number];
         };
       };
       const tl = ctx.store.getSnapshot().timeline;
@@ -118,6 +126,12 @@ export function setClipPropertiesTool(): ToolSpec {
       }
       if (properties.textStyle !== undefined) {
         const cmd = setClipTextStyleCommand(clipId, properties.textStyle);
+        reducers.push(cmd.apply.bind(cmd));
+      }
+      if (properties.fillMode !== undefined) {
+        const mode = parseTextFillMode(properties.fillMode);
+        if (!mode) return errorResult(`fillMode must be one of ${TEXT_FILL_MODES.join(", ")}`);
+        const cmd = setClipTextFillModeCommand(clipId, mode, properties.textStyle?.color);
         reducers.push(cmd.apply.bind(cmd));
       }
 
@@ -221,7 +235,10 @@ export function setKeyframesTool(): ToolSpec {
 export function addTextsTool(): ToolSpec {
   return {
     name: "add_texts",
-    description: "Adds one or more text clips to the timeline. All additions are a single undo step.",
+    description:
+      "Adds one or more text clips to the timeline. fillMode color (default) is solid typography; " +
+      "footage stencils layers below through the glyphs over a matte (black if color is omitted); " +
+      "inverted is white Difference-blended glyphs. style.widthScale/heightScale stretch glyphs (0.1–10); style.blur is whole-layer Gaussian blur in 1080p pixels. One undo step.",
     inputSchema: z.object({
       texts: z.array(z.object({
         content: z.string(),
@@ -230,6 +247,7 @@ export function addTextsTool(): ToolSpec {
         trackIndex: z.number().finite().int().optional(),
         style: TextStyleSchema.optional(),
         animation: TextAnimationSchema.optional(),
+        fillMode: z.enum(["color", "footage", "inverted"]).optional(),
       })).min(1),
     }),
     run(args, ctx) {
@@ -241,6 +259,7 @@ export function addTextsTool(): ToolSpec {
           trackIndex?: number;
           style?: z.infer<typeof TextStyleSchema>;
           animation?: z.infer<typeof TextAnimationSchema>;
+          fillMode?: (typeof TEXT_FILL_MODES)[number];
         }[];
       };
       const tl = ctx.store.getSnapshot().timeline;
@@ -300,6 +319,10 @@ export function addTextsTool(): ToolSpec {
         if (text.style) {
           const styleCmd = setClipTextStyleCommand(clipId, text.style);
           reducers.push(styleCmd.apply.bind(styleCmd));
+        }
+        if (text.fillMode) {
+          const fillCmd = setClipTextFillModeCommand(clipId, text.fillMode, text.style?.color);
+          reducers.push(fillCmd.apply.bind(fillCmd));
         }
 
         // wordTimings is intentionally left unset here — a per-word preset with no wordTimings

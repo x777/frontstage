@@ -3,6 +3,7 @@ import { type Crop, type Transform, lerpCrop } from "./transform.js";
 import { linearFromDb } from "./volume-scale.js";
 import type { ClipType } from "./clip-type.js";
 import type { RGBA, TextStyle } from "./text-style.js";
+import type { TextFillMode } from "./text-fill-mode.js";
 import type { Effect } from "./color/effect.js";
 import type { BlendMode } from "./color/blend-mode.js";
 import type { TextAnimationPreset, TextWordTiming } from "./text-animation.js";
@@ -29,6 +30,8 @@ export interface Clip {
   captionGroupId?: string;
   textContent?: string;
   textStyle?: TextStyle;
+  /** Palmier `Clip.textFillMode` — omitted means `color`. */
+  textFillMode?: TextFillMode;
   textAnimation?: { preset: TextAnimationPreset; highlightColor?: RGBA };
   /** Clip-relative frames (unlike Swift's WordTiming, which TextFrameRenderer reads the same way per clip). */
   wordTimings?: TextWordTiming[];

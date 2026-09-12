@@ -1,4 +1,4 @@
-import { timelineTotalFrames, fitShortestSide, type Timeline } from "@frontstage/core";
+import { timelineTotalFrames, fitShortestSide, type Timeline, type TimelineResolver } from "@frontstage/core";
 import { SourceCoordinator } from "../compositor/source-coordinator.js";
 import type { MediaByteSource } from "../media/media-source.js";
 import { FrameRenderer } from "../render/webgpu-renderer.js";
@@ -18,6 +18,7 @@ export interface SpanRenderOptions {
   includeAudio?: boolean;
   width?: number;
   height?: number;
+  resolveTimeline?: TimelineResolver;
 }
 
 export async function runExport(
@@ -37,7 +38,7 @@ export async function runExport(
 
   const offscreen = new OffscreenCanvas(width, height);
   const renderer = await FrameRenderer.create(offscreen);
-  const coord = await SourceCoordinator.create(timeline, media);
+  const coord = await SourceCoordinator.create(timeline, media, renderOpts?.resolveTimeline);
   const mixer = includeAudio ? await AudioMixer.create(timeline, media) : undefined;
 
   await sink.configure({
@@ -116,7 +117,7 @@ export async function exportTimelineToMp4(
 export async function renderSpanToMp4(
   timeline: Timeline,
   media: MediaByteSource,
-  opts: { startFrame: number; frameCount: number; shortSide?: number },
+  opts: { startFrame: number; frameCount: number; shortSide?: number; resolveTimeline?: TimelineResolver },
 ): Promise<Uint8Array> {
   const { width, height } = opts.shortSide != null
     ? fitShortestSide(timeline.width, timeline.height, opts.shortSide)
@@ -128,6 +129,7 @@ export async function renderSpanToMp4(
     includeAudio: false,
     width,
     height,
+    resolveTimeline: opts.resolveTimeline,
   });
   if (!blob) throw new Error("Span render produced no output");
   return new Uint8Array(await blob.arrayBuffer());

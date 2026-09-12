@@ -25,6 +25,7 @@ export function handleEditorKeydown(e: KeyboardEvent, store: EditorStore): boole
   switch (e.key.toLowerCase()) {
     case "v": store.setToolMode("pointer"); return true;
     case "c": store.setToolMode("razor"); return true;
+    case "t": store.setToolMode("trim"); return true;
     case "q": store.dispatch(trimStartToPlayheadCommand([...snap.selection], snap.playhead)); return true;
     case "w": store.dispatch(trimEndToPlayheadCommand([...snap.selection], snap.playhead)); return true;
     default: return false;

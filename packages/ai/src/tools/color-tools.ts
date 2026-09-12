@@ -6,6 +6,7 @@ import {
   computeScopes,
   scopesGap,
   effectDescriptor,
+  nonColorEffectCatalog,
   parseCubeLUT,
   type ApplyColorInput,
   type Effect,
@@ -160,7 +161,9 @@ export function applyEffectTool(): ToolSpec {
   return {
     name: "apply_effect",
     description:
-      "Adds/updates or removes non-color effects (blur, chroma key, vignette, grain, glow, etc.) on clips. Rejects color.* — use apply_color. One undo step.",
+      "Adds/updates or removes non-color effects (blur, sharpen, stylize, detail, key) on clips. Rejects color.* — use apply_color. One undo step. " +
+      "Available effects — type: param (range, default):\n" +
+      nonColorEffectCatalog(),
     inputSchema: z.object({
       clipIds: z.array(z.string()).min(1),
       effects: z
@@ -185,13 +188,28 @@ export function applyEffectTool(): ToolSpec {
         if (e.type.startsWith("color.")) {
           return errorResult(`'${e.type}' is a color effect — use apply_color instead`);
         }
-        if (!effectDescriptor(e.type)) {
+        const d = effectDescriptor(e.type);
+        if (!d) {
           return errorResult(`unknown effect type: '${e.type}'`);
+        }
+        if (e.params) {
+          const allowed = new Set(d.params.map((p) => p.key));
+          const unknown = Object.keys(e.params).filter((k) => !allowed.has(k)).sort();
+          if (unknown.length > 0) {
+            return errorResult(
+              `${e.type}: unknown param(s) '${unknown.join("', '")}'. Allowed: ${[...allowed].sort().join(", ")}.`,
+            );
+          }
         }
       }
       const tl = ctx.store.getSnapshot().timeline;
       for (const id of a.clipIds) {
-        if (!findClip(tl, id)) return errorResult(`unknown clip: ${id}`);
+        const loc = findClip(tl, id);
+        if (!loc) return errorResult(`unknown clip: ${id}`);
+        const clip = tl.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+        if (clip.mediaType !== "video" && clip.mediaType !== "image") {
+          return errorResult(`Clip ${id} is a ${clip.mediaType} clip; apply_effect needs a video or image clip.`);
+        }
       }
       const reducer = (t: Timeline): Timeline => ({
         ...t,

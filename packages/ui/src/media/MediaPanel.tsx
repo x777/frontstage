@@ -431,7 +431,7 @@ export function MediaPanel({ library, onItemPointerDown, store, executor, transc
               ref={fileInputRef}
               type="file"
               multiple
-              accept="video/*,image/*,audio/*"
+              accept="video/*,image/*,audio/*,.srt,.vtt,application/x-subrip,text/vtt"
               style={{ display: "none" }}
               onChange={handleFileChange}
             />
@@ -631,7 +631,7 @@ function MediaItem({ entry, thumbnail, onPointerDown }: MediaItemProps) {
   const status = parseGenerationStatus(entry.generationStatus);
   const isGenerating = status.kind !== "none" && status.kind !== "failed";
   const isFailed = status.kind === "failed";
-  const showsDurationBadge = (entry.type === "video" || entry.type === "audio") && entry.duration > 0;
+  const showsDurationBadge = (entry.type === "video" || entry.type === "audio" || entry.type === "subtitle") && entry.duration > 0;
   const { hovered, hoverProps } = useHover();
 
   return (

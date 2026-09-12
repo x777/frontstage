@@ -504,3 +504,97 @@ describe("add_captions — findClip sanity", () => {
     expect(loc).not.toBeNull();
   });
 });
+
+describe("add_captions subtitleMediaRef", () => {
+  const srt = "1\n00:00:01,000 --> 00:00:02,000\nHello.\n\n2\n00:00:03,000 --> 00:00:04,000\nWorld.\n";
+
+  function subtitleEntry(id: string, over: Partial<MediaManifestEntry> = {}): MediaManifestEntry {
+    return {
+      id,
+      name: "captions.srt",
+      type: "subtitle",
+      source: { kind: "project", relativePath: "media/captions.srt" },
+      duration: 4,
+      ...over,
+    };
+  }
+
+  function subtitleCtx(over: {
+    entries?: MediaManifestEntry[];
+    bytes?: Uint8Array;
+    noRead?: boolean;
+  } = {}): ToolContext {
+    const entries = over.entries ?? [subtitleEntry("subs")];
+    const bytes = over.bytes ?? new TextEncoder().encode(srt);
+    return makeCtx(timelineOf(track("t0", "video", [baseClip({ id: "v1" })])), manifestOf(...entries), undefined, {
+      library: {
+        listFolders: () => [],
+        createFolder: () => ({ id: "f", name: "f" }),
+        renameFolder: () => {},
+        renameEntry: () => {},
+        moveEntriesToFolder: () => {},
+        deleteFolders: () => ({ removedAssetIds: [] }),
+        deleteEntries: () => {},
+        ...(over.noRead
+          ? {}
+          : {
+              readEntryBytes: async () => bytes,
+            }),
+      },
+    });
+  }
+
+  test("places subtitle cues as captions at their timecodes without transcription", async () => {
+    const ctx = subtitleCtx();
+    const result = await addCaptionsTool().run({ subtitleMediaRef: "subs" }, ctx);
+    expect(result.isError).toBe(false);
+    const out = JSON.parse(textOf(result));
+    expect(out.captionsAdded).toBe(2);
+    const captions = textClips(ctx.store);
+    expect(captions.map((c) => c.textContent)).toEqual(["Hello.", "World."]);
+    expect(captions.map((c) => c.startFrame)).toEqual([30, 90]);
+    expect(captions.every((c) => c.captionGroupId === out.captionGroupId)).toBe(true);
+  });
+
+  test("one undo restores the timeline", async () => {
+    const ctx = subtitleCtx();
+    const before = ctx.store.getSnapshot().timeline;
+    await addCaptionsTool().run({ subtitleMediaRef: "subs" }, ctx);
+    expect(textClips(ctx.store).length).toBe(2);
+    ctx.store.undo();
+    expect(ctx.store.getSnapshot().timeline.tracks).toEqual(before.tracks);
+  });
+
+  test("rejects combined options, wrong types, missing assets, and malformed files", async () => {
+    const combined = await addCaptionsTool().run({ subtitleMediaRef: "subs", maxWords: 3 }, subtitleCtx());
+    expect(combined.isError).toBe(true);
+    expect(textOf(combined)).toContain("maxWords");
+
+    const missing = await addCaptionsTool().run({ subtitleMediaRef: "nope" }, subtitleCtx());
+    expect(missing.isError).toBe(true);
+    expect(textOf(missing)).toContain("media asset not found");
+
+    const video = await addCaptionsTool().run(
+      { subtitleMediaRef: "m" },
+      subtitleCtx({ entries: [mediaEntry("m", { hasAudio: true })] }),
+    );
+    expect(video.isError).toBe(true);
+    expect(textOf(video)).toContain("not a subtitle file");
+
+    const malformedCtx = subtitleCtx({ bytes: new TextEncoder().encode("garbage --> nonsense\nBroken.\n") });
+    const malformed = await addCaptionsTool().run({ subtitleMediaRef: "subs" }, malformedCtx);
+    expect(malformed.isError).toBe(true);
+    expect(textOf(malformed)).toContain("Malformed cue timing at line 1");
+    expect(textClips(malformedCtx.store)).toHaveLength(0);
+
+    const offline = await addCaptionsTool().run({ subtitleMediaRef: "subs" }, subtitleCtx({ noRead: true }));
+    expect(offline.isError).toBe(true);
+    expect(textOf(offline)).toContain("offline");
+  });
+
+  test("empty subtitleMediaRef is rejected", async () => {
+    const result = await addCaptionsTool().run({ subtitleMediaRef: "" }, subtitleCtx());
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("subtitleMediaRef");
+  });
+});

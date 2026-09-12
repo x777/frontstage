@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { PlaybackEngine } from "@frontstage/engine";
 import type { MediaByteSource } from "@frontstage/engine";
-import type { EditorStore, Timeline } from "@frontstage/core";
-import { timelineTotalFrames } from "@frontstage/core";
+import type { CanvasOverlaySelection, EditorStore, Timeline } from "@frontstage/core";
+import { emptyCanvasOverlaySelection, timelineTotalFrames } from "@frontstage/core";
 import { theme } from "../theme/theme.js";
 import { TransportBar } from "./TransportBar.js";
 import { TransformOverlay } from "./TransformOverlay.js";
 import { CropOverlay } from "./CropOverlay.js";
+import { CanvasViewingOverlay } from "./CanvasViewingOverlay.js";
+import { CanvasGuidesMenu } from "./CanvasGuidesMenu.js";
 import { useStore } from "../store/use-store.js";
 import { selectClipAtPreviewPoint } from "./preview-hit-test.js";
 
@@ -39,6 +41,7 @@ export function PreviewPanel({ store, media, engineRef: engineRefProp }: Preview
   // used to force a re-render when the engine becomes ready
   const [engineReady, setEngineReady] = useState(false);
   const [canvasRect, setCanvasRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [canvasOverlays, setCanvasOverlays] = useState<CanvasOverlaySelection>(() => emptyCanvasOverlaySelection());
 
   useEffect(() => {
     // StrictMode double-mount guard: mountedRef stays true so the re-invoke doesn't create a
@@ -69,6 +72,7 @@ export function PreviewPanel({ store, media, engineRef: engineRefProp }: Preview
       prevTimelineRef.current = snap.timeline;
       prevPlayheadRef.current = snap.playhead;
 
+      engine.setResolveTimeline((id) => store.timelineById(id));
       await engine.load(snap.timeline, media);
       if (abortRef.current) { engine.dispose(); return; }
 
@@ -220,6 +224,18 @@ export function PreviewPanel({ store, media, engineRef: engineRefProp }: Preview
         >
           {canvasRect && <TransformOverlay store={store} canvasRect={canvasRect} />}
           {canvasRect && <CropOverlay store={store} canvasRect={canvasRect} />}
+          {canvasRect && <CanvasViewingOverlay selection={canvasOverlays} canvasRect={canvasRect} />}
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            top: theme.spacing.xs,
+            right: theme.spacing.xs,
+            pointerEvents: "auto",
+            zIndex: 5,
+          }}
+        >
+          <CanvasGuidesMenu selection={canvasOverlays} onChange={setCanvasOverlays} />
         </div>
       </div>
       {engineReady && engineRef.current ? (

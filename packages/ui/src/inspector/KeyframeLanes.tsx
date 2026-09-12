@@ -85,6 +85,7 @@ function laneTint(sourceClipType: ClipType): string {
     case "image": return theme.track.image;
     case "text": return theme.track.text;
     case "lottie": return theme.track.lottie;
+    case "subtitle": return theme.track.text;
     default: return theme.track.video;
   }
 }

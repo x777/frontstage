@@ -176,6 +176,14 @@ test("bytesFor: undefined for a non-project source", () => {
   expect(lib.bytesFor(entry)).toBeUndefined();
 });
 
+test("readEntryBytes: returns in-memory bytes for a finalized project entry", async () => {
+  const lib = new MediaLibrary();
+  const entry = realEntry("a");
+  const bytes = new Uint8Array([1, 2, 3]);
+  lib.addEntry(entry, bytes);
+  await expect(lib.readEntryBytes("a")).resolves.toEqual(bytes);
+});
+
 test("readMedia: delegates to the configured gateway", async () => {
   const lib = new MediaLibrary();
   const reads: string[] = [];
@@ -719,6 +727,32 @@ test("importFiles: a failing file is marked failed, the rest still finalize (fai
   expect(okEntry.sourceWidth).toBe(12);
   expect(badEntry.generationStatus).toMatch(/^failed: /);
   expect(badEntry.generationStatus).toMatch(/bad image data/);
+});
+
+test("importFiles: srt becomes a subtitle asset with duration from the last cue", async () => {
+  const lib = new MediaLibrary();
+  const srt = "1\n00:00:01,000 --> 00:00:02,000\nHello.\n\n2\n00:00:03,000 --> 00:00:04,000\nWorld.\n";
+  const file = fakeFile("captions.srt", "application/x-subrip", new TextEncoder().encode(srt));
+
+  const added = await lib.importFiles([file]);
+  await flushAsync();
+
+  const entry = lib.entry(added[0]!.id)!;
+  expect(entry.type).toBe("subtitle");
+  expect(entry.generationStatus).toBeUndefined();
+  expect(entry.duration).toBe(4);
+});
+
+test("importFiles: malformed srt is marked failed and stays in the library", async () => {
+  const lib = new MediaLibrary();
+  const file = fakeFile("broken.srt", "application/x-subrip", new TextEncoder().encode("garbage --> nonsense\nBroken.\n"));
+
+  const added = await lib.importFiles([file]);
+  await flushAsync();
+
+  const entry = lib.entry(added[0]!.id)!;
+  expect(entry.type).toBe("subtitle");
+  expect(entry.generationStatus).toMatch(/^failed: /);
 });
 
 test("importFiles (delete-during-import race, M12A final review L1): deleting the entry before finalize lands leaves no dangling thumbnail-map entry", async () => {

@@ -12,6 +12,9 @@ import { buildCatalog, ToolExecutor, type ToolContext } from "../src/index.js";
 
 const EXPECTED_NAMES = [
   "get_timeline",
+  "create_timeline",
+  "set_active_timeline",
+  "manage_markers",
   "get_media",
   "inspect_media",
   "inspect_timeline",
@@ -19,11 +22,14 @@ const EXPECTED_NAMES = [
   "add_clips",
   "remove_clips",
   "remove_tracks",
+  "manage_tracks",
   "move_clips",
   "split_clip",
   "split_clips",
   "trim_clips",
+  "swap_clip_media",
   "set_clip_properties",
+  "copy_clip_settings",
   "set_keyframes",
   "add_texts",
   "generate_image",
@@ -39,6 +45,7 @@ const EXPECTED_NAMES = [
   "inspect_color",
   "get_transcript",
   "remove_words",
+  "remove_silence",
   "add_captions",
   "list_folders",
   "create_folder",
@@ -48,6 +55,7 @@ const EXPECTED_NAMES = [
   "delete_media",
   "delete_folder",
   "import_media",
+  "extract_audio",
   "create_matte",
   "export_project",
   "set_project_settings",
@@ -112,15 +120,15 @@ function makeCtx(store: EditorStore): ToolContext {
 }
 
 describe("buildCatalog", () => {
-  test("returns exactly 41 specs", () => {
+  test("returns exactly 49 specs", () => {
     const catalog = buildCatalog();
-    expect(catalog).toHaveLength(41);
+    expect(catalog).toHaveLength(49);
   });
 
   test("all names are unique", () => {
     const catalog = buildCatalog();
     const names = catalog.map((s) => s.name);
-    expect(new Set(names).size).toBe(41);
+    expect(new Set(names).size).toBe(49);
   });
 
   test("names match the expected list exactly", () => {
@@ -129,6 +137,11 @@ describe("buildCatalog", () => {
     for (const expected of EXPECTED_NAMES) {
       expect(names).toContain(expected);
     }
+  });
+
+  test("apply_effect lists stylize.invert as no params", () => {
+    const tool = buildCatalog().find((s) => s.name === "apply_effect")!;
+    expect(tool.description).toContain("stylize.invert — Invert: no params");
   });
 
   test("each spec has name, description, inputSchema, and run", () => {
@@ -155,19 +168,19 @@ describe("buildCatalog", () => {
     expect(buildCatalog("mcp").map((s) => s.name)).not.toContain("read_skill");
   });
 
-  test('"mcp" returns exactly 43 specs: the 40 shared tools + the 3 project-nav tools, in order (unchanged by M15 T1)', () => {
+  test('"mcp" returns the shared tools + the 3 project-nav tools, in order', () => {
     const mcp = buildCatalog("mcp");
-    expect(mcp).toHaveLength(43);
+    expect(mcp).toHaveLength(51);
     // The shared base order, independent of either kind-specific tail (read_skill / the nav trio).
     const baseNames = buildCatalog("inApp").map((s) => s.name).filter((n) => n !== "read_skill");
     const mcpNames = mcp.map((s) => s.name);
-    expect(mcpNames.slice(0, 40)).toEqual(baseNames);
-    expect(mcpNames.slice(40)).toEqual(MCP_ONLY_NAMES);
+    expect(mcpNames.slice(0, baseNames.length)).toEqual(baseNames);
+    expect(mcpNames.slice(baseNames.length)).toEqual(MCP_ONLY_NAMES);
   });
 
   test('"mcp" names are unique', () => {
     const names = buildCatalog("mcp").map((s) => s.name);
-    expect(new Set(names).size).toBe(43);
+    expect(new Set(names).size).toBe(51);
   });
 });
 

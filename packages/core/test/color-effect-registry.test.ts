@@ -4,11 +4,20 @@ import { resolveParam, type Effect } from "../src/color/effect.js";
 import { BLEND_MODES } from "../src/color/blend-mode.js";
 
 describe("effect registry", () => {
-  it("declares all 20 effects in canonical order", () => {
-    expect(EFFECT_REGISTRY).toHaveLength(20);
+  it("declares all 21 effects in canonical order", () => {
+    expect(EFFECT_REGISTRY).toHaveLength(21);
     expect(EFFECT_REGISTRY[0]!.type).toBe("color.exposure");
-    expect(EFFECT_REGISTRY[19]!.type).toBe("stylize.glow");
+    expect(EFFECT_REGISTRY[17]!.type).toBe("stylize.invert");
+    expect(EFFECT_REGISTRY[20]!.type).toBe("stylize.glow");
     EFFECT_REGISTRY.forEach((d, i) => expect(canonicalIndex(d.type)).toBe(i));
+  });
+
+  it("stylize.invert has no params", () => {
+    const d = effectDescriptor("stylize.invert")!;
+    expect(d.displayName).toBe("Invert");
+    expect(d.params).toEqual([]);
+    const e = defaultEffect("stylize.invert", () => "inv")!;
+    expect(e.params).toEqual({});
   });
   it("marks color.exposure as the only linearizing effect", () => {
     expect(effectDescriptor("color.exposure")!.linearizes).toBe(true);

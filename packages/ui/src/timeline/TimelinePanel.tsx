@@ -14,11 +14,19 @@ import {
   moveDelta,
   trimLeftDelta,
   trimRightDelta,
+  fadeFramesFromCursor,
+  fadeKneeHit,
+  setFadeCommand,
   moveClipCommand,
   splitClipCommand,
   splitLinkedClipCommand,
   removeClipCommand,
   addClipCommand,
+  slipClipCommand,
+  isSlipEligible,
+  slipTargets,
+  slipHeadroom,
+  slipPropagationPartnerIds,
   clipFromAsset,
   dropTargetAt,
   insertionLineY,
@@ -42,6 +50,7 @@ import { hitTest, trimTickCommand, selectForwardScopeForKey } from "./pointer.js
 import type { MediaDragController } from "../media/media-drag.js";
 import { ClipContextMenu, type ClipContextMenuState } from "./ClipContextMenu.js";
 import { useStore } from "../store/use-store.js";
+import type { WaveformCache } from "../media/waveform-cache.js";
 
 const DRAG_THRESHOLD = 3;
 
@@ -55,6 +64,9 @@ export interface TimelinePanelProps {
   store: EditorStore;
   dragController?: MediaDragController;
   library?: TimelineLibraryLike;
+  waveformByRef?: Map<string, readonly number[]>;
+  waveformCache?: WaveformCache;
+  onExtractAudio?: (mediaRef: string) => void;
 }
 
 /** mediaRef (= entry.id) → serialized generationStatus, entries without one omitted. */
@@ -110,7 +122,7 @@ function resolvePalette(el: Element): TimelinePalette {
   };
 }
 
-export function TimelinePanel({ store, dragController, library }: TimelinePanelProps) {
+export function TimelinePanel({ store, dragController, library, waveformByRef, waveformCache, onExtractAudio }: TimelinePanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const snapLineXRef = useRef<number | null>(null);
@@ -181,12 +193,20 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       if (ghostPreviewRef.current) {
         overlays.ghostInsert = ghostPreviewRef.current;
       }
+      if (drag?.kind === "slip" && drag.lastAbsoluteDelta !== 0) {
+        overlays.slip = {
+          clipId: drag.clipId,
+          partnerIds: drag.propagateToLinked ? slipPropagationPartnerIds(snap.timeline, drag.clipId) : [],
+          deltaFrames: drag.lastAbsoluteDelta,
+        };
+      }
 
       const libraryEntries = library?.getSnapshot().entries;
       const statusByRef = libraryEntries ? generationStatusByRef(libraryEntries) : undefined;
       const nameByRef = libraryEntries ? mediaNameByRef(libraryEntries) : undefined;
 
-      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef, razorLineX);
+      const waveforms = waveformCache?.getSnapshot() ?? waveformByRef;
+      drawTimeline(ctx, snap, geom, { width: currentWidth, height: currentHeight, dpr: currentDpr }, palette, snapLineXRef.current, dropIndicatorRef.current, overlays, statusByRef, nameByRef, razorLineX, waveforms);
     }
 
     function scheduleDraw() {
@@ -229,6 +249,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
     const unsub = store.subscribe(scheduleDraw);
     // Library subscription — redraws the generating/failed clip scrim when a job finalizes or fails
     const unsubLibrary = library ? library.subscribe(scheduleDraw) : null;
+    const unsubWave = waveformCache ? waveformCache.subscribe(scheduleDraw) : null;
 
     // pointer: scrub + drag gestures (move, trim)
     let scrubbing = false;
@@ -241,8 +262,8 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
     type RangeDragState = { anchorFrame: number };
     let rangeDrag: RangeDragState | null = null;
 
-    // Drag state (move or trim)
-    type DragKind = "move" | "trim-left" | "trim-right";
+    // Drag state (move, trim, or slip)
+    type DragKind = "move" | "trim-left" | "trim-right" | "slip" | "fade-left" | "fade-right";
     type DragState = {
       kind: DragKind;
       clipId: string;
@@ -265,6 +286,12 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       // ripple trim (shift held at drag start; fixed for the gesture, like Swift's isRipple)
       isRipple: boolean;
       lastAbsoluteDelta: number;
+      // slip (Palmier T-tool body drag)
+      maxRightDelta: number;
+      maxLeftDelta: number;
+      propagateToLinked: boolean;
+      originalFadeIn: number;
+      originalFadeOut: number;
     } | null;
 
     let drag: DragState = null;
@@ -332,8 +359,35 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
         if (!clip) return;
 
         const hasNoSourceMedia = clip.mediaType === "image" || clip.mediaType === "text";
-
-        if (hit.edge === "left" || hit.edge === "right") {
+        const fadeEdge = fadeKneeHit(clip, clipRect(geom, clip, hit.trackIndex), x, y);
+        if (fadeEdge) {
+          cv.setPointerCapture(e.pointerId);
+          drag = {
+            kind: fadeEdge === "left" ? "fade-left" : "fade-right",
+            clipId: hit.clipId,
+            trackIndex: hit.trackIndex,
+            pointerId: e.pointerId,
+            downX: x,
+            downY: y,
+            started: true,
+            grabOffsetFrames: 0,
+            originalFrame: clip.startFrame,
+            originalTrackIndex: hit.trackIndex,
+            originalDuration: clip.durationFrames,
+            originalTrimStart: clip.trimStartFrame,
+            originalTrimEnd: clip.trimEndFrame,
+            originalStartFrame: clip.startFrame,
+            hasNoSourceMedia,
+            snapState: newSnapState(),
+            isRipple: false,
+            lastAbsoluteDelta: 0,
+            maxRightDelta: 0,
+            maxLeftDelta: 0,
+            propagateToLinked: true,
+            originalFadeIn: clip.fadeInFrames,
+            originalFadeOut: clip.fadeOutFrames,
+          };
+        } else if (hit.edge === "left" || hit.edge === "right") {
           // Start a trim drag
           cv.setPointerCapture(e.pointerId);
           drag = {
@@ -355,6 +409,41 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
             snapState: newSnapState(),
             isRipple: e.shiftKey,
             lastAbsoluteDelta: 0,
+            maxRightDelta: 0,
+            maxLeftDelta: 0,
+            propagateToLinked: true,
+            originalFadeIn: clip.fadeInFrames,
+            originalFadeOut: clip.fadeOutFrames,
+          };
+        } else if (snap.toolMode === "trim") {
+          if (!isSlipEligible(clip)) return;
+          cv.setPointerCapture(e.pointerId);
+          const propagate = !e.altKey;
+          const headroom = slipHeadroom(slipTargets(snap.timeline, clip.id, propagate));
+          drag = {
+            kind: "slip",
+            clipId: hit.clipId,
+            trackIndex: hit.trackIndex,
+            pointerId: e.pointerId,
+            downX: x,
+            downY: y,
+            started: false,
+            grabOffsetFrames: frameAtX(geom, x),
+            originalFrame: clip.startFrame,
+            originalTrackIndex: hit.trackIndex,
+            originalDuration: clip.durationFrames,
+            originalTrimStart: clip.trimStartFrame,
+            originalTrimEnd: clip.trimEndFrame,
+            originalStartFrame: clip.startFrame,
+            hasNoSourceMedia,
+            snapState: newSnapState(),
+            isRipple: false,
+            lastAbsoluteDelta: 0,
+            maxRightDelta: headroom.right,
+            maxLeftDelta: headroom.left,
+            propagateToLinked: propagate,
+            originalFadeIn: clip.fadeInFrames,
+            originalFadeOut: clip.fadeOutFrames,
           };
         } else {
           // Clip body — start a move drag (DRAG_THRESHOLD before dispatching)
@@ -379,8 +468,43 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
             snapState: newSnapState(),
             isRipple: false,
             lastAbsoluteDelta: 0,
+            maxRightDelta: 0,
+            maxLeftDelta: 0,
+            propagateToLinked: true,
+            originalFadeIn: clip.fadeInFrames,
+            originalFadeOut: clip.fadeOutFrames,
           };
         }
+      } else if (hit.kind === "fade") {
+        store.select([hit.clipId]);
+        const clip = snap.timeline.tracks[hit.trackIndex]?.clips.find((c) => c.id === hit.clipId);
+        if (!clip) return;
+        cv.setPointerCapture(e.pointerId);
+        drag = {
+          kind: hit.edge === "left" ? "fade-left" : "fade-right",
+          clipId: hit.clipId,
+          trackIndex: hit.trackIndex,
+          pointerId: e.pointerId,
+          downX: x,
+          downY: y,
+          started: true,
+          grabOffsetFrames: 0,
+          originalFrame: clip.startFrame,
+          originalTrackIndex: hit.trackIndex,
+          originalDuration: clip.durationFrames,
+          originalTrimStart: clip.trimStartFrame,
+          originalTrimEnd: clip.trimEndFrame,
+          originalStartFrame: clip.startFrame,
+          hasNoSourceMedia: false,
+          snapState: newSnapState(),
+          isRipple: false,
+          lastAbsoluteDelta: 0,
+          maxRightDelta: 0,
+          maxLeftDelta: 0,
+          propagateToLinked: true,
+          originalFadeIn: clip.fadeInFrames,
+          originalFadeOut: clip.fadeOutFrames,
+        };
       } else {
         // Empty area — begin marquee
         const base: ReadonlySet<string> = e.shiftKey ? new Set(snap.selection) : new Set<string>();
@@ -464,6 +588,34 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       const snap = store.getSnapshot();
       const tracks = snap.timeline.tracks;
       const playheadFrame = snap.playhead;
+
+      if (drag.kind === "fade-left" || drag.kind === "fade-right") {
+        const frame = frameAtX(geom, x);
+        const edge = drag.kind === "fade-left" ? "left" : "right";
+        const frames = fadeFramesFromCursor(
+          {
+            startFrame: drag.originalStartFrame,
+            durationFrames: drag.originalDuration,
+            fadeInFrames: drag.originalFadeIn,
+            fadeOutFrames: drag.originalFadeOut,
+          },
+          edge,
+          frame,
+        );
+        store.dispatch(setFadeCommand(drag.clipId, edge, frames, "fade-" + drag.clipId));
+        scheduleDraw();
+        return;
+      }
+
+      if (drag.kind === "slip") {
+        const frame = frameAtX(geom, x);
+        const delta = Math.max(-drag.maxLeftDelta, Math.min(drag.maxRightDelta, frame - drag.grabOffsetFrames));
+        if (delta !== drag.lastAbsoluteDelta) {
+          drag.lastAbsoluteDelta = delta;
+          scheduleDraw();
+        }
+        return;
+      }
 
       if (drag.kind === "move") {
         const cursorFrame = frameAtX(geom, x);
@@ -609,6 +761,9 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       }
 
       if (drag && drag.pointerId === e.pointerId) {
+        if (drag.kind === "slip" && drag.lastAbsoluteDelta !== 0) {
+          store.dispatch(slipClipCommand(drag.clipId, drag.lastAbsoluteDelta, drag.propagateToLinked));
+        }
         drag = null;
         snapLineXRef.current = null;
         // Every drag-gesture family (move, trim, ripple-trim) ends its coalesce run here — mirrors
@@ -754,7 +909,10 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
           });
           const target = dropTargetAt(geomDrop, ly);
           const dropFrame = frameAtX(geomDrop, lx);
-          if (dragSnap.ripple) {
+          if (dragSnap.entry.type === "subtitle") {
+            dropIndicatorRef.current = null;
+            ghostPreviewRef.current = null;
+          } else if (dragSnap.ripple) {
             // Ripple mode: show ghost-insert preview (gaps + shifts)
             dropIndicatorRef.current = null;
             const entry = dragSnap.entry;
@@ -786,6 +944,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       aborted = true;
       unsub();
       if (unsubLibrary) unsubLibrary();
+      if (unsubWave) unsubWave();
       if (unsubDrag) unsubDrag();
       ro.disconnect();
       if (rafId !== null) {
@@ -802,7 +961,7 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       canvas.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("click", onDocClick);
     };
-  }, [store, dragController, library]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store, dragController, library, waveformByRef, waveformCache]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -819,9 +978,12 @@ export function TimelinePanel({ store, dragController, library }: TimelinePanelP
       <canvas
         ref={canvasRef}
         data-testid="timeline-canvas"
-        style={{ display: "block", cursor: toolMode === "razor" ? "crosshair" : undefined }}
+        style={{
+          display: "block",
+          cursor: toolMode === "razor" ? "crosshair" : toolMode === "trim" ? "ew-resize" : undefined,
+        }}
       />
-      <ClipContextMenu store={store} menu={menu} onClose={() => setMenu(null)} />
+      <ClipContextMenu store={store} menu={menu} onClose={() => setMenu(null)} library={library} onExtractAudio={onExtractAudio} />
     </div>
   );
 }

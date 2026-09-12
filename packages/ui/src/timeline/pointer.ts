@@ -5,6 +5,7 @@ import {
   trackAtY,
   trimClipCommand,
   rippleTrimClipCommand,
+  fadeKneeHit,
 } from "@frontstage/core";
 import type { TimelineGeometry, Command, SelectForwardScope } from "@frontstage/core";
 import type { EditorState } from "@frontstage/core";
@@ -12,6 +13,7 @@ import type { EditorState } from "@frontstage/core";
 export type HitResult =
   | { kind: "ruler" }
   | { kind: "clip"; clipId: string; trackIndex: number; edge: "left" | "right" | null }
+  | { kind: "fade"; clipId: string; trackIndex: number; edge: "left" | "right" }
   | { kind: "empty" };
 
 /** Pure hit-test: maps canvas-local CSS-px (x, y) to a timeline element. */
@@ -31,6 +33,11 @@ export function hitTest(state: EditorState, geom: TimelineGeometry, x: number, y
       y >= rect.y &&
       y <= rect.y + rect.height
     ) {
+      const selected = state.selection.has(clip.id);
+      if (selected) {
+        const fade = fadeKneeHit(clip, rect, x, y);
+        if (fade) return { kind: "fade", clipId: clip.id, trackIndex: ti, edge: fade };
+      }
       let edge: "left" | "right" | null = null;
       if (x - rect.x <= TRIM_HANDLE_WIDTH) edge = "left";
       else if (rect.x + rect.width - x <= TRIM_HANDLE_WIDTH) edge = "right";

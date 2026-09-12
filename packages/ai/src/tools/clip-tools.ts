@@ -1,12 +1,14 @@
 import { z } from "zod";
-import { findClip, addClipCommand, moveClipCommand, splitLinkedClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption } from "@frontstage/core";
+import { findClip, addClipCommand, moveClipCommand, splitLinkedClipCommand, trimClipCommand, removeClipCommand, clipTypesCompatible, clipEndFrame, planAgentResolutionAdoption, subtitleNotPlaceableMessage, nestBlockReason, nestTimelineCommand } from "@frontstage/core";
 import type { ToolSpec } from "./types.js";
 import { ok, errorResult, asUndoStep } from "./executor.js";
 
 export function addClipsTool(): ToolSpec {
   return {
     name: "add_clips",
-    description: "Adds one or more clips to the timeline. Each clip references a media entry by id. All clips are added as a single undo step.",
+    description:
+      "Adds one or more clips to the timeline. Each clip references a media entry by id, or a timelineId to nest as a sequence clip. " +
+      "Empty timelines and self/cycle nesting are refused. Nested timelines with audio get a linked audio partner. All clips are one undo step.",
     inputSchema: z.object({
       clips: z.array(
         z.object({
@@ -19,22 +21,38 @@ export function addClipsTool(): ToolSpec {
     run(args, ctx) {
       const { clips } = args as { clips: { mediaId: string; trackIndex?: number; startFrame: number }[] };
       const manifest = ctx.getManifest();
-      const tl = ctx.store.getSnapshot().timeline;
+      const snap = ctx.store.getSnapshot();
+      const tl = snap.timeline;
       const fps = tl.fps;
+      const resolveTimeline = (id: string) => ctx.store.timelineById(id);
+      const hostId = snap.activeTimelineId;
 
       // Validate all before touching the store
-      const entries = [];
+      const entries: { kind: "media"; entry: (typeof manifest.entries)[number]; trackIndex?: number; startFrame: number }[] = [];
+      const nests: { child: NonNullable<ReturnType<typeof resolveTimeline>>; trackIndex?: number; startFrame: number }[] = [];
       for (const c of clips) {
-        const entry = manifest.entries.find((e) => e.id === c.mediaId);
-        if (!entry) return errorResult(`unknown media: ${c.mediaId}`);
+        const library = manifest.entries.find((e) => e.id === c.mediaId);
+        const child = library ? undefined : resolveTimeline(c.mediaId);
+        if (library) {
+          if (library.type === "subtitle") return errorResult(subtitleNotPlaceableMessage(c.mediaId));
+          if (c.trackIndex !== undefined) {
+            if (c.trackIndex < 0 || c.trackIndex >= tl.tracks.length)
+              return errorResult(`trackIndex ${c.trackIndex} out of range`);
+            const track = tl.tracks[c.trackIndex]!;
+            if (!clipTypesCompatible(track.type, library.type))
+              return errorResult(`media type "${library.type}" incompatible with track type "${track.type}" at index ${c.trackIndex}`);
+          }
+          entries.push({ kind: "media", entry: library, trackIndex: c.trackIndex, startFrame: c.startFrame });
+          continue;
+        }
+        if (!child) return errorResult(`unknown media: ${c.mediaId}`);
+        const reason = nestBlockReason(child, hostId, resolveTimeline);
+        if (reason) return errorResult(reason);
         if (c.trackIndex !== undefined) {
           if (c.trackIndex < 0 || c.trackIndex >= tl.tracks.length)
             return errorResult(`trackIndex ${c.trackIndex} out of range`);
-          const track = tl.tracks[c.trackIndex]!;
-          if (!clipTypesCompatible(track.type, entry.type))
-            return errorResult(`media type "${entry.type}" incompatible with track type "${track.type}" at index ${c.trackIndex}`);
         }
-        entries.push({ entry, trackIndex: c.trackIndex, startFrame: c.startFrame });
+        nests.push({ child, trackIndex: c.trackIndex, startFrame: c.startFrame });
       }
 
       // Resolution auto-match (#233 standing rule: fps is never adopted here) — a separate undo
@@ -43,27 +61,43 @@ export function addClipsTool(): ToolSpec {
       if (adoption.command) ctx.store.dispatch(adoption.command);
 
       const newIds: string[] = [];
-      const commands = entries.map(({ entry, trackIndex, startFrame }) => {
-        const target =
-          trackIndex !== undefined
-            ? ({ kind: "existing" as const, index: trackIndex })
-            : ({ kind: "new" as const, index: 0 });
-        const id = ctx.newId();
-        newIds.push(id);
-        // addClipCommand calls newId() once per entity (visual clip, linkGroupId, new track,
-        // linked audio clip, audio track). The visual clip must carry the reported id; every
-        // other entity must get its own — a constant thunk collapses them, colliding the linked
-        // audio's id with the video's and desyncing later split/move/remove. (Snapshot-based
-        // undo applies once, so a stateful first-call thunk is safe.)
-        let firstCall = true;
-        const genId = () => {
-          if (firstCall) { firstCall = false; return id; }
-          return ctx.newId();
-        };
-        return addClipCommand(entry, target, startFrame, fps, undefined, genId);
-      });
+      const commands = [
+        ...entries.map(({ entry, trackIndex, startFrame }) => {
+          const target =
+            trackIndex !== undefined
+              ? ({ kind: "existing" as const, index: trackIndex })
+              : ({ kind: "new" as const, index: 0 });
+          const id = ctx.newId();
+          newIds.push(id);
+          // addClipCommand calls newId() once per entity (visual clip, linkGroupId, new track,
+          // linked audio clip, audio track). The visual clip must carry the reported id; every
+          // other entity must get its own — a constant thunk collapses them, colliding the linked
+          // audio's id with the video's and desyncing later split/move/remove. (Snapshot-based
+          // undo applies once, so a stateful first-call thunk is safe.)
+          let firstCall = true;
+          const genId = () => {
+            if (firstCall) { firstCall = false; return id; }
+            return ctx.newId();
+          };
+          return addClipCommand(entry, target, startFrame, fps, undefined, genId);
+        }),
+        ...nests.map(({ child, trackIndex, startFrame }) => {
+          const target =
+            trackIndex !== undefined
+              ? ({ kind: "existing" as const, index: trackIndex })
+              : ({ kind: "new" as const, index: 0 });
+          const id = ctx.newId();
+          newIds.push(id);
+          let firstCall = true;
+          const genId = () => {
+            if (firstCall) { firstCall = false; return id; }
+            return ctx.newId();
+          };
+          return nestTimelineCommand(child, startFrame, target, genId);
+        }),
+      ];
 
-      asUndoStep(ctx.store, "Add Clips", commands.map((cmd) => cmd.apply.bind(cmd)));
+      asUndoStep(ctx.store, nests.length && !entries.length ? "Nest Timeline" : "Add Clips", commands.map((cmd) => cmd.apply.bind(cmd)));
 
       const prefix = adoption.note ? `${adoption.note} ` : "";
       return ok(`${prefix}Added ${newIds.length} clip(s): ${newIds.join(", ")}`);

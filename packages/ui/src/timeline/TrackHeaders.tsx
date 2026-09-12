@@ -9,6 +9,10 @@ import {
   toggleTrackHiddenCommand,
   toggleTrackSyncLockCommand,
   reorderTrackCommand,
+  setTrackNameCommand,
+  timelineTrackDisplayLabel,
+  normalizeTrackName,
+  TRACK_NAME_MAX_LENGTH,
   type EditorStore,
 } from "@frontstage/core";
 
@@ -19,9 +23,24 @@ export const TRACK_HEADER_WIDTH = 100;
 const ROW_ICON_SIZE = 10;
 
 export function TrackHeaders({ store }: { store: EditorStore }) {
-  const tracks = useStore(store, (s) => s.timeline.tracks);
+  const timeline = useStore(store, (s) => s.timeline);
+  const tracks = timeline.tracks;
   const listRef = useRef<HTMLDivElement>(null);
   const [dragTrackId, setDragTrackId] = useState<string | null>(null);
+  const [rename, setRename] = useState<{ id: string; draft: string } | null>(null);
+  const renameRef = useRef(rename);
+  renameRef.current = rename;
+
+  function commitRename(save: boolean): void {
+    const current = renameRef.current;
+    if (!current) return;
+    renameRef.current = null;
+    if (save) {
+      const parsed = normalizeTrackName(current.draft);
+      if (parsed.ok) store.dispatch(setTrackNameCommand(current.id, parsed.name ?? ""));
+    }
+    setRename(null);
+  }
 
   function targetIndexForY(clientY: number): number {
     const top = listRef.current?.getBoundingClientRect().top ?? 0;
@@ -114,19 +133,51 @@ export function TrackHeaders({ store }: { store: EditorStore }) {
             >
               <Icon name="grip" size={ROW_ICON_SIZE} />
             </span>
-            <span
-              style={{
-                flex: 1,
-                color: theme.text.secondary,
-                fontSize: theme.fontSize.sm,
-                fontWeight: theme.fontWeight.medium,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {track.type} {i + 1}
-            </span>
+            {rename?.id === track.id ? (
+              <input
+                data-testid={`track-rename-${track.id}`}
+                value={rename.draft}
+                maxLength={TRACK_NAME_MAX_LENGTH}
+                autoFocus
+                onChange={(e) => setRename({ id: track.id, draft: e.target.value })}
+                onBlur={() => commitRename(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitRename(true);
+                  }
+                  if (e.key === "Escape") commitRename(false);
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  color: theme.text.secondary,
+                  fontSize: theme.fontSize.sm,
+                  fontWeight: theme.fontWeight.medium,
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  padding: 0,
+                }}
+              />
+            ) : (
+              <span
+                data-testid={`track-label-${track.id}`}
+                title={track.name ? `${track.name} (${timelineTrackDisplayLabel(timeline, i)})` : timelineTrackDisplayLabel(timeline, i)}
+                onDoubleClick={() => setRename({ id: track.id, draft: track.name ?? "" })}
+                style={{
+                  flex: 1,
+                  color: theme.text.secondary,
+                  fontSize: theme.fontSize.sm,
+                  fontWeight: theme.fontWeight.medium,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {track.name ?? timelineTrackDisplayLabel(timeline, i)}
+              </span>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.xs }}>
               <IconButton
                 frame="xs"

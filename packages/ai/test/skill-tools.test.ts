@@ -69,13 +69,13 @@ describe("read_skill — description is Swift-verbatim", () => {
 describe("catalog registration — inApp 41 / mcp 43 (M15 T1)", () => {
   test("buildCatalog('inApp') (and the default) includes read_skill, length 41", () => {
     expect(buildCatalog().map((s) => s.name)).toContain("read_skill");
-    expect(buildCatalog()).toHaveLength(41);
-    expect(buildCatalog("inApp")).toHaveLength(41);
+    expect(buildCatalog()).toHaveLength(49);
+    expect(buildCatalog("inApp")).toHaveLength(49);
   });
 
   test("buildCatalog('mcp') never includes read_skill, length stays 43", () => {
     const names = buildCatalog("mcp").map((s) => s.name);
     expect(names).not.toContain("read_skill");
-    expect(buildCatalog("mcp")).toHaveLength(43);
+    expect(buildCatalog("mcp")).toHaveLength(51);
   });
 });

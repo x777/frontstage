@@ -23,10 +23,18 @@ export interface Fill {
   color: RGBA;
 }
 
+export const TEXT_AXIS_SCALE_RANGE = { min: 0.1, max: 10 } as const;
+
 export interface TextStyle {
   fontName: string;
   fontSize: number;
   fontScale: number;
+  /** Palmier `TextStyle.widthScale` — glyph X multiplier. Omitted = 1. */
+  widthScale?: number;
+  /** Palmier `TextStyle.heightScale` — glyph Y multiplier. Omitted = 1. */
+  heightScale?: number;
+  /** Palmier `TextStyle.blur` — whole-layer Gaussian blur in 1080p canvas pixels. Omitted = 0. */
+  blur?: number;
   color: RGBA;
   alignment: TextAlignment;
   shadow: Shadow;
@@ -39,12 +47,20 @@ export function defaultTextStyle(): TextStyle {
     fontName: "Helvetica-Bold",
     fontSize: 96,
     fontScale: 1,
+    widthScale: 1,
+    heightScale: 1,
+    blur: 0,
     color: { r: 1, g: 1, b: 1, a: 1 },
     alignment: "center",
     shadow: { enabled: true, color: { r: 0, g: 0, b: 0, a: 0.6 }, offsetX: 0, offsetY: -2, blur: 6 },
     background: { enabled: false, color: { r: 0, g: 0, b: 0, a: 0.6 } },
     border: { enabled: false, color: { r: 0, g: 0, b: 0, a: 1 } },
   };
+}
+
+/** Palmier `TextStyle.caption` — Helvetica-Bold at AppTheme.Caption.defaultFontSize (48). */
+export function defaultCaptionTextStyle(): TextStyle {
+  return { ...defaultTextStyle(), fontSize: 48 };
 }
 
 export function rgbaFromHex(hex: string): RGBA | null {
@@ -69,4 +85,10 @@ export function rgbaFromHex(hex: string): RGBA | null {
     return r === null || g === null || b === null || a === null ? null : { r, g, b, a };
   }
   return null;
+}
+
+export function rgbaToHex(c: RGBA): string {
+  const byte = (n: number) => Math.round(Math.max(0, Math.min(1, n)) * 255).toString(16).padStart(2, "0");
+  const rgb = `#${byte(c.r)}${byte(c.g)}${byte(c.b)}`;
+  return Math.round(c.a * 255) === 255 ? rgb : `${rgb}${byte(c.a)}`;
 }

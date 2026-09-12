@@ -65,6 +65,8 @@ export interface ToolContext {
     moveEntriesToFolder(assetIds: string[], folderId: string | undefined): void;
     deleteFolders(ids: string[]): { removedAssetIds: string[] };
     deleteEntries(ids: string[]): void;
+    // Bytes for a library asset (in-memory or gateway). Used by add_captions subtitleMediaRef.
+    readEntryBytes?(id: string): Promise<Uint8Array>;
   };
   // Placeholder-first import facade backing import_media (M12A T3). Each method registers a
   // placeholder synchronously and finalizes it asynchronously (probe → finalizeGenerated /
@@ -80,6 +82,16 @@ export interface ToolContext {
     // Solid-color matte rendering (M13A T1, create_matte): the ai package can't touch canvas, so
     // hosts wire this from @frontstage/ui's renderMattePng. Absent -> create_matte errors cleanly.
     renderMatte?(hex: string, width: number, height: number): Promise<Uint8Array>;
+  };
+  // Desktop ffmpeg demux of a video's soundtrack (extract_audio). Absent on web.
+  extractAudio?: {
+    extract(mediaRef: string): Promise<{ bytes: Uint8Array; durationSeconds: number }>;
+  };
+  // Waveform + optional VAD/speech masks backing remove_silence (Palmier SpeechMaskStore).
+  audioAnalysis?: {
+    waveformSamples(mediaRef: string): number[] | undefined;
+    quietNonSpeechMask(mediaRef: string): boolean[] | undefined;
+    speechMask?(mediaRef: string): boolean[] | undefined;
   };
   // .cube LUT project persistence (M14C T2, the Swift LUTLoader.store pattern) backing
   // apply_color's lut.path — mirrors the inspector's LUTSection picker so both paths store the

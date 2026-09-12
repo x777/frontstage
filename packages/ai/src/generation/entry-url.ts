@@ -28,12 +28,15 @@ const MIME_BY_EXT: Record<string, string> = {
   wav: "audio/wav",
   aac: "audio/aac",
   m4a: "audio/mp4",
+  srt: "application/x-subrip",
+  vtt: "text/vtt",
 };
 
 const MIME_BY_TYPE: Record<string, string> = {
   video: "video/mp4",
   audio: "audio/mpeg",
   image: "image/png",
+  subtitle: "application/x-subrip",
 };
 
 function pathOf(entry: MediaManifestEntry): string {

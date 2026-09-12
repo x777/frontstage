@@ -156,6 +156,42 @@ describe("add_clips", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  test("nests a timeline as a sequence clip with linked audio; undo restores parent", async () => {
+    const parent: Timeline = { ...defaultTimeline(), settingsConfigured: true, tracks: [] };
+    const store = new EditorStore(parent);
+    const parentId = store.getSnapshot().activeTimelineId;
+    const childId = store.createTimeline("Intro", true);
+    await addClipsTool().run({ clips: [{ mediaId: "media-av", startFrame: 0 }] }, makeCtx(store));
+    expect(store.getSnapshot().timeline.tracks.some((t) => t.type === "audio" && t.clips.length > 0)).toBe(true);
+    store.activateTimeline(parentId);
+    const before = store.getSnapshot().timeline;
+    const result = await addClipsTool().run({ clips: [{ mediaId: childId, startFrame: 30 }] }, makeCtx(store));
+    expect(result.isError).toBe(false);
+    const tl = store.getSnapshot().timeline;
+    const video = tl.tracks.find((t) => t.type === "video")!.clips[0]!;
+    const audio = tl.tracks.find((t) => t.type === "audio")!.clips[0]!;
+    expect(video.mediaType).toBe("sequence");
+    expect(video.mediaRef).toBe(childId);
+    expect(video.startFrame).toBe(30);
+    expect(video.durationFrames).toBe(60);
+    expect(audio.sourceClipType).toBe("sequence");
+    expect(audio.linkGroupId).toBe(video.linkGroupId);
+    store.undo();
+    expect(store.getSnapshot().timeline.tracks.every((t) => t.clips.length === 0)).toBe(true);
+    expect(before.tracks.every((t) => t.clips.length === 0)).toBe(true);
+  });
+
+  test("refuses empty child and self-nest", async () => {
+    const store = new EditorStore({ ...makeTimeline(), settingsConfigured: true });
+    const hostId = store.getSnapshot().activeTimelineId;
+    const selfNest = await addClipsTool().run({ clips: [{ mediaId: hostId, startFrame: 0 }] }, makeCtx(store));
+    expect(selfNest.isError).toBe(true);
+    const emptyId = store.createTimeline("Empty", false);
+    const emptyNest = await addClipsTool().run({ clips: [{ mediaId: emptyId, startFrame: 0 }] }, makeCtx(store));
+    expect(emptyNest.isError).toBe(true);
+    expect(store.getSnapshot().timeline.tracks[0]!.clips.some((c) => c.mediaType === "sequence")).toBe(false);
+  });
+
   test("adds to a new track when trackIndex omitted", async () => {
     const store = new EditorStore(makeTimeline());
     const ctx = makeCtx(store);
@@ -186,6 +222,33 @@ describe("add_clips", () => {
     // one undo reverts BOTH
     expect(store.getSnapshot().timeline.tracks[0]!.clips.length).toBe(beforeCount);
     expect(store.canUndo()).toBe(false);
+  });
+
+  test("subtitle assets cannot be placed as clips", async () => {
+    const store = new EditorStore(makeTimeline());
+    const before = store.getSnapshot().timeline;
+    const ctx: ToolContext = {
+      store,
+      getManifest: () => ({
+        version: 2,
+        entries: [
+          {
+            id: "subs",
+            name: "captions.srt",
+            type: "subtitle",
+            source: { kind: "project", relativePath: "media/captions.srt" },
+            duration: 4,
+          },
+        ],
+        folders: [],
+      }),
+      newId: () => "x",
+    };
+    const result = await addClipsTool().run({ clips: [{ mediaId: "subs", startFrame: 0 }] }, ctx);
+    expect(result.isError).toBe(true);
+    const block = result.blocks[0];
+    expect(block && block.kind === "text" ? block.text : "").toMatch(/subtitle file/);
+    expect(store.getSnapshot().timeline).toBe(before);
   });
 
   test("unknown mediaId returns isError:true, store unchanged", async () => {

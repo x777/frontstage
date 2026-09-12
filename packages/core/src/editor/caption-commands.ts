@@ -1,7 +1,9 @@
 import type { Clip } from "../clip.js";
-import type { RGBA, TextStyle } from "../text-style.js";
+import { defaultCaptionTextStyle, type RGBA, type TextStyle } from "../text-style.js";
 import type { TextAnimationPreset } from "../text-animation.js";
 import type { CaptionClipSpec } from "../captions/caption-mapper.js";
+import { captionSpecsFromCues } from "../captions/subtitle-import.js";
+import type { SubtitleCue } from "../captions/subtitle-export.js";
 import type { Timeline } from "../timeline.js";
 import type { Command } from "./editor-store.js";
 import { insertTrackCommand } from "./track-commands.js";
@@ -75,4 +77,26 @@ export function placeCaptionsCommand(args: PlaceCaptionsArgs): Command {
       return replaceTrackClips(withTrack, trackIndex, sorted);
     },
   };
+}
+
+export interface PlaceSubtitleCaptionsArgs {
+  cues: SubtitleCue[];
+  fps: number;
+  captionGroupId: string;
+  newId(): string;
+  style?: TextStyle;
+  centerX?: number;
+  centerY?: number;
+}
+
+/** Places parsed subtitle cues as caption text clips on a new top track. One undo step. */
+export function placeSubtitleCaptionsCommand(args: PlaceSubtitleCaptionsArgs): Command {
+  return placeCaptionsCommand({
+    specs: captionSpecsFromCues(args.cues, args.fps),
+    style: args.style ?? defaultCaptionTextStyle(),
+    captionGroupId: args.captionGroupId,
+    newId: args.newId,
+    centerX: args.centerX,
+    centerY: args.centerY,
+  });
 }

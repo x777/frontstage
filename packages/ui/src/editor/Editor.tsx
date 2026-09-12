@@ -15,6 +15,8 @@ import {
   DEFAULT_TRACK_HEIGHT,
   resolveDropPlan,
   rippleInsertClipsSpecs,
+  parseSubtitleFile,
+  placeSubtitleCaptionsCommand,
 } from "@frontstage/core";
 import { TRACK_HEADER_WIDTH } from "../timeline/TrackHeaders.js";
 import type { RippleInsertSpec } from "@frontstage/core";
@@ -24,11 +26,13 @@ import { Button, Dialog, IconButton } from "../primitives/index.js";
 import { Layout, persistLayout } from "../layout/Layout.js";
 import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { TimelinePanel } from "../timeline/TimelinePanel.js";
+import { TimelineTabs } from "../timeline/TimelineTabs.js";
 import { Toolbar } from "../toolbar/Toolbar.js";
 import { MediaPanel } from "../media/MediaPanel.js";
 import type { CaptionsExecutor, CaptionsTranscriptionFacade } from "../media/CaptionsTab.js";
 import type { MediaIndexingFacade } from "../media/MediaPanel.js";
 import { MediaDragController } from "../media/media-drag.js";
+import { WaveformCache } from "../media/waveform-cache.js";
 import { FOLDER_DROP_ROOT } from "../media/FolderTile.js";
 import { InspectorPanel } from "../inspector/InspectorPanel.js";
 import { LutReconciler } from "../inspector/adjust/lut-reconciler.js";
@@ -62,6 +66,9 @@ export interface EditorLibrary {
   // typecheck unmodified; the real MediaLibrary implements both.
   storeLut?(filename: string, bytes: Uint8Array): Promise<string>;
   readDerived?(relativePath: string): Promise<Uint8Array | null>;
+  bytesFor?(entry: MediaManifestEntry): Uint8Array | undefined;
+  readMedia?(relativePath: string): Promise<Uint8Array>;
+  readEntryBytes?(id: string): Promise<Uint8Array>;
 }
 
 export interface EditorProps {
@@ -106,6 +113,8 @@ export interface EditorProps {
     // Relay mode (M18C T3) — gates the GenerationPanel/AgentPanel composer when signed out.
     relayGate?: RelayGate;
   };
+  /** Host-owned cache (desktop: same instance `extract_audio` ingests into). */
+  waveformCache?: WaveformCache;
 }
 
 interface DiscardDialogState {
@@ -114,8 +123,17 @@ interface DiscardDialogState {
 
 export type RunProjectCommand = (fn: () => Promise<unknown>) => void;
 
-export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog, indexing, relayAuth }: EditorProps) {
+export function Editor({ store, media, library, session, nativeFileMenu, exportGateway, interopExport, engineRef, onReady, agent, getGenerationLog, indexing, relayAuth, waveformCache: waveformCacheProp }: EditorProps) {
   const dragController = useMemo(() => new MediaDragController(), []);
+  const ownedWaveformCache = useMemo(() => new WaveformCache(), []);
+  const waveformCache = waveformCacheProp ?? ownedWaveformCache;
+  useEffect(() => {
+    const ingest = () => {
+      waveformCache.ingestLibraryBytes(library.getSnapshot().entries, (e) => library.bytesFor?.(e));
+    };
+    ingest();
+    return library.subscribe(ingest);
+  }, [library, waveformCache]);
 
   const [agentVisible, setAgentVisible] = useState(() => {
     try { return localStorage.getItem("frontstage.agent.visible") === "1"; } catch { return false; }
@@ -178,10 +196,63 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
     });
   }, []);
 
+  const placeSubtitleAsset = useCallback(async (entry: MediaManifestEntry) => {
+    try {
+      let bytes: Uint8Array | undefined;
+      if (library.readEntryBytes) {
+        try { bytes = await library.readEntryBytes(entry.id); } catch { bytes = undefined; }
+      }
+      if (!bytes || bytes.length === 0) bytes = library.bytesFor?.(entry);
+      if ((!bytes || bytes.length === 0) && entry.source.kind === "project" && library.readMedia) {
+        try { bytes = await library.readMedia(entry.source.relativePath); } catch { bytes = undefined; }
+      }
+      if (!bytes || bytes.length === 0) {
+        showError(`Can't add captions — "${entry.name}" is offline.`);
+        return;
+      }
+      const filename = entry.source.kind === "project" ? entry.source.relativePath : entry.name;
+      const cues = parseSubtitleFile(bytes, filename);
+      store.dispatch(placeSubtitleCaptionsCommand({
+        cues,
+        fps: store.getSnapshot().timeline.fps,
+        captionGroupId: crypto.randomUUID(),
+        newId: () => crypto.randomUUID(),
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Can't add captions from "${entry.name}" — ${msg}`);
+    }
+  }, [library, store]);
+
+  function importCaptionsFromFile() {
+    runProjectCommand(async () => {
+      const picked = await new Promise<{ name: string; bytes: Uint8Array } | null>((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".srt,.vtt,application/x-subrip,text/vtt";
+        input.addEventListener("change", async () => {
+          const file = input.files?.[0];
+          if (!file) { resolve(null); return; }
+          resolve({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+        });
+        input.click();
+      });
+      if (!picked) return;
+      const cues = parseSubtitleFile(picked.bytes, picked.name);
+      store.dispatch(placeSubtitleCaptionsCommand({
+        cues,
+        fps: store.getSnapshot().timeline.fps,
+        captionGroupId: crypto.randomUUID(),
+        newId: () => crypto.randomUUID(),
+      }));
+    });
+  }
+
   const { exportProject, exportState, canExport, canExportXml, canExportCaptions } = useExportCommand({
     exportGateway,
     interopExport,
     getTimeline: () => store.getSnapshot().timeline,
+    getResolveTimeline: () => (id: string) => store.timelineById(id),
     getMediaEntries: () => library.getSnapshot().entries,
     media,
     suggestedName: () => session?.getState().name ?? "Untitled",
@@ -333,7 +404,9 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
             const target = dropTargetAt(geom, ly);
             const dropFrame = frameAtX(geom, lx);
             const isRipple = result.ripple || e.metaKey || e.ctrlKey;
-            if (isRipple) {
+            if (result.entry.type === "subtitle") {
+              void placeSubtitleAsset(result.entry);
+            } else if (isRipple) {
               const { entry } = result;
               const fps = storeSnap.timeline.fps;
               const plan = resolveDropPlan(
@@ -400,7 +473,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
       unsubDrag();
       removeListeners();
     };
-  }, [dragController, store, library]);
+  }, [dragController, store, library, placeSubtitleAsset]);
 
   return (
     <>
@@ -417,6 +490,7 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
                   onExport={(canExport || canExportXml || canExportCaptions) ? exportProject : undefined}
                   canExportXml={canExportXml}
                   canExportCaptions={canExportCaptions}
+                  onImportCaptions={importCaptionsFromFile}
                 />
               )}
               {agent && (
@@ -487,8 +561,21 @@ export function Editor({ store, media, library, session, nativeFileMenu, exportG
         timeline={
           <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
             <Toolbar store={store} />
+            <TimelineTabs store={store} />
             <div style={{ flex: 1, minHeight: 0 }}>
-              <TimelinePanel store={store} dragController={dragController} library={library} />
+              <TimelinePanel
+                store={store}
+                dragController={dragController}
+                library={library}
+                waveformCache={waveformCache}
+                onExtractAudio={
+                  agent?.executor
+                    ? (mediaRef) => {
+                        void agent.executor!.execute("extract_audio", { mediaRef });
+                      }
+                    : undefined
+                }
+              />
             </div>
           </div>
         }

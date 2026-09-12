@@ -1,3 +1,4 @@
+import { clipTypeCanLinkAudio, type ClipType } from "../clip-type.js";
 import type { Timeline } from "../timeline.js";
 import type { TrackDropTarget } from "./geometry.js";
 import { computeZones, audioTrackCount } from "./zones.js";
@@ -68,15 +69,19 @@ export interface DropPlan {
 export function resolveDropPlan(
   timeline: Timeline,
   cursor: TrackDropTarget,
-  mediaType: "video" | "image" | "audio" | "text" | "lottie",
+  mediaType: ClipType,
   hasAudio: boolean,
   durationFrames: number,
 ): DropPlan {
+  // Palmier: subtitle assets never enter the clip drop plan — cues are placed via add_captions.
+  if (mediaType === "subtitle") {
+    return { visualTarget: null, audioTarget: null, visualDurationFrames: 0, audioOnlyDurationFrames: 0 };
+  }
   if (mediaType === "audio") {
     return { visualTarget: null, audioTarget: resolveAudioDropTarget(timeline, cursor), visualDurationFrames: 0, audioOnlyDurationFrames: durationFrames };
   }
   const visualTarget = resolveVisualDropTarget(timeline, cursor);
-  if (mediaType === "video" && hasAudio) {
+  if (clipTypeCanLinkAudio(mediaType) && hasAudio) {
     const audioTarget = shiftAfterVisualInsertion(resolveAudioDropTarget(timeline, cursor), visualTarget);
     return { visualTarget, audioTarget, visualDurationFrames: durationFrames, audioOnlyDurationFrames: durationFrames };
   }

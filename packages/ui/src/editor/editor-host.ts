@@ -67,6 +67,15 @@ export function createEditorHost(
     getTimeline() {
       return store.getSnapshot().timeline;
     },
+    getTimelines() {
+      return store.getSnapshot().timelines;
+    },
+    getActiveTimelineId() {
+      return store.getSnapshot().activeTimelineId;
+    },
+    getOpenTimelineIds() {
+      return store.getSnapshot().openTimelineIds;
+    },
     getManifest() {
       return mediaHost.getManifest();
     },
@@ -78,7 +87,16 @@ export function createEditorHost(
       if (!_bindPending) _lastMedia = null;
       _bindPending = false;
       _genLog = doc.generationLog?.entries ? [...doc.generationLog.entries] : [];
-      store.load(doc.timeline);
+      if (doc.timelines && doc.timelines.length > 0) {
+        store.loadProject({
+          timelines: doc.timelines,
+          activeTimelineId: doc.activeTimelineId ?? doc.timelines[0]!.id!,
+          openTimelineIds: doc.openTimelineIds,
+          viewStates: doc.viewStates,
+        });
+      } else {
+        store.load(doc.timeline);
+      }
       // Clear stuck in-flight statuses (no resumable jobId) before entries ever reach the library.
       const manifest = { ...doc.manifest, entries: resetStuckGenerations(doc.manifest.entries) };
       mediaHost.loadManifest(manifest, _lastMedia);

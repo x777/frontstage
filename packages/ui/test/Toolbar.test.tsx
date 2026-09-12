@@ -55,7 +55,7 @@ test("undo/redo buttons call store.undo/redo", () => {
   expect(redoSpy).toHaveBeenCalledTimes(1);
 });
 
-test("pointer/razor buttons switch toolMode with active state", () => {
+test("pointer/razor/trim buttons switch toolMode with active state", () => {
   const store = new EditorStore(defaultTimeline());
   render(<Toolbar store={store} />);
   expect(screen.getByTestId("toolbar-pointer")).toHaveAttribute("aria-pressed", "true");
@@ -66,6 +66,10 @@ test("pointer/razor buttons switch toolMode with active state", () => {
   expect(store.getSnapshot().toolMode).toBe("razor");
   expect(screen.getByTestId("toolbar-razor")).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("toolbar-pointer")).toHaveAttribute("aria-pressed", "false");
+
+  fireEvent.click(screen.getByTestId("toolbar-trim"));
+  expect(store.getSnapshot().toolMode).toBe("trim");
+  expect(screen.getByTestId("toolbar-trim")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("tool-mode buttons rest at tertiary tone (ToolbarView.toolModeButton)", () => {

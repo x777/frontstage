@@ -125,10 +125,10 @@ test("Editor: panels render, on-disk round-trip, and menu IPC routing", async ()
     expect(restoredFps).toBe(30);
 
     // Verify the saved project.json on disk has the correct content
-    // The file stores timeline fields at the top level (schemaVersion + spread timeline).
+    // Palmier v0.9.0 ProjectFile: schemaVersion + timelines[] + activeTimelineId.
     const projectJson = JSON.parse(readFileSync(join(tempA, "project.json"), "utf-8"));
     expect(projectJson.schemaVersion).toBeDefined();
-    expect(projectJson.fps).toBe(30);
+    expect(projectJson.timelines[0].fps).toBe(30);
 
     // ── 6. Native-menu dirty-guard: IPC path must open discard dialog ─────
     // Make the store dirty via a real dispatch

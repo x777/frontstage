@@ -47,6 +47,28 @@ export function setDuration(clip: Clip, newDuration: number): Clip {
   return clampFadesToDuration(clampKeyframesToDuration({ ...clip, durationFrames: Math.max(1, newDuration) }));
 }
 
+function rebaseTrack<V>(track: KeyframeTrack<V> | undefined, headCut: number): KeyframeTrack<V> | undefined {
+  if (!track || headCut === 0) return track;
+  const keyframes = track.keyframes
+    .map((k) => ({ ...k, frame: k.frame - headCut }))
+    .filter((k) => k.frame >= 0);
+  return keyframes.length === 0 ? undefined : { keyframes };
+}
+
+/** Palmier `Clip.shiftKeyframeTracks` after a head cut. */
+export function rebaseKeyframeTracks(clip: Clip, headCut: number): Clip {
+  if (!(headCut > 0)) return clip;
+  return {
+    ...clip,
+    opacityTrack: rebaseTrack(clip.opacityTrack, headCut),
+    positionTrack: rebaseTrack(clip.positionTrack, headCut),
+    scaleTrack: rebaseTrack(clip.scaleTrack, headCut),
+    rotationTrack: rebaseTrack(clip.rotationTrack, headCut),
+    cropTrack: rebaseTrack(clip.cropTrack, headCut),
+    volumeTrack: rebaseTrack(clip.volumeTrack, headCut),
+  };
+}
+
 export function rescaleKeyframes(clip: Clip, scale: number): Clip {
   return {
     ...clip,

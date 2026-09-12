@@ -33,6 +33,11 @@ export function hsvToRgb(c: HSV): RGB {
   }
 }
 
+/** Palmier `stylize.invert` CIColorMatrix: RGB → 1−RGB, alpha unchanged. */
+export function applyInvert(c: RGB): RGB {
+  return { r: 1 - c.r, g: 1 - c.g, b: 1 - c.b };
+}
+
 export function applyExposure(c: RGB, ev: number): RGB {
   const k = Math.pow(2, ev);
   return { r: linToSrgb(srgbToLin(c.r) * k), g: linToSrgb(srgbToLin(c.g) * k), b: linToSrgb(srgbToLin(c.b) * k) };

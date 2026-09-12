@@ -10,6 +10,9 @@ import type { BoundProject, ProjectGateway, ProjectRef } from "./gateway.js";
 
 export interface ProjectHost {
   getTimeline(): Timeline;
+  getTimelines?(): Timeline[];
+  getActiveTimelineId?(): string;
+  getOpenTimelineIds?(): string[];
   getManifest(): MediaManifest;
   getGenerationLog(): GenerationLog;
   loadDoc(doc: ProjectDoc): void;
@@ -37,6 +40,7 @@ export class ProjectSession {
   private state: ProjectSessionState;
   private bound: BoundProject | null = null;
   private savedTimeline: Timeline;
+  private savedTimelines: Timeline[] | undefined;
   private savedManifest: MediaManifest;
   private listeners: Set<() => void> = new Set();
   // Set when the opened project's media.json existed but failed to decode, so saves preserve
@@ -53,6 +57,7 @@ export class ProjectSession {
     this.untitledName = untitledName;
     this.state = { ref: null, name: untitledName };
     this.savedTimeline = host.getTimeline();
+    this.savedTimelines = host.getTimelines?.();
     this.savedManifest = host.getManifest();
   }
 
@@ -73,10 +78,12 @@ export class ProjectSession {
 
   // generationLog intentionally excluded from dirty — only timeline + manifest.
   isDirty(): boolean {
-    return (
-      this.host.getTimeline() !== this.savedTimeline ||
-      this.host.getManifest() !== this.savedManifest
-    );
+    const timelines = this.host.getTimelines?.();
+    const timelinesDirty =
+      timelines !== undefined && this.savedTimelines !== undefined
+        ? timelines !== this.savedTimelines
+        : this.host.getTimeline() !== this.savedTimeline;
+    return timelinesDirty || this.host.getManifest() !== this.savedManifest;
   }
 
   async newProject(confirm: ConfirmDiscard): Promise<boolean> {
@@ -164,6 +171,9 @@ export class ProjectSession {
       bound.store,
       {
         timeline: this.host.getTimeline(),
+        timelines: this.host.getTimelines?.(),
+        activeTimelineId: this.host.getActiveTimelineId?.(),
+        openTimelineIds: this.host.getOpenTimelineIds?.(),
         manifest,
         generationLog: this.host.getGenerationLog(),
       },
@@ -190,6 +200,7 @@ export class ProjectSession {
 
   private advanceSaved(): void {
     this.savedTimeline = this.host.getTimeline();
+    this.savedTimelines = this.host.getTimelines?.();
     this.savedManifest = this.host.getManifest();
   }
 }

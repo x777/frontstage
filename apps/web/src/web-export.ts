@@ -1,4 +1,4 @@
-import type { ExportGateway, ExportTarget, ExportProgressFn } from "@frontstage/ui";
+import type { ExportGateway, ExportTarget, ExportProgressFn, ExportRunOptions } from "@frontstage/ui";
 import type { Timeline } from "@frontstage/core";
 import type { MediaByteSource } from "@frontstage/engine";
 import { runExport, WebCodecsMp4Sink } from "@frontstage/engine";
@@ -42,8 +42,15 @@ export class WebExportGateway implements ExportGateway {
     media: MediaByteSource,
     target: ExportTarget,
     onProgress: ExportProgressFn,
+    opts?: ExportRunOptions,
   ): Promise<void> {
-    const blob = await runExport(timeline, media, new WebCodecsMp4Sink(), onProgress);
+    const blob = await runExport(
+      timeline,
+      media,
+      new WebCodecsMp4Sink(),
+      onProgress,
+      opts?.resolveTimeline ? { resolveTimeline: opts.resolveTimeline } : undefined,
+    );
     const w = await (target as WebExportTarget).handle.createWritable();
     await w.write(blob!);
     await w.close();

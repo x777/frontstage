@@ -288,6 +288,50 @@ describe("planRippleTrim + rippleTrimClip", () => {
     const tl = timeline([track("t", [clip("a", 0, 30)])]);
     expect(rippleTrimClip(tl, "a", "right", 0, false)).toBe(tl);
   });
+
+  it("left ripple keeps the start edge and grows duration to the right", () => {
+    const tl = timeline([track("t", [clip("c1", 0, 100, { trimStartFrame: 30 }), clip("c2", 100, 50)])]);
+    const next = rippleTrimClip(tl, "c1", "left", -20, false);
+    const c1 = next.tracks[0]!.clips.find((c) => c.id === "c1")!;
+    const c2 = next.tracks[0]!.clips.find((c) => c.id === "c2")!;
+    expect(c1.startFrame).toBe(0);
+    expect(c1.durationFrames).toBe(120);
+    expect(c1.trimStartFrame).toBe(10);
+    expect(c2.startFrame).toBe(120);
+  });
+
+  it("linked partner ripples in sync when propagateToLinked is true", () => {
+    const v1 = clip("v1", 0, 100, { trimEndFrame: 50, linkGroupId: "g" });
+    const a1 = clip("a1", 0, 100, { mediaType: "audio", sourceClipType: "audio", trimEndFrame: 50, linkGroupId: "g" });
+    const tl = timeline([
+      track("v", [v1, clip("v2", 100, 50)]),
+      track("a", [a1, clip("a2", 100, 50, { mediaType: "audio", sourceClipType: "audio" })], { type: "audio" }),
+    ]);
+    const next = rippleTrimClip(tl, "v1", "right", 20, true);
+    expect(next.tracks[0]!.clips.find((c) => c.id === "v1")!.durationFrames).toBe(120);
+    expect(next.tracks[1]!.clips.find((c) => c.id === "a1")!.durationFrames).toBe(120);
+    expect(next.tracks[0]!.clips.find((c) => c.id === "v2")!.startFrame).toBe(120);
+    expect(next.tracks[1]!.clips.find((c) => c.id === "a2")!.startFrame).toBe(120);
+  });
+
+  it("linked extend clamps to the most constrained partner", () => {
+    const v1 = clip("v1", 0, 100, { trimEndFrame: 50, linkGroupId: "g" });
+    const a1 = clip("a1", 0, 100, { mediaType: "audio", sourceClipType: "audio", trimEndFrame: 10, linkGroupId: "g" });
+    const tl = timeline([
+      track("v", [v1, clip("v2", 100, 50)]),
+      track("a", [a1, clip("a2", 100, 50, { mediaType: "audio" })], { type: "audio" }),
+    ]);
+    const next = rippleTrimClip(tl, "v1", "right", 20, true);
+    expect(next.tracks[0]!.clips.find((c) => c.id === "v1")!.durationFrames).toBe(110);
+    expect(next.tracks[1]!.clips.find((c) => c.id === "a1")!.durationFrames).toBe(110);
+    expect(next.tracks[0]!.clips.find((c) => c.id === "v2")!.startFrame).toBe(110);
+  });
+
+  it("shrink clamps so a clip never reaches zero duration", () => {
+    const tl = timeline([track("t", [clip("c1", 0, 10, { trimEndFrame: 50 })])]);
+    const next = rippleTrimClip(tl, "c1", "right", -100, false);
+    expect(next.tracks[0]!.clips.find((c) => c.id === "c1")!.durationFrames).toBe(1);
+  });
 });
 
 describe("rippleTrimClipCommand", () => {

@@ -67,4 +67,12 @@ describe("resolveDropPlan", () => {
     expect(plan.visualDurationFrames).toBe(0);
     expect(plan.audioTarget).toEqual({ kind: "existing", index: 1 });
   });
+  it("subtitle drop never enters the clip drop plan", () => {
+    const tl = timeline(["video", "audio"]);
+    const plan = resolveDropPlan(tl, { kind: "existing", index: 0 }, "subtitle", false, 30);
+    expect(plan.visualTarget).toBeNull();
+    expect(plan.audioTarget).toBeNull();
+    expect(plan.visualDurationFrames).toBe(0);
+    expect(plan.audioOnlyDurationFrames).toBe(0);
+  });
 });

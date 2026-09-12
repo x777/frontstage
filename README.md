@@ -24,13 +24,13 @@ Or just tell the agent what you want and watch it edit.**
 | | |
 |---|---|
 | 🎬 **Real timeline editing** | Multi-track, ripple & razor tools, linked A/V, sync-locked tracks, keyframes on opacity/position/scale/crop/volume, snapping, frame-accurate trims |
-| 🎨 **Color & effects** | 20 GPU effects: color wheels, curves & hue curves with histogram, LUTs (.cube), chroma key, blur/grain/glow, 16 blend modes |
+| 🎨 **Color & effects** | 21 GPU effects: color wheels, curves & hue curves with histogram, LUTs (.cube), chroma key, invert, blur/grain/glow, 16 blend modes |
 | ✨ **AI generation** | Video, image, audio & TTS via [fal.ai](https://fal.ai) — Veo, Kling, Seedance, nano-banana and more. Your key, your cost control, results land in the library |
 | 🤖 **The agent** | A chat that *edits your timeline*: cuts, layouts, color, captions — 40+ tools over the same undo stack you use. Any model via [OpenRouter](https://openrouter.ai) |
-| 💬 **Captions & transcription** | On-device Whisper transcription (free, no key), word-level editing, 11 animated caption presets, remove filler words by text |
+| 💬 **Captions & transcription** | On-device Whisper transcription (free, no key), word-level editing, 11 animated caption presets, SRT/VTT import and export, remove filler words by text |
 | 🔍 **Visual search** | Search your footage by what's *in* it — on-device SigLIP embeddings, no cloud |
-| 🔌 **MCP server** | Point Claude (or any MCP client) at your project — 43 tools to edit it from the outside |
-| 📤 **Pro interop** | Export FCPXML (DaVinci Resolve / Final Cut), XMEML (Premiere), SRT/VTT subtitles, MP4 render |
+| 🔌 **MCP server** | Point Claude (or any MCP client) at your project — 51 tools to edit it from the outside |
+| 📤 **Pro interop** | Export FCPXML (DaVinci Resolve / Final Cut), XMEML (Premiere), import/export SRT/VTT subtitles, MP4 render |
 
 ## Run it
 
@@ -67,7 +67,7 @@ The desktop app ships an MCP server (Settings → Agent → enable). Add it to C
 }
 ```
 
-Then: *"split the interview at every silence and add captions"* — and watch your timeline change. 43 tools: editing, color, generation, transcription, export.
+Then: *"split the interview at every silence and add captions"* — and watch your timeline change. 51 tools: editing, color, generation, transcription, export.
 
 ## Under the hood
 
@@ -76,9 +76,9 @@ pnpm + Turborepo monorepo — TypeScript end to end:
 | Package | What it is |
 |---|---|
 | `packages/core` | Headless domain: timeline model, commands/undo, ripple engine, color math, captions, interop exporters — zero UI deps, 1000+ tests |
-| `packages/engine` | Browser playback & render: WebGPU compositor (20 effects, 15 blends), WebCodecs decode, WebAudio mixing, MP4 export |
+| `packages/engine` | Browser playback & render: WebGPU compositor (21 effects, 15 blends), WebCodecs decode, WebAudio mixing, MP4 export |
 | `packages/ui` | The React editor — one `<Editor>` shared by web and desktop, token-driven design system |
-| `packages/ai` | Agent loop, 43-tool catalog, fal.ai generation pipeline, on-device Whisper & SigLIP |
+| `packages/ai` | Agent loop, 48-tool MCP catalog, fal.ai generation pipeline, on-device Whisper & SigLIP |
 | `apps/desktop` | Electron shell: native FS, keychain, ffmpeg, the MCP server |
 | `apps/web` | The same editor on File System Access API |
 | `apps/proxy` | Self-host relay for web AI (your server, your keys) |

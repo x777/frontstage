@@ -3,8 +3,12 @@ import type { Timeline } from "../timeline.js";
 import { findClip } from "../timeline.js";
 import type { Transform, Crop } from "../transform.js";
 import type { TextStyle } from "../text-style.js";
+import { applyTextFillMode, type TextFillMode } from "../text-fill-mode.js";
+import type { RGBA } from "../text-style.js";
 import type { Command } from "./editor-store.js";
 import { replaceClip } from "./timeline-commands.js";
+import { setFade } from "../clip-mutations.js";
+import type { FadeEdge } from "../timeline/fade-geometry.js";
 
 export function removeClipCommand(clipId: string): Command {
   return {
@@ -42,6 +46,23 @@ export function setClipPropertyCommand<K extends keyof Clip>(
   };
 }
 
+export function setFadeCommand(
+  clipId: string,
+  edge: FadeEdge,
+  frames: number,
+  coalesceKey?: string,
+): Command {
+  return {
+    label: "Set Fade",
+    coalesceKey,
+    apply(timeline: Timeline): Timeline {
+      const loc = findClip(timeline, clipId);
+      if (!loc) return timeline;
+      return replaceClip(timeline, clipId, (c) => setFade(c, edge, frames));
+    },
+  };
+}
+
 export function setClipTransformCommand(
   clipId: string,
   transform: Transform,
@@ -73,6 +94,21 @@ export function setClipTextStyleCommand(
     coalesceKey,
     apply(timeline: Timeline): Timeline {
       return replaceClip(timeline, clipId, (clip) => ({ ...clip, textStyle }));
+    },
+  };
+}
+
+export function setClipTextFillModeCommand(
+  clipId: string,
+  mode: TextFillMode,
+  footageMatteColor?: RGBA,
+  coalesceKey?: string,
+): Command {
+  return {
+    label: "Set Text Fill",
+    coalesceKey,
+    apply(timeline: Timeline): Timeline {
+      return replaceClip(timeline, clipId, (clip) => applyTextFillMode(clip, mode, footageMatteColor));
     },
   };
 }

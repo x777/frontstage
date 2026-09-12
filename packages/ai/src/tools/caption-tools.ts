@@ -7,15 +7,18 @@ import {
   captionSpecsForClip,
   dominantSpeechTrack,
   placeCaptionsCommand,
+  placeSubtitleCaptionsCommand,
   defaultTextStyle,
   rgbaFromHex,
   sourceFramesConsumed,
   heuristicCaptionWidthFrac,
+  parseSubtitleFile,
+  SubtitleParseError,
   type CaptionClipSpec,
   type CaptionPhrase,
   type TextStyle,
 } from "@frontstage/core";
-import type { ToolSpec } from "./types.js";
+import type { ToolContext, ToolResult, ToolSpec } from "./types.js";
 import { ok, errorResult } from "./executor.js";
 import { confirmationResult } from "./generate-tools.js";
 import { canTranscribe, classifyRefsByCache, transcribeRefs } from "./transcription-tools.js";
@@ -46,7 +49,9 @@ export function addCaptionsTool(): ToolSpec {
     name: "add_captions",
     description:
       "Generates timed captions from the timeline's spoken-word transcript and places them as text clips " +
-      "on a new video track. Targets explicit clipIds, or auto-detects the dominant speech track. One undo step.",
+      "on a new video track. Targets explicit clipIds, or auto-detects the dominant speech track. One undo step. " +
+      "Alternatively, pass subtitleMediaRef (a subtitle asset from import_media) to place that SRT/WebVTT file's " +
+      "cues as captions at their authored timecodes — no transcription; mutually exclusive with every other parameter.",
     inputSchema: z.object({
       clipIds: z.array(z.string()).optional(),
       centerX: z.number().finite().optional(),
@@ -60,6 +65,7 @@ export function addCaptionsTool(): ToolSpec {
       fontName: z.string().optional(),
       color: z.string().optional(),
       confirm: z.boolean().optional(),
+      subtitleMediaRef: z.string().optional(),
     }),
     async run(args, ctx) {
       const a = args as {
@@ -75,7 +81,11 @@ export function addCaptionsTool(): ToolSpec {
         fontName?: string;
         color?: string;
         confirm?: boolean;
+        subtitleMediaRef?: string;
       };
+      if (a.subtitleMediaRef !== undefined) {
+        return addCaptionsFromSubtitle(a, ctx);
+      }
       const facade = ctx.transcription;
       if (!facade) return errorResult("transcription is not available in this context");
 
@@ -195,4 +205,64 @@ export function addCaptionsTool(): ToolSpec {
       return ok(JSON.stringify(out, null, 2));
     },
   };
+}
+
+async function addCaptionsFromSubtitle(
+  a: Record<string, unknown> & { subtitleMediaRef?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const subtitleMediaRef = a.subtitleMediaRef;
+  if (typeof subtitleMediaRef !== "string" || subtitleMediaRef.length === 0) {
+    return errorResult("add_captions: subtitleMediaRef must be a non-empty media asset id string.");
+  }
+  const combined = Object.keys(a)
+    .filter((k) => k !== "subtitleMediaRef" && a[k] !== undefined)
+    .sort();
+  if (combined.length > 0) {
+    return errorResult(
+      "add_captions: subtitleMediaRef uses the file's text, timing, and default styling as-is; " +
+        `remove ${combined.join(", ")}.`,
+    );
+  }
+
+  const entry = ctx.getManifest().entries.find((e) => e.id === subtitleMediaRef);
+  if (!entry) return errorResult(`add_captions: media asset not found: ${subtitleMediaRef}`);
+  if (entry.type !== "subtitle") {
+    return errorResult(
+      `add_captions: '${subtitleMediaRef}' is ${entry.type}, not a subtitle file. Omit subtitleMediaRef to caption spoken audio.`,
+    );
+  }
+  if (!ctx.library?.readEntryBytes) {
+    return errorResult(`add_captions: the subtitle file for '${subtitleMediaRef}' is offline.`);
+  }
+
+  let bytes: Uint8Array;
+  try {
+    bytes = await ctx.library.readEntryBytes(subtitleMediaRef);
+  } catch {
+    return errorResult(`add_captions: the subtitle file for '${subtitleMediaRef}' is offline.`);
+  }
+  if (!bytes || bytes.length === 0) {
+    return errorResult(`add_captions: the subtitle file for '${subtitleMediaRef}' is offline.`);
+  }
+
+  const filename = entry.source.kind === "project" ? entry.source.relativePath : entry.source.absolutePath;
+  let cues;
+  try {
+    cues = parseSubtitleFile(bytes, filename);
+  } catch (err) {
+    const message = err instanceof SubtitleParseError ? err.message : String(err);
+    return errorResult(`add_captions: ${message}`);
+  }
+
+  const captionGroupId = ctx.newId();
+  const cmd = placeSubtitleCaptionsCommand({
+    cues,
+    fps: ctx.store.getSnapshot().timeline.fps,
+    captionGroupId,
+    newId: ctx.newId,
+  });
+  ctx.store.dispatch(cmd);
+  const out = { captionsAdded: cues.length, trackIndex: 0, captionGroupId };
+  return ok(JSON.stringify(out, null, 2));
 }

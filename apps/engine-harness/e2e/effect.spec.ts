@@ -19,6 +19,34 @@ test("saturation amount=0 desaturates a red layer to grey", async ({ page }) => 
   expect(p[0]).toBeLessThan(70);
 });
 
+test("stylize.invert GPU matches 1-rgb within ±3", async ({ page }) => {
+  await page.goto("/effect.html?case=invert");
+  await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+  const expected = await page.evaluate(
+    () => (window as unknown as { __expected: [number, number, number] }).__expected,
+  );
+  const p = await px(page, 100, 100);
+  for (let ch = 0; ch < 3; ch++) {
+    const exp8 = Math.round(expected[ch]! * 255);
+    expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(3);
+  }
+});
+
+test("footage stencil white mask keeps dest; empty mask shows matte", async ({ page }) => {
+  for (const c of ["stencil-keep", "stencil-matte"] as const) {
+    await page.goto(`/effect.html?case=${c}`);
+    await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });
+    const expected = await page.evaluate(
+      () => (window as unknown as { __expected: [number, number, number] }).__expected,
+    );
+    const p = await px(page, 100, 100);
+    for (let ch = 0; ch < 3; ch++) {
+      const exp8 = Math.round(expected[ch]! * 255);
+      expect(Math.abs(p[ch]! - exp8)).toBeLessThanOrEqual(4);
+    }
+  }
+});
+
 test("a plain layer (no effects) is unchanged red", async ({ page }) => {
   await page.goto("/effect.html?case=plain");
   await expect(page.locator("#status")).toHaveText("ok", { timeout: 20_000 });

@@ -355,6 +355,8 @@ export const IMPORT_EXT_TO_TYPE: Readonly<Record<string, ClipType>> = {
   jpeg: "image",
   tiff: "image",
   heic: "image",
+  srt: "subtitle",
+  vtt: "subtitle",
 };
 
 export const IMPORT_MIME_TO_EXT: Readonly<Record<string, string>> = {
@@ -382,13 +384,16 @@ export const IMPORT_MIME_TO_EXT: Readonly<Record<string, string>> = {
   "image/tiff": "tiff",
   "image/heic": "heic",
   "image/heif": "heic",
+  "application/x-subrip": "srt",
+  "text/vtt": "vtt",
+  "text/srt": "srt",
 };
 
 // Ported verbatim from Swift's acceptedMimeTypesMessage.
 const ACCEPTED_MIME_TYPES_MESSAGE =
-  "Accepted: video/mp4, video/quicktime, audio/mpeg, audio/wav, audio/aac, audio/mp4, audio/aiff, audio/flac, image/png, image/jpeg, image/tiff, image/heic.";
+  "Accepted: video/mp4, video/quicktime, audio/mpeg, audio/wav, audio/aac, audio/mp4, audio/aiff, audio/flac, image/png, image/jpeg, image/tiff, image/heic, application/x-subrip, text/vtt.";
 const SUPPORTED_EXTENSIONS_TEXT =
-  "Supported: mov/mp4, mp3/wav/aac/m4a/aiff/aifc/flac, png/jpg/jpeg/tiff/heic.";
+  "Supported: mov/mp4, mp3/wav/aac/m4a/aiff/aifc/flac, png/jpg/jpeg/tiff/heic, srt/vtt.";
 const MEDIA_IMPORT_UNAVAILABLE = "media import is not available in this context";
 
 function isLottieMime(mime: string): boolean {
@@ -462,7 +467,7 @@ export function importMediaTool(): ToolSpec {
   return {
     name: "import_media",
     description:
-      "Imports external media into the project's library — the bridge for assets coming from other MCP servers (stock libraries, music services, web search) or local files the user already has. The 'source' object must set exactly one of: url (HTTPS only — downloaded in the background; max 5 GB), path (absolute local file path — copied into the project in the background; may also be a directory, imported recursively, mirroring its subfolder structure as media folders; desktop only), or bytes (base64-encoded inline data — max ~15 MB of base64; use url/path for anything larger). For url, type is inferred from the URL path's file extension unless source.mimeType is set as an override. For bytes, source.mimeType is required. Supported types: video (mp4, mov), audio (mp3, wav, aac, m4a, aiff, aifc, flac), image (png, jpg, jpeg, tiff, heic). Lottie/JSON is not supported. Returns a placeholder asset id immediately; the asset becomes usable once the copy/download completes — poll get_media.",
+      "Imports external media into the project's library — the bridge for assets coming from other MCP servers (stock libraries, music services, web search) or local files the user already has. The 'source' object must set exactly one of: url (HTTPS only — downloaded in the background; max 5 GB), path (absolute local file path — copied into the project in the background; may also be a directory, imported recursively, mirroring its subfolder structure as media folders; desktop only), or bytes (base64-encoded inline data — max ~15 MB of base64; use url/path for anything larger). For url, type is inferred from the URL path's file extension unless source.mimeType is set as an override. For bytes, source.mimeType is required. Supported types: video (mp4, mov), audio (mp3, wav, aac, m4a, aiff, aifc, flac), image (png, jpg, jpeg, tiff, heic), subtitle (srt, vtt — becomes a subtitle asset; place its cues as caption clips via add_captions subtitleMediaRef; not placeable via add_clips). Lottie/JSON is not supported. Returns a placeholder asset id immediately; the asset becomes usable once the copy/download completes — poll get_media.",
     inputSchema: z.object({
       source: importSourceSchema.optional(),
       name: z.string().optional(),

@@ -365,7 +365,12 @@ async function bootstrap() {
     // generate_audio's video-to-audio span source (M14C T3) — the SAME headless export pipeline
     // the real export gateway drives (runExport), just silent (no audio) and shrunk to shortSide.
     renderSpanToMp4: (startFrame: number, frameCount: number, shortSide: number) =>
-      renderSpanToMp4(store.getSnapshot().timeline, library.byteSource, { startFrame, frameCount, shortSide }),
+      renderSpanToMp4(store.getSnapshot().timeline, library.byteSource, {
+        startFrame,
+        frameCount,
+        shortSide,
+        resolveTimeline: (id) => store.timelineById(id),
+      }),
     uploadFile: (bytes: Uint8Array, contentType: string, fileName: string) =>
       genGateway.uploadFile(bytes, contentType, fileName),
   };
@@ -393,6 +398,7 @@ async function bootstrap() {
     moveEntriesToFolder: (assetIds: string[], folderId: string | undefined) => library.moveEntriesToFolder(assetIds, folderId),
     deleteFolders: (ids: string[]) => library.deleteFolders(ids),
     deleteEntries: (ids: string[]) => library.deleteEntries(ids),
+    readEntryBytes: (id: string) => library.readEntryBytes(id),
   };
 
   // Reads localStorage at call time (not just the bootstrap-time aiProxyUrl) so a proxy URL/token

@@ -356,6 +356,34 @@ describe("apply_effect", () => {
     expect(store.canUndo()).toBe(false);
   });
 
+  test("stylize.invert has no params, unknown params rejected, undo restores", async () => {
+    const store = new EditorStore(makeTimeline());
+    const ctx = makeCtx(store);
+    const result = await applyEffectTool().run(
+      { clipIds: ["c1"], effects: [{ type: "stylize.invert" }] },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const loc = findClip(store.getSnapshot().timeline, "c1")!;
+    const clip = store.getSnapshot().timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+    const inv = clip.effects?.find((e) => e.type === "stylize.invert");
+    expect(inv).toBeDefined();
+    expect(inv!.params).toEqual({});
+
+    const invalid = await applyEffectTool().run(
+      { clipIds: ["c1"], effects: [{ type: "stylize.invert", params: { amount: 1 } }] },
+      ctx,
+    );
+    expect(invalid.isError).toBe(true);
+    const still = store.getSnapshot().timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+    expect(still.effects?.some((e) => e.type === "stylize.invert")).toBe(true);
+
+    expect(store.canUndo()).toBe(true);
+    store.undo();
+    const restored = store.getSnapshot().timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+    expect(restored.effects?.some((e) => e.type === "stylize.invert")).toBeFalsy();
+  });
+
   test("unknown clipId returns isError:true, store unchanged", async () => {
     const store = new EditorStore(makeTimeline());
     const before = store.getSnapshot().timeline;

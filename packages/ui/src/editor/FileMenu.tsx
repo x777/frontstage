@@ -32,9 +32,10 @@ export interface FileMenuProps {
   canExportXml?: boolean;
   // SRT/VTT (M14A T1): gated on the timeline having caption clips, not on canExportXml.
   canExportCaptions?: boolean;
+  onImportCaptions?: () => void;
 }
 
-export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport, canExportXml, canExportCaptions }: FileMenuProps) {
+export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport, canExportXml, canExportCaptions, onImportCaptions }: FileMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentRefs, setRecentRefs] = useState<ProjectRef[]>([]);
   const [fcpxmlTarget, setFcpxmlTarget] = useState<FcpxmlTarget>(DEFAULT_FCPXML_TARGET);
@@ -112,8 +113,11 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
     { id: "save", label: "Save", testid: "file-save", separatorBefore: true },
     { id: "save-as", label: "Save As…", testid: "file-save-as" },
   );
+  if (onImportCaptions) {
+    items.push({ id: "import-captions", label: "Import Captions (SRT/VTT)…", testid: "file-import-captions", separatorBefore: true });
+  }
   if (onExport) {
-    items.push({ id: "export-video", label: "Export Video (MP4)…", testid: "file-export-video", separatorBefore: true });
+    items.push({ id: "export-video", label: "Export Video (MP4)…", testid: "file-export-video", separatorBefore: !onImportCaptions });
     if (canExportXml) {
       items.push({ id: "export-fcpxml", label: "Export FCPXML (Resolve/FCP)…", testid: "file-export-fcpxml" });
       items.push({
@@ -171,6 +175,7 @@ export function FileMenu({ session, confirmDiscard, runProjectCommand, onExport,
     }
     if (id === "save") return handleSave();
     if (id === "save-as") return handleSaveAs();
+    if (id === "import-captions") { setMenuOpen(false); onImportCaptions?.(); return; }
     if (id === "export-video") { setMenuOpen(false); onExport?.("video"); return; }
     if (id === "export-fcpxml") { setMenuOpen(false); onExport?.("fcpxml", { target: fcpxmlTarget, version: fcpxmlVersion }); return; }
     if (id === "export-xmeml") { setMenuOpen(false); onExport?.("xmeml"); return; }

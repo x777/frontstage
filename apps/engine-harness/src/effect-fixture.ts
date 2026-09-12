@@ -2,7 +2,7 @@ import { FrameRenderer, readPixelFactory, type ReadPixelFn, type CompositeLayer 
 import {
   affineTransform, defaultTransform, defaultCrop, type Effect, type BlendMode,
   applyExposure, applyContrast, applyHighlightsShadows, applyBlacksWhites, applyTemperatureTint, applyVibrance,
-  applyColorWheels, applyCurves, applyHueCurves, parseGradeCurve, parseHueCurves,
+  applyColorWheels, applyCurves, applyHueCurves, applyInvert, applyFootageStencil, parseGradeCurve, parseHueCurves,
   parseCubeLUT, sampleLUT, blendPixel, applyChromaKey,
 } from "@frontstage/core";
 
@@ -54,6 +54,39 @@ async function main() {
       layer.effects = [{ id: "e", type: "color.saturation", enabled: true, params: { amount: { value: 0 } } }];
       await r.composite([layer], size);
       frame.close();
+    } else if (useCase === "invert") {
+      const inp = { r: MID.r, g: MID.g, b: MID.b };
+      const f = solidFrame(W, H, `rgb(${MID_R},${MID_G},${MID_B})`);
+      const layer: CompositeLayer = {
+        frame: f, transform: full, opacity: 1, crop: defaultCrop(),
+        effects: [{ id: "e", type: "stylize.invert", enabled: true, params: {} }],
+      };
+      await r.composite([layer], size);
+      f.close();
+      const exp = applyInvert(inp);
+      window.__expected = [exp.r, exp.g, exp.b];
+    } else if (useCase === "stencil-keep") {
+      const bg = solidFrame(W, H, "rgb(255,0,0)");
+      const mask = solidFrame(W, H, "rgb(255,255,255)");
+      await r.composite([
+        { frame: bg, transform: full, opacity: 1, crop: defaultCrop() },
+        { frame: mask, transform: full, opacity: 1, crop: defaultCrop(), stencil: true, matteColor: { r: 0, g: 0, b: 0, a: 1 } },
+      ], size);
+      bg.close();
+      mask.close();
+      const exp = applyFootageStencil({ r: 1, g: 0, b: 0 }, 1, { r: 0, g: 0, b: 0, a: 1 });
+      window.__expected = [exp.r, exp.g, exp.b];
+    } else if (useCase === "stencil-matte") {
+      const bg = solidFrame(W, H, "rgb(255,0,0)");
+      const mask = solidFrame(W, H, "rgba(0,0,0,0)");
+      await r.composite([
+        { frame: bg, transform: full, opacity: 1, crop: defaultCrop() },
+        { frame: mask, transform: full, opacity: 1, crop: defaultCrop(), stencil: true, matteColor: { r: 0, g: 0, b: 0, a: 1 } },
+      ], size);
+      bg.close();
+      mask.close();
+      const exp = applyFootageStencil({ r: 1, g: 0, b: 0 }, 0, { r: 0, g: 0, b: 0, a: 1 });
+      window.__expected = [exp.r, exp.g, exp.b];
     } else if (useCase === "curves") {
       const curveJson = JSON.stringify({ master: [{ x: 0, y: 0 }, { x: 0.5, y: 0.75 }, { x: 1, y: 1 }] });
       const inp = { r: 102 / 255, g: 128 / 255, b: 153 / 255 };

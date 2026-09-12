@@ -38,6 +38,35 @@ describe("buildRenderPlan", () => {
     const tl = { ...defaultTimeline(), tracks: [track([clip({ startFrame: 0, durationFrames: 5 })])] };
     expect(buildRenderPlan(tl, 50, sizes).layers).toHaveLength(0);
   });
+  test("sequence clip expands child visual layers at the mapped frame", () => {
+    const childClip = clip({ id: "child-v", mediaRef: "child-media", durationFrames: 60 });
+    const child = {
+      ...defaultTimeline(),
+      id: "child-tl",
+      width: 1920,
+      height: 1080,
+      tracks: [track([childClip])],
+    };
+    const nest = clip({
+      id: "nest",
+      mediaType: "sequence",
+      sourceClipType: "sequence",
+      mediaRef: "child-tl",
+      startFrame: 30,
+      durationFrames: 60,
+    });
+    const parent = { ...defaultTimeline(), tracks: [track([nest])] };
+    const resolve = (id: string) => (id === "child-tl" ? child : undefined);
+    const sizes = new Map([
+      ["m", { width: 1920, height: 1080 }],
+      ["child-media", { width: 1920, height: 1080 }],
+    ]);
+    expect(buildRenderPlan(parent, 15, sizes, resolve).layers).toHaveLength(0);
+    const during = buildRenderPlan(parent, 45, sizes, resolve);
+    expect(during.layers.some((l) => l.mediaRef === "child-media")).toBe(true);
+    expect(during.layers.some((l) => l.clipId === "child-v")).toBe(true);
+  });
+
   test("audio clips are excluded", () => {
     const tl = { ...defaultTimeline(), tracks: [track([clip({ id: "a", mediaType: "audio" })], { type: "audio" })] };
     expect(buildRenderPlan(tl, 10, sizes).layers).toHaveLength(0);

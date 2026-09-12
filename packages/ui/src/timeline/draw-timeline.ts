@@ -8,6 +8,13 @@ import {
   trackHeightAt,
   trackTopY,
   xForFrame,
+  sourceFramesConsumed,
+  sourceDurationFrames,
+  waveformColumnsForWidth,
+  fadeHandleRenderX,
+  FADE_HANDLE_SIZE,
+  findClip,
+  appliedSourceDelta,
 } from "@frontstage/core";
 import type { TimelineGeometry, FrameRange } from "@frontstage/core";
 import { generatingLabel } from "../media/GeneratingOverlay.js";
@@ -53,6 +60,7 @@ function trackColor(palette: TimelinePalette, mediaType: string): string {
     case "image": return palette.trackImage;
     case "text": return palette.trackText;
     case "lottie": return palette.trackLottie;
+    case "subtitle": return palette.trackText;
     default: return palette.trackVideo;
   }
 }
@@ -189,15 +197,38 @@ function drawFadeWedge(
  * Port of ClipRenderer.drawOpacityFades — the fade-in/out wedges for non-audio clips.
  * Swift's audio-only volume rubber band (keyframed dB automation) is a separate, unported feature.
  */
+/** Palmier waveform: normalized 0=loud fills the body; 1=silence collapses to the midline. */
+function drawClipWaveform(
+  ctx: CanvasRenderingContext2D,
+  clip: Clip,
+  rect: { x: number; y: number; width: number; height: number },
+  samples: readonly number[],
+  color: string,
+): void {
+  const bodyY = rect.y + CLIP_LABEL_BAR_HEIGHT;
+  const bodyH = Math.max(0, rect.height - CLIP_LABEL_BAR_HEIGHT - 1);
+  if (bodyH < 2 || rect.width < 2) return;
+  const total = Math.max(1, sourceDurationFrames(clip));
+  const startFrac = clip.trimStartFrame / total;
+  const endFrac = (clip.trimStartFrame + sourceFramesConsumed(clip)) / total;
+  const cols = waveformColumnsForWidth(samples, Math.max(1, Math.floor(rect.width)), startFrac, endFrac);
+  const mid = bodyY + bodyH / 2;
+  ctx.fillStyle = withAlpha(color, 0.85);
+  for (let x = 0; x < cols.length; x++) {
+    const amp = (1 - cols[x]!) * (bodyH / 2);
+    if (amp < 0.5) continue;
+    ctx.fillRect(rect.x + x, mid - amp, 1, amp * 2);
+  }
+}
+
 function drawClipFades(
   ctx: CanvasRenderingContext2D,
   clip: Clip,
   rect: { x: number; y: number; width: number; height: number },
   isSelected: boolean
 ): void {
-  if (clip.mediaType === "audio") return;
   if (clip.durationFrames <= 0) return;
-  if (clip.fadeInFrames <= 0 && clip.fadeOutFrames <= 0) return;
+  if (clip.fadeInFrames <= 0 && clip.fadeOutFrames <= 0 && !isSelected) return;
   const pxPerFrame = rect.width / clip.durationFrames;
   if (pxPerFrame <= 0) return;
 
@@ -208,25 +239,32 @@ function drawClipFades(
 
   const alpha = isSelected ? CLIP_FADE_ALPHA_SELECTED : CLIP_FADE_ALPHA_UNSELECTED;
   const strokeColor = `rgba(255,255,255,${alpha * 0.7})`;
+  const handleFill = `rgba(255,255,255,${alpha})`;
 
-  const kneeXFor = (kfOffset: number, isLeft: boolean): number => {
-    const actual = rect.x + kfOffset * pxPerFrame;
-    return isLeft
-      ? Math.max(rect.x + CLIP_FADE_HANDLE_EDGE_INSET, actual)
-      : Math.min(rect.x + rect.width - CLIP_FADE_HANDLE_EDGE_INSET, actual);
-  };
+  const leftOffset = Math.min(clip.fadeInFrames, clip.durationFrames);
+  const rightOffset = Math.max(0, clip.durationFrames - clip.fadeOutFrames);
+  const leftKneeX = fadeHandleRenderX(rect.x, rect.width, leftOffset, pxPerFrame);
+  const rightKneeX = fadeHandleRenderX(rect.x, rect.width, rightOffset, pxPerFrame);
 
   if (clip.fadeInFrames > 0) {
-    const leftOffset = Math.min(clip.fadeInFrames, clip.durationFrames);
-    const kneeX = kneeXFor(leftOffset, true);
-    const curve = fadeCurvePoints(rect.x, bodyBottom, kneeX, kneeY, clip.fadeInInterpolation);
-    drawFadeWedge(ctx, rect.x, bodyBottom, kneeX, kneeY, bodyY, curve, strokeColor);
+    const curve = fadeCurvePoints(rect.x, bodyBottom, leftKneeX, kneeY, clip.fadeInInterpolation);
+    drawFadeWedge(ctx, rect.x, bodyBottom, leftKneeX, kneeY, bodyY, curve, strokeColor);
   }
   if (clip.fadeOutFrames > 0) {
-    const rightOffset = Math.max(0, clip.durationFrames - clip.fadeOutFrames);
-    const kneeX = kneeXFor(rightOffset, false);
-    const curve = fadeCurvePoints(rect.x + rect.width, bodyBottom, kneeX, kneeY, clip.fadeOutInterpolation);
-    drawFadeWedge(ctx, rect.x + rect.width, bodyBottom, kneeX, kneeY, bodyY, curve, strokeColor);
+    const curve = fadeCurvePoints(rect.x + rect.width, bodyBottom, rightKneeX, kneeY, clip.fadeOutInterpolation);
+    drawFadeWedge(ctx, rect.x + rect.width, bodyBottom, rightKneeX, kneeY, bodyY, curve, strokeColor);
+  }
+
+  if (isSelected) {
+    const half = FADE_HANDLE_SIZE / 2;
+    for (const [kx, edge] of [[leftKneeX, "left"], [rightKneeX, "right"]] as const) {
+      ctx.fillStyle = handleFill;
+      ctx.fillRect(kx - half, kneeY - half, FADE_HANDLE_SIZE, FADE_HANDLE_SIZE);
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(kx - half, kneeY - half, FADE_HANDLE_SIZE, FADE_HANDLE_SIZE);
+      void edge;
+    }
   }
 }
 
@@ -241,6 +279,7 @@ export interface TimelineOverlays {
     gapRangesByTrackIndex: Map<number, FrameRange>;
     shiftDeltasByClipId: Map<string, number>;
   };
+  slip?: { clipId: string; partnerIds: string[]; deltaFrames: number };
 }
 
 /**
@@ -264,7 +303,8 @@ export function drawTimeline(
   overlays?: TimelineOverlays,
   statusByRef?: Map<string, string>,
   nameByRef?: Map<string, string>,
-  razorLineX: number | null = null
+  razorLineX: number | null = null,
+  waveformByRef?: Map<string, readonly number[]>,
 ): void {
   const { width, height, dpr } = size;
 
@@ -325,6 +365,30 @@ export function drawTimeline(
     ctx.restore();
   }
 
+  const markers = state.timeline.markers ?? [];
+  if (markers.length > 0) {
+    ctx.save();
+    for (const marker of markers) {
+      const x = xForFrame(geom, marker.startFrame);
+      if (x < -8 || x > width + 8) continue;
+      const { r, g, b, a } = marker.color;
+      ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+      if (marker.durationFrames > 0) {
+        const x2 = xForFrame(geom, marker.startFrame + marker.durationFrames);
+        ctx.globalAlpha = 0.22;
+        ctx.fillRect(x, 0, Math.max(1, x2 - x), RULER_HEIGHT);
+        ctx.globalAlpha = 1;
+      }
+      ctx.beginPath();
+      ctx.moveTo(x, RULER_HEIGHT);
+      ctx.lineTo(x - 4, RULER_HEIGHT - 8);
+      ctx.lineTo(x + 4, RULER_HEIGHT - 8);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // ── Track backgrounds ────────────────────────────────────────────────────────
   const tracks = state.timeline.tracks;
   for (let ti = 0; ti < tracks.length; ti++) {
@@ -363,6 +427,11 @@ export function drawTimeline(
       roundRect(ctx, rect.x, rect.y, rect.width, rect.height, radius);
       ctx.fillStyle = withAlpha(color, isSelected ? CLIP_FILL_ALPHA_SELECTED : CLIP_FILL_ALPHA);
       ctx.fill();
+
+      const samples = waveformByRef?.get(clip.mediaRef);
+      if (samples && samples.length > 0 && (clip.mediaType === "audio" || clip.mediaType === "video")) {
+        drawClipWaveform(ctx, clip, rect, samples, color);
+      }
 
       // Fade-in/out wedges (video/image/text/lottie only — Swift's audio volume rubber band is unported).
       drawClipFades(ctx, clip, rect, isSelected);
@@ -526,6 +595,40 @@ export function drawTimeline(
       ctx.setLineDash([4, 3]);
       roundRect(ctx, dropIndicator.x, dropIndicator.y, dropIndicator.width, dropIndicator.height, 3);
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Slip source window (FCP-style: source range slides under a fixed clip) ──
+  if (overlays?.slip && overlays.slip.deltaFrames !== 0) {
+    const ids = [overlays.slip.clipId, ...overlays.slip.partnerIds];
+    ctx.save();
+    for (const id of ids) {
+      const loc = findClip(state.timeline, id);
+      if (!loc) continue;
+      const clip = state.timeline.tracks[loc.trackIndex]!.clips[loc.clipIndex]!;
+      const applied = appliedSourceDelta(clip, overlays.slip.deltaFrames);
+      const preview = {
+        ...clip,
+        trimStartFrame: clip.trimStartFrame - applied,
+        trimEndFrame: clip.trimEndFrame + applied,
+      };
+      const active = clipRect(geom, clip, loc.trackIndex);
+      const speed = Math.max(preview.speed, 0.001);
+      const sourceFrames = preview.trimStartFrame + sourceFramesConsumed(preview) + preview.trimEndFrame;
+      const sourceW = Math.max(1, sourceFrames / speed) * geom.pixelsPerFrame;
+      const headX = active.x - (preview.trimStartFrame / speed) * geom.pixelsPerFrame;
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = palette.accentPrimary;
+      roundRect(ctx, headX, active.y, sourceW, active.height, 3);
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = palette.accentPrimary;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      roundRect(ctx, active.x, active.y, active.width, active.height, 3);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
     ctx.restore();
   }

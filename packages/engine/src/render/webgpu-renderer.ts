@@ -506,6 +506,42 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
 }
 `;
 
+// Effect: stylize.invert — Palmier CIColorMatrix RGB → 1−RGB, alpha unchanged.
+const WGSL_INVERT = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct Invert { _pad: vec4f };
+
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var<uniform> u: Invert;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  var c = textureSample(src, samp, uv);
+  c = vec4f(1.0 - c.rgb, c.a + u._pad.x * 0.0);
+  return c;
+}
+`;
+
+// Palmier footage fill: CIBlendWithMask — white glyph keeps dest, black shows matte-over-dest.
+const WGSL_STENCIL = WGSL_FULLSCREEN_VS + /* wgsl */ `
+struct StencilU { r: f32, g: f32, b: f32, a: f32, opacity: f32, _p0: f32, _p1: f32, _p2: f32 };
+@group(0) @binding(0) var maskTex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var dstTex: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> u: StencilU;
+
+@fragment
+fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let mask = textureSample(maskTex, samp, uv);
+  let dest = textureSample(dstTex, samp, uv);
+  let m = mask.a;
+  let matte = vec4f(u.r, u.g, u.b, u.a);
+  let over = vec4f(matte.rgb * matte.a + dest.rgb * (1.0 - matte.a), matte.a + dest.a * (1.0 - matte.a));
+  let stenciled = mix(over, dest, m);
+  return mix(dest, stenciled, u.opacity);
+}
+`;
+
 // Effect: stylize.grain — deterministic hash noise; resX/resY are the canvas dimensions.
 const WGSL_GRAIN = WGSL_FULLSCREEN_VS + /* wgsl */ `
 struct Grain { amount: f32, size: f32, resX: f32, resY: f32 };
@@ -775,6 +811,7 @@ interface EffectStep {
 
 type LayerPlan =
   | { kind: "simple"; source: SourceBinding; uBuf: GPUBuffer }
+  | { kind: "stencil"; source: SourceBinding; capBuf: GPUBuffer; uBuf: GPUBuffer }
   | { kind: "effected"; source: SourceBinding; capBuf: GPUBuffer; steps: EffectStep[]; compBuf: GPUBuffer; blendMode?: BlendMode; opacity: number };
 
 interface RendererResources {
@@ -799,6 +836,8 @@ interface RendererResources {
   compositeModule: GPUShaderModule;
   blendModule: GPUShaderModule;
   chromaModule: GPUShaderModule;
+  invertModule: GPUShaderModule;
+  stencilModule: GPUShaderModule;
   vignetteModule: GPUShaderModule;
   grainModule: GPUShaderModule;
   gaussModule: GPUShaderModule;
@@ -868,6 +907,8 @@ export class FrameRenderer {
   private compositeModule: GPUShaderModule;
   private blendModule: GPUShaderModule;
   private chromaModule: GPUShaderModule;
+  private invertModule: GPUShaderModule;
+  private stencilModule: GPUShaderModule;
   private vignetteModule: GPUShaderModule;
   private grainModule: GPUShaderModule;
   private gaussModule: GPUShaderModule;
@@ -931,6 +972,8 @@ export class FrameRenderer {
     this.compositeModule = r.compositeModule;
     this.blendModule = r.blendModule;
     this.chromaModule = r.chromaModule;
+    this.invertModule = r.invertModule;
+    this.stencilModule = r.stencilModule;
     this.vignetteModule = r.vignetteModule;
     this.grainModule = r.grainModule;
     this.gaussModule = r.gaussModule;
@@ -994,6 +1037,8 @@ export class FrameRenderer {
     const compositeModule = device.createShaderModule({ code: WGSL_COMPOSITE });
     const blendModule = device.createShaderModule({ code: WGSL_BLEND });
     const chromaModule = device.createShaderModule({ code: WGSL_CHROMA });
+    const invertModule = device.createShaderModule({ code: WGSL_INVERT });
+    const stencilModule = device.createShaderModule({ code: WGSL_STENCIL });
     const vignetteModule = device.createShaderModule({ code: WGSL_VIGNETTE });
     const grainModule = device.createShaderModule({ code: WGSL_GRAIN });
     const gaussModule = device.createShaderModule({ code: WGSL_GAUSS });
@@ -1118,7 +1163,7 @@ export class FrameRenderer {
 
     return new FrameRenderer({
       device, ctx, canvasFmt, sampler,
-      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule, chromaModule, vignetteModule, grainModule, gaussModule,
+      extModule, texModule, satModule, exposureModule, contrastModule, hsModule, bwModule, tempModule, vibModule, wheelsModule, curvesModule, hueCurvesModule, lutModule, compositeModule, blendModule, chromaModule, invertModule, stencilModule, vignetteModule, grainModule, gaussModule,
       motionModule, sharpenFx2Module, noiseRedFx2Module, clarityFx2Module, glowThreshModule, glowFx2Module,
       extBgl, copyBgl, blitBgl, fxBgl, fx2Bgl,
       extLayout, copyLayout, fxLayout, fx2Layout, fxLutBgl, fxLutLayout, fxLut3dBgl, fxLut3dLayout, blendBgl, blendLayout,
@@ -1191,6 +1236,15 @@ export class FrameRenderer {
       layout: this.blendLayout,
       vertex: { module: this.blendModule, entryPoint: "vs" },
       fragment: { module: this.blendModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+      primitive: { topology: "triangle-strip" },
+    }));
+  }
+
+  private stencilPipeline(): GPURenderPipeline {
+    return this.pipelineFor("footage-stencil", () => this.device.createRenderPipeline({
+      layout: this.blendLayout,
+      vertex: { module: this.stencilModule, entryPoint: "vs" },
+      fragment: { module: this.stencilModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
       primitive: { topology: "triangle-strip" },
     }));
   }
@@ -1280,6 +1334,13 @@ export class FrameRenderer {
           layout: this.fxLayout,
           vertex: { module: this.chromaModule, entryPoint: "vs" },
           fragment: { module: this.chromaModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
+          primitive: { topology: "triangle-strip" },
+        }));
+      case "stylize.invert":
+        return this.pipelineFor("effect:stylize.invert", () => this.device.createRenderPipeline({
+          layout: this.fxLayout,
+          vertex: { module: this.invertModule, entryPoint: "vs" },
+          fragment: { module: this.invertModule, entryPoint: "fs", targets: [{ format: FX_FORMAT }] },
           primitive: { topology: "triangle-strip" },
         }));
       case "stylize.vignette":
@@ -1402,6 +1463,8 @@ export class FrameRenderer {
           resolveParam(eff.params.softness, 0, 0.5),
           resolveParam(eff.params.spill, 0, 0.5),
         ]);
+      case "stylize.invert":
+        return new Float32Array([0, 0, 0, 0]);
       case "stylize.vignette":
         return new Float32Array([
           resolveParam(eff.params.amount, 0, 0),
@@ -1556,7 +1619,8 @@ export class FrameRenderer {
         const enabledEffects = (layer.effects ?? []).filter((e) => e.enabled);
         const bm: BlendMode | undefined = layer.blendMode;
         const normalBlend = bm === undefined || bm === "normal";
-        const simple = enabledEffects.length === 0 && normalBlend;
+        const stencil = layer.stencil === true;
+        const simple = enabledEffects.length === 0 && normalBlend && !stencil;
 
         // Import (zero-copy) or copy (software) the source once.
         let source: SourceBinding;
@@ -1587,6 +1651,14 @@ export class FrameRenderer {
 
         if (simple) {
           plans.push({ kind: "simple", source, uBuf: uniformBuffer(bigUniform(layer, layer.opacity), UNIFORMS_F32 * 4) });
+        } else if (stencil) {
+          const matte = layer.matteColor ?? { r: 0, g: 0, b: 0, a: 1 };
+          plans.push({
+            kind: "stencil",
+            source,
+            capBuf: uniformBuffer(bigUniform(layer, 1), UNIFORMS_F32 * 4),
+            uBuf: uniformBuffer(new Float32Array([matte.r, matte.g, matte.b, matte.a, layer.opacity, 0, 0, 0]), 32),
+          });
         } else {
           // Capture pins the source into fxPing with transform+crop but NO opacity (opacity is applied at composite).
           const capBuf = uniformBuffer(bigUniform(layer, 1), UNIFORMS_F32 * 4);
@@ -1696,6 +1768,58 @@ export class FrameRenderer {
             i++;
           }
           pass.end();
+          continue;
+        }
+
+        if (plan.kind === "stencil") {
+          const sp = plan;
+          const ping = this.fxPing;
+          const cap = encoder.beginRenderPass({
+            colorAttachments: [{ view: ping.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+          });
+          if (sp.source.type === "ext") {
+            cap.setPipeline(this.capturePipeline("ext"));
+            cap.setBindGroup(0, device.createBindGroup({
+              layout: this.extBgl,
+              entries: [
+                { binding: 0, resource: sp.source.extTex },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: { buffer: sp.capBuf } },
+              ],
+            }));
+          } else {
+            cap.setPipeline(this.capturePipeline("tex"));
+            cap.setBindGroup(0, device.createBindGroup({
+              layout: this.copyBgl,
+              entries: [
+                { binding: 0, resource: sp.source.copyTex.createView() },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: { buffer: sp.capBuf } },
+              ],
+            }));
+          }
+          cap.draw(4);
+          cap.end();
+
+          const stencilPass = encoder.beginRenderPass({
+            colorAttachments: [{ view: otherAccum.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+          });
+          stencilPass.setPipeline(this.stencilPipeline());
+          stencilPass.setBindGroup(0, device.createBindGroup({
+            layout: this.blendBgl,
+            entries: [
+              { binding: 0, resource: ping.createView() },
+              { binding: 1, resource: this.sampler },
+              { binding: 2, resource: curAccum.createView() },
+              { binding: 3, resource: { buffer: sp.uBuf } },
+            ],
+          }));
+          stencilPass.draw(4);
+          stencilPass.end();
+          const tmpAccum = curAccum;
+          curAccum = otherAccum;
+          otherAccum = tmpAccum;
+          i++;
           continue;
         }
 

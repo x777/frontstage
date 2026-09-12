@@ -1,6 +1,6 @@
 import {
   type Size, type TextLayer, type TextStyle, type TextAlignment, type TextWordState, type RGBA,
-  splitTextWords, DEFAULT_HIGHLIGHT_COLOR,
+  splitTextWords, DEFAULT_HIGHLIGHT_COLOR, textRasterAppearance, type TextRasterAppearance,
 } from "@frontstage/core";
 
 const css = (c: RGBA): string =>
@@ -44,9 +44,18 @@ export function layoutWordsLine(
  */
 export function textRasterCacheKey(layer: TextLayer, renderSize: Size): string {
   const ws = layer.wordState;
-  if (!ws) return JSON.stringify([layer.text, layer.style, renderSize]);
+  if (!ws) {
+    if (layer.fillMode === undefined) return JSON.stringify([layer.text, layer.style, renderSize]);
+    return JSON.stringify([layer.text, layer.style, renderSize, layer.fillMode]);
+  }
+  if (layer.fillMode === undefined) {
+    return JSON.stringify([
+      layer.text, layer.style, renderSize,
+      layer.preset, ws.visibleCount, ws.highlightIndex, ws.soloIndex, layer.highlightColor,
+    ]);
+  }
   return JSON.stringify([
-    layer.text, layer.style, renderSize,
+    layer.text, layer.style, renderSize, layer.fillMode,
     layer.preset, ws.visibleCount, ws.highlightIndex, ws.soloIndex, layer.highlightColor,
   ]);
 }
@@ -63,12 +72,18 @@ export class TextRasterizer {
     const o = new OffscreenCanvas(W, H);
     const c = o.getContext("2d")!;
     const s = layer.style;
+    const look = textRasterAppearance(s, layer.fillMode, H);
     // Always center the raster at canvas center; transform is applied at composite time.
     const cx = W / 2;
     const cy = H / 2;
 
     c.font = `${s.fontSize * s.fontScale}px ${s.fontName}`;
     c.textBaseline = "middle";
+    if (look.blurPx > 0) c.filter = `blur(${look.blurPx}px)`;
+    c.save();
+    c.translate(cx, cy);
+    c.scale(look.widthScale, look.heightScale);
+    c.translate(-cx, -cy);
 
     const ws = layer.wordState;
     const isWordCycle = layer.preset === "wordCycle";
@@ -78,7 +93,7 @@ export class TextRasterizer {
     const displayText = soloWord ?? layer.text;
 
     // background fill (behind text bounds)
-    if (s.background.enabled) {
+    if (look.drawBackground) {
       const m = c.measureText(displayText);
       const tw = m.width;
       const th = s.fontSize * s.fontScale;
@@ -89,7 +104,7 @@ export class TextRasterizer {
     }
 
     // shadow
-    if (s.shadow.enabled) {
+    if (look.drawShadow) {
       c.shadowColor = css(s.shadow.color);
       c.shadowBlur = s.shadow.blur;
       c.shadowOffsetX = s.shadow.offsetX;
@@ -101,10 +116,11 @@ export class TextRasterizer {
     } else if (!ws || soloWord !== null) {
       // Non-animated text, or wordCycle's solo word — single centered draw, byte-identical to the
       // pre-M11C path when ws is absent.
-      this._drawSingle(c, s, displayText, cx, cy);
+      this._drawSingle(c, s, look, displayText, cx, cy);
     } else {
-      this._drawWords(c, layer, ws, cx, cy);
+      this._drawWords(c, layer, look, ws, cx, cy);
     }
+    c.restore();
 
     const vf = new VideoFrame(o.transferToImageBitmap(), { timestamp: 0 });
     this.cache.set(key, vf);
@@ -114,17 +130,18 @@ export class TextRasterizer {
   private _drawSingle(
     c: OffscreenCanvasRenderingContext2D,
     s: TextStyle,
+    look: TextRasterAppearance,
     text: string,
     cx: number,
     cy: number,
   ): void {
     c.textAlign = s.alignment;
-    if (s.border.enabled) {
+    if (look.drawBorder) {
       c.lineWidth = 2;
       c.strokeStyle = css(s.border.color);
       c.strokeText(text, cx, cy);
     }
-    c.fillStyle = css(s.color);
+    c.fillStyle = css(look.fill);
     c.fillText(text, cx, cy);
   }
 
@@ -140,6 +157,7 @@ export class TextRasterizer {
   private _drawWords(
     c: OffscreenCanvasRenderingContext2D,
     layer: TextLayer,
+    look: TextRasterAppearance,
     ws: TextWordState,
     cx: number,
     cy: number,
@@ -158,7 +176,7 @@ export class TextRasterizer {
       const highlighted = ws.highlightIndex === i;
 
       // Swift: drawWordBackground — rounded block behind the active word, base text color kept.
-      if (layer.preset === "highlightBlock" && highlighted) {
+      if (layer.preset === "highlightBlock" && highlighted && look.drawBackground) {
         const m = c.measureText(box.text);
         const ascent = m.actualBoundingBoxAscent || fontSize * 0.8;
         const descent = m.actualBoundingBoxDescent || fontSize * 0.2;
@@ -178,12 +196,12 @@ export class TextRasterizer {
         c.scale(1.15, 1.15);
         c.translate(-wcx, -cy);
       }
-      if (s.border.enabled) {
+      if (look.drawBorder) {
         c.lineWidth = 2;
         c.strokeStyle = css(s.border.color);
         c.strokeText(box.text, box.x, cy);
       }
-      c.fillStyle = css(layer.preset === "highlightPop" && highlighted ? highlightColor : s.color);
+      c.fillStyle = css(layer.preset === "highlightPop" && highlighted ? highlightColor : look.fill);
       c.fillText(box.text, box.x, cy);
       c.restore();
     }

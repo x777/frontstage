@@ -68,6 +68,20 @@ test("Select Forward on Track anchors on the right-clicked clip, not the current
   expect([...store.getSnapshot().selection]).toEqual(["b"]); // only b's own track, from its own frame
 });
 
+test("Nest Clips and Decompose Nested Timeline are on the clip menu", () => {
+  const store = new EditorStore(tl());
+  store.select(["a"]);
+  render(<ClipContextMenu store={store} menu={{ x: 0, y: 0, clipId: "a" }} onClose={() => {}} />);
+  expect(screen.getByTestId("ctx-nest-clips")).not.toBeDisabled();
+  expect(screen.getByTestId("ctx-decompose-nest")).toBeDisabled();
+});
+
+test("Extract Audio is present and disabled without an extractable video asset", () => {
+  const store = new EditorStore(tl());
+  render(<ClipContextMenu store={store} menu={{ x: 0, y: 0, clipId: "a" }} onClose={() => {}} />);
+  expect(screen.getByTestId("ctx-extract-audio")).toBeDisabled();
+});
+
 test("Select Forward on All Tracks reaches every track from the right-clicked clip's frame", () => {
   const store = new EditorStore(tl());
   render(<ClipContextMenu store={store} menu={{ x: 0, y: 0, clipId: "a" }} onClose={() => {}} />);

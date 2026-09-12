@@ -1,13 +1,18 @@
 export type { ToolBlock, ToolResult, ToolContext, ToolSpec } from "./tools/types.js";
 export { ok, errorResult, asUndoStep, ToolExecutor } from "./tools/executor.js";
 export { getTimelineTool, getMediaTool, inspectMediaTool, searchMediaTool } from "./tools/read-tools.js";
+export { createTimelineTool, setActiveTimelineTool, manageMarkersTool } from "./tools/timeline-tools.js";
 export { inspectTimelineTool } from "./tools/inspect-timeline-tool.js";
 export { addClipsTool, removeClipsTool, moveClipsTool, splitClipTool, splitClipsTool, trimClipsTool } from "./tools/clip-tools.js";
 export { rippleDeleteRangesTool, insertClipsTool } from "./tools/ripple-tools.js";
 export { getTranscriptTool, removeWordsTool, canTranscribe, classifyRefsByCache, transcribeRefs } from "./tools/transcription-tools.js";
 export { addCaptionsTool } from "./tools/caption-tools.js";
+export { extractAudioTool } from "./tools/extract-audio-tool.js";
+export { removeSilenceTool } from "./tools/silence-tools.js";
 export { setClipPropertiesTool, setKeyframesTool, addTextsTool } from "./tools/property-tools.js";
-export { removeTracksTool } from "./tools/track-tools.js";
+export { copyClipSettingsTool } from "./tools/clip-settings-tools.js";
+export { swapClipMediaTool } from "./tools/swap-clip-media-tool.js";
+export { removeTracksTool, manageTracksTool } from "./tools/track-tools.js";
 export { applyColorTool, applyEffectTool, inspectColorTool } from "./tools/color-tools.js";
 export {
   listFoldersTool,

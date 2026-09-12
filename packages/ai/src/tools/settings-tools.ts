@@ -98,7 +98,7 @@ export function setProjectSettingsTool(): ToolSpec {
 
       const manifest = ctx.getManifest();
       const cmd = applyTimelineSettingsCommand(newFPS, newWidth, newHeight, manifest, "Set Project Settings (Agent)");
-      ctx.store.dispatch(cmd);
+      ctx.store.applyToAllTimelines((t) => cmd.apply(t));
 
       // Swift also rescales the playhead on fps change; it's outside the undo step there too.
       if (newFPS !== prevFPS) {
